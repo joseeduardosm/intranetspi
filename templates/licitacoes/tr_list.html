@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start">
+    <div>
+      <h1>TR</h1>
+      <p>Termos de referencia cadastrados.</p>
+    </div>
+    <a class="btn btn-primary btn-lg" href="{% url 'licitacoes:tr_create' %}">Novo TR</a>
+  </div>
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0 spi-table-wide">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th>Processo</th>
+            <th>Link</th>
+            <th class="text-end">Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for termo in termos %}
+            <tr>
+              <td>{{ termo.id }}</td>
+              <td>{{ termo.nome }}</td>
+              <td>{{ termo.numero_processo }}</td>
+              <td>{% if termo.link %}<a href="{{ termo.link }}" target="_blank" rel="noopener">Abrir</a>{% else %}-{% endif %}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:tr_detail' termo.pk %}">Abrir</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:tr_update' termo.pk %}">Editar</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:tr_export' termo.pk %}">DOCX</a>
+                <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:tr_delete' termo.pk %}">Excluir</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-muted">Nenhum TR cadastrado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

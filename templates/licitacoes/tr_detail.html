@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{{ termo.nome }}</h1>
+      <p>Processo {{ termo.numero_processo }}{% if termo.link %} - <a href="{{ termo.link }}" target="_blank" rel="noopener">abrir link</a>{% endif %}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 justify-content-end">
+      <a class="btn btn-primary" href="{% url 'licitacoes:sessao_create' termo.pk %}">Nova sessao</a>
+      <a class="btn btn-outline-secondary" href="{% url 'licitacoes:tr_export' termo.pk %}">DOCX</a>
+      <a class="btn btn-outline-secondary" href="{% url 'licitacoes:tr_update' termo.pk %}">Editar TR</a>
+      <a class="btn btn-light" href="{% url 'licitacoes:tr_list' %}">Voltar</a>
+    </div>
+  </div>
+  <div class="row g-4">
+    <aside class="col-12 col-xl-2">
+      <div class="list-group spi-sticky">
+        {% for bloco in tree %}
+          <a class="list-group-item list-group-item-action" href="#sessao-{{ bloco.sessao.pk }}">{{ bloco.sessao.ordem }}. {{ bloco.sessao.titulo }}</a>
+        {% endfor %}
+      </div>
+    </aside>
+    <section class="col-12 col-xl-10">
+      {% for bloco in tree %}
+        <article id="sessao-{{ bloco.sessao.pk }}" class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3">
+            <h2 class="h5 mb-0">{{ bloco.sessao.ordem }}. {{ bloco.sessao.titulo }}</h2>
+            <div class="d-flex flex-wrap gap-2">
+              <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:item_create' bloco.sessao.pk %}">+ item</a>
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:sessao_update' termo.pk bloco.sessao.pk %}">Editar sessao</a>
+              <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:sessao_delete' termo.pk bloco.sessao.pk %}">Excluir sessao</a>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table align-middle mb-0 spi-tr-table">
+              <thead>
+                <tr>
+                  <th class="spi-index-col">Indice</th>
+                  <th>Texto</th>
+                  <th class="text-end spi-actions-col">Acoes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in bloco.rows %}
+                  <tr id="item-{{ row.item.pk }}">
+                    <td>{% if row.enum_prefix %}<strong>{{ row.enum_prefix }}</strong>{% else %}{{ row.indice }}.{% endif %}</td>
+                    <td><div style="padding-left: {{ row.indent }}rem;">{{ row.item.texto|linebreaksbr }}</div></td>
+                    <td class="text-end">
+                      <div class="btn-group btn-group-sm">
+                        <a class="btn btn-outline-primary" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}">+ subitem</a>
+                        <a class="btn btn-outline-primary" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}?tipo=INCISO">+ inciso</a>
+                        <a class="btn btn-outline-primary" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}?tipo=ALINEA">+ alinea</a>
+                        <a class="btn btn-outline-secondary" href="{% url 'licitacoes:item_move' row.item.sessao.pk row.item.pk %}">Mover para</a>
+                        <a class="btn btn-outline-secondary" href="{% url 'licitacoes:item_update' row.item.sessao.pk row.item.pk %}">Editar</a>
+                        <a class="btn btn-outline-danger" href="{% url 'licitacoes:item_delete' row.item.sessao.pk row.item.pk %}">Excluir</a>
+                      </div>
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="3" class="text-muted">Nenhum item nesta sessao.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      {% empty %}
+        <div class="alert alert-info">Nenhuma sessao cadastrada neste TR.</div>
+      {% endfor %}
+    </section>
+  </div>
+{% endblock %}
