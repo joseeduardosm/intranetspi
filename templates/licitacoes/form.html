@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{{ titulo|default:"Formulario" }}</h1>
+      <p>Preencha os campos abaixo.</p>
+    </div>
+    {% if voltar_url %}<a class="btn btn-outline-secondary" href="{{ voltar_url }}">Voltar</a>{% endif %}
+  </div>
+  <form method="post" class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="row g-3">
+        {% for field in form %}
+          <div class="col-12 {% if field.name == 'link' or field.name == 'numero_processo' %}col-xl-6{% endif %}">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-end gap-2 p-3">
+      {% if voltar_url %}<a class="btn btn-light" href="{{ voltar_url }}">Cancelar</a>{% endif %}
+      <button class="btn btn-primary" type="submit">Salvar</button>
+    </div>
+  </form>
+{% endblock %}

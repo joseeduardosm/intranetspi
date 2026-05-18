@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Confirmar exclusao</h1>
+    <p>Esta acao nao pode ser desfeita.</p>
+  </div>
+  <form method="post" class="card border-danger shadow-sm">
+    <div class="card-body p-4">
+      {% csrf_token %}
+      <p class="fs-5 mb-0">Confirma a exclusao de <strong>{{ object }}</strong>?</p>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-end gap-2">
+      <button class="btn btn-danger" type="submit">Excluir</button>
+      <a class="btn btn-light" href="javascript:history.back()">Cancelar</a>
+    </div>
+  </form>
+{% endblock %}

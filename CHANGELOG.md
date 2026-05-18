@@ -10,3 +10,4 @@ O formato segue a ideia de manter entradas por versao/data, com secoes para novi
 
 - Criado changelog inicial do projeto.
 - Configurado repositorio para uso via SSH no GitHub.
+- Adicionado projeto Django Aplicacoes SPI ao repositorio.
