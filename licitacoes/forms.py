@@ -77,6 +77,7 @@ class DfdSecaoForm(BootstrapModelForm):
         widgets = {
             'informacoes_preliminares': forms.Textarea(attrs={'rows': 10}),
             'descricao_objeto': forms.Textarea(attrs={'rows': 10}),
+            'objeto_nao_luxo': forms.Textarea(attrs={'rows': 4}),
             'justificativa_necessidade': forms.Textarea(attrs={'rows': 10}),
             'estimativa_quantidade_valores': forms.Textarea(attrs={'rows': 10}),
             'vinculacao_outro_dfd': forms.Textarea(attrs={'rows': 10}),
@@ -94,8 +95,16 @@ class DfdSecaoForm(BootstrapModelForm):
 class DfdItemTabelaForm(BootstrapModelForm):
     class Meta:
         model = DfdItemTabela
-        fields = ['item', 'equipamento', 'catmat', 'siafisico', 'quantidade', 'descricao']
-        widgets = {'descricao': forms.Textarea(attrs={'rows': 6})}
+        fields = [
+            'especificacao',
+            'catmat',
+            'siafisico',
+            'unidade_medida',
+            'quantidade',
+            'valor_unitario',
+            'valor_total',
+        ]
+        widgets = {'especificacao': forms.Textarea(attrs={'rows': 6})}
 
 
 class TermoReferenciaForm(BootstrapModelForm):

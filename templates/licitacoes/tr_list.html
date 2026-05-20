@@ -30,6 +30,10 @@
               <td class="text-end">
                 <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:tr_detail' termo.pk %}">Abrir</a>
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:tr_update' termo.pk %}">Editar</a>
+                <form class="d-inline" method="post" action="{% url 'licitacoes:tr_duplicate' termo.pk %}">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">Duplicar</button>
+                </form>
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:tr_export' termo.pk %}">DOCX</a>
                 <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:tr_delete' termo.pk %}">Excluir</a>
               </td>

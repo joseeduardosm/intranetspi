@@ -6,6 +6,7 @@ from .models import Dfd, DfdItemTabela, EtpTic, ItemTR, SessaoTR, TabelaItemLinh
 from .services import (
     build_item_rows,
     duplicate_item,
+    duplicate_termo,
     item_parent_for_tipo,
     move_item,
     red_marked_html,
@@ -49,10 +50,40 @@ class DfdTests(TestCase):
         secoes = render_dfd_sections(dfd)
 
         self.assertEqual(secoes[0]['entradas'], ['Orgao: SEDS', 'Setor: DIVTI'])
-        self.assertEqual(secoes[1]['entradas'][0], '1.1. Primeiro paragrafo.')
-        self.assertEqual(secoes[1]['entradas'][1], '1.2. Segundo paragrafo.')
+        self.assertEqual(secoes[1]['entradas'][0], '1.1. Primeiro paragrafo.\n\nSegundo paragrafo.')
+        self.assertEqual(secoes[1]['entradas_apos_tabela'], [Dfd.OBJETO_NAO_LUXO_PADRAO])
         self.assertEqual(secoes[2]['entradas'][0], '2.1. Justificativa.')
         self.assertEqual(secoes[5]['entradas'], ['Nenhum responsavel informado.'])
+
+    def test_render_dfd_item_1_2_normaliza_prefixo_na_exportacao(self):
+        dfd = Dfd.objects.create(
+            nome='DFD',
+            numero_processo='001/2026',
+            descricao_objeto='Objeto.',
+            objeto_nao_luxo='Item 1.2: O objeto desta contratação não se enquadra como sendo de bem de luxo.',
+        )
+
+        secao_objeto = render_dfd_sections(dfd)[1]
+
+        self.assertEqual(
+            secao_objeto['entradas_apos_tabela'],
+            ['1.2. O objeto desta contratação não se enquadra como sendo de bem de luxo.'],
+        )
+
+    def test_preview_dfd_renderiza_responsaveis_centralizado(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        dfd = Dfd.objects.create(
+            nome='DFD',
+            numero_processo='001/2026',
+            responsaveis='Responsavel centralizado.',
+        )
+
+        response = self.client.get(reverse('licitacoes:dfd_preview', args=[dfd.pk]))
+
+        self.assertContains(response, '<h2 class="h5 text-center">Responsaveis</h2>')
+        self.assertContains(response, '<p class="mb-0 text-center">Responsavel centralizado.</p>')
 
     def test_criar_dfd_redireciona_para_edicao_secao_1(self):
         User = get_user_model()
@@ -90,6 +121,26 @@ class DfdTests(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_concluir_dfd_salva_responsaveis_da_secao_atual(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        dfd = Dfd.objects.create(nome='DFD', numero_processo='001/2026', secao_atual=6)
+
+        response = self.client.post(
+            f"{reverse('licitacoes:dfd_edit', args=[dfd.pk])}?secao=6",
+            {'responsaveis': 'Responsavel salvo.', '_acao': 'concluir'},
+        )
+
+        dfd.refresh_from_db()
+        self.assertEqual(dfd.responsaveis, 'Responsavel salvo.')
+        self.assertEqual(dfd.status, Dfd.Status.CONCLUIDO)
+        self.assertRedirects(
+            response,
+            reverse('licitacoes:dfd_preview', args=[dfd.pk]),
+            fetch_redirect_response=False,
+        )
+
     def test_crud_linha_tabela_dfd(self):
         User = get_user_model()
         User.objects.create_superuser(username='admin', password='123')
@@ -99,12 +150,13 @@ class DfdTests(TestCase):
         create_response = self.client.post(
             reverse('licitacoes:dfd_tabela_create', args=[dfd.pk]),
             {
-                'item': '1',
-                'equipamento': 'Notebook',
+                'especificacao': 'Notebook',
                 'catmat': '123',
                 'siafisico': '456',
+                'unidade_medida': 'Unidade',
                 'quantidade': '2',
-                'descricao': 'Equipamento portatil',
+                'valor_unitario': '100.50',
+                'valor_total': '201.00',
             },
         )
         linha = dfd.itens_tabela.get()
@@ -118,17 +170,19 @@ class DfdTests(TestCase):
         self.client.post(
             reverse('licitacoes:dfd_tabela_update', args=[dfd.pk, linha.pk]),
             {
-                'item': '1',
-                'equipamento': 'Desktop',
+                'especificacao': 'Desktop',
                 'catmat': '123',
                 'siafisico': '456',
+                'unidade_medida': 'Unidade',
                 'quantidade': '3',
-                'descricao': 'Equipamento fixo',
+                'valor_unitario': '150.00',
+                'valor_total': '450.00',
             },
         )
         linha.refresh_from_db()
-        self.assertEqual(linha.equipamento, 'Desktop')
+        self.assertEqual(linha.especificacao, 'Desktop')
         self.assertEqual(linha.quantidade, 3)
+        self.assertEqual(str(linha.valor_total), '450.00')
 
         delete_response = self.client.post(reverse('licitacoes:dfd_tabela_delete', args=[dfd.pk, linha.pk]))
         self.assertFalse(DfdItemTabela.objects.filter(pk=linha.pk).exists())
@@ -142,6 +196,7 @@ class DfdTests(TestCase):
         from io import BytesIO
 
         from docx import Document
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
 
         User = get_user_model()
         User.objects.create_superuser(username='admin', password='123')
@@ -149,10 +204,20 @@ class DfdTests(TestCase):
         dfd = Dfd.objects.create(
             nome='DFD',
             numero_processo='001/2026',
+            informacoes_preliminares='Orgao: SEDS',
             descricao_objeto='Objeto.',
             vinculacao_outro_dfd='Sem dependencia.',
+            responsaveis='Responsavel centralizado.',
         )
-        DfdItemTabela.objects.create(dfd=dfd, ordem=1, item='1', equipamento='Notebook', quantidade=2)
+        DfdItemTabela.objects.create(
+            dfd=dfd,
+            ordem=1,
+            especificacao='Notebook',
+            siafisico='456',
+            quantidade='2.00',
+            valor_unitario='100.50',
+            valor_total='201.00',
+        )
 
         response = self.client.get(reverse('licitacoes:dfd_export', args=[dfd.pk]))
 
@@ -161,8 +226,84 @@ class DfdTests(TestCase):
         table_text = '\n'.join(cell.text for table in document.tables for row in table.rows for cell in row.cells)
         self.assertIn('DFD - DFD', paragraphs)
         self.assertIn('1.1. Objeto.', paragraphs)
+        self.assertIn(Dfd.OBJETO_NAO_LUXO_PADRAO, paragraphs)
         self.assertIn('4.1. Sem dependencia.', paragraphs)
         self.assertIn('Notebook', table_text)
+        self.assertIn('SIAFISICO', table_text)
+        self.assertIn('456', table_text)
+        self.assertIn('Valor total', table_text)
+        info_paragraph = next(p for p in document.paragraphs if p.text == 'Orgao: SEDS')
+        object_paragraph = next(p for p in document.paragraphs if p.text == '1.1. Objeto.')
+        responsaveis_paragraph = next(p for p in document.paragraphs if p.text == 'Responsavel centralizado.')
+        self.assertEqual(info_paragraph.alignment, WD_ALIGN_PARAGRAPH.LEFT)
+        self.assertEqual(object_paragraph.alignment, WD_ALIGN_PARAGRAPH.JUSTIFY)
+        self.assertEqual(responsaveis_paragraph.alignment, WD_ALIGN_PARAGRAPH.CENTER)
+        self.assertTrue(all(run.font.name == 'Verdana' for run in object_paragraph.runs if run.text))
+        self.assertTrue(all(run.font.size.pt == 10 for run in object_paragraph.runs if run.text))
+        header_run = document.tables[0].rows[0].cells[0].paragraphs[0].runs[0]
+        body_run = document.tables[0].rows[1].cells[1].paragraphs[0].runs[0]
+        self.assertEqual(header_run.font.name, 'Verdana')
+        self.assertEqual(header_run.font.size.pt, 8)
+        self.assertEqual(body_run.font.name, 'Verdana')
+        self.assertEqual(body_run.font.size.pt, 8)
+
+    def test_preview_dfd_renderiza_marcacao_vermelha(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        dfd = Dfd.objects.create(
+            nome='DFD',
+            numero_processo='001/2026',
+            descricao_objeto='Texto *vermelho*',
+            objeto_nao_luxo='1.2. Item *destacado*',
+        )
+        DfdItemTabela.objects.create(
+            dfd=dfd,
+            ordem=1,
+            especificacao='Notebook *especial*',
+            quantidade='2.00',
+            valor_unitario='100.50',
+            valor_total='201.00',
+        )
+
+        response = self.client.get(reverse('licitacoes:dfd_preview', args=[dfd.pk]))
+
+        self.assertContains(response, '<span class="text-danger">vermelho</span>')
+        self.assertContains(response, '<span class="text-danger">destacado</span>')
+        self.assertContains(response, '<span class="text-danger">especial</span>')
+
+    def test_exporta_dfd_marcacao_vermelha_no_docx(self):
+        from io import BytesIO
+
+        from docx import Document
+
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        dfd = Dfd.objects.create(
+            nome='DFD',
+            numero_processo='001/2026',
+            descricao_objeto='Texto *vermelho*',
+            objeto_nao_luxo='1.2. Item *destacado*',
+        )
+        DfdItemTabela.objects.create(
+            dfd=dfd,
+            ordem=1,
+            especificacao='Notebook *especial*',
+            quantidade='2.00',
+            valor_unitario='100.50',
+            valor_total='201.00',
+        )
+
+        response = self.client.get(reverse('licitacoes:dfd_export', args=[dfd.pk]))
+        document = Document(BytesIO(response.content))
+        runs = [run for paragraph in document.paragraphs for run in paragraph.runs]
+        runs += [run for table in document.tables for row in table.rows for cell in row.cells for paragraph in cell.paragraphs for run in paragraph.runs]
+        red_texts = {run.text for run in runs if run.font.color.rgb and str(run.font.color.rgb) == 'FF0000'}
+
+        self.assertIn('vermelho', red_texts)
+        self.assertIn('destacado', red_texts)
+        self.assertIn('especial', red_texts)
 
 
 class RedMarkTests(TestCase):
@@ -172,6 +313,18 @@ class RedMarkTests(TestCase):
         self.assertIn('<span class="text-danger">vermelho</span>', html)
         self.assertIn('<span class="text-danger">alerta</span>', html)
         self.assertNotIn('*vermelho*', html)
+
+    def test_renderiza_marcacao_vermelha_em_palavra_solteira_e_bloco_com_espaco(self):
+        html = red_marked_html('Texto *destaque\n\n* paragrafo inteiro*')
+
+        self.assertIn('<span class="text-danger">destaque</span>', html)
+        self.assertIn('<span class="text-danger"> paragrafo inteiro</span>', html)
+
+    def test_renderiza_marcacao_vermelha_em_frase_pareada_com_um_ou_dois_asteriscos(self):
+        html = red_marked_html('Texto *frase inteira marcada* e **outra frase marcada**')
+
+        self.assertIn('<span class="text-danger">frase inteira marcada</span>', html)
+        self.assertIn('<span class="text-danger">outra frase marcada</span>', html)
 
 
 class TrTests(TestCase):
@@ -249,6 +402,24 @@ class TrTests(TestCase):
         self.assertEqual(duplicate_child.texto, 'Filho')
         self.assertEqual(duplicate_child.filhos.get().texto, 'Neto')
         self.assertEqual(duplicate.tabela_linhas.get().descricao, 'Notebook')
+
+    def test_duplicar_tr_copia_sessoes_itens_e_tabelas(self):
+        sessao_2 = SessaoTR.objects.create(termo=self.termo, titulo='Outra sessao', ordem=2)
+        item = ItemTR.objects.create(sessao=self.sessao, texto='Item original', ordem=1)
+        child = ItemTR.objects.create(sessao=self.sessao, parent=item, texto='Subitem original', ordem=1)
+        TabelaItemLinha.objects.create(item=item, ordem=1, descricao='Notebook', quantidade='2.00')
+        ItemTR.objects.create(sessao=sessao_2, texto='Item sessao 2', ordem=1)
+
+        duplicate = duplicate_termo(self.termo)
+
+        self.assertEqual(duplicate.nome, 'Copia de TR')
+        self.assertEqual(duplicate.numero_processo, self.termo.numero_processo)
+        self.assertEqual(duplicate.sessoes.count(), 2)
+        new_sessao = duplicate.sessoes.get(ordem=1)
+        new_item = new_sessao.itens.get(parent=None, texto='Item original')
+        self.assertNotEqual(new_item.pk, item.pk)
+        self.assertEqual(new_item.filhos.get().texto, child.texto)
+        self.assertEqual(new_item.tabela_linhas.get().descricao, 'Notebook')
 
     def test_tabela_item_create_disponivel_somente_no_item_1_1(self):
         User = get_user_model()
@@ -333,6 +504,22 @@ class TrTests(TestCase):
         self.assertRedirects(
             response,
             f"{reverse('licitacoes:tr_detail', args=[self.termo.pk])}#item-{duplicate.pk}",
+            fetch_redirect_response=False,
+        )
+
+    def test_duplicar_tr_pela_listagem_volta_para_tr_duplicado(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        ItemTR.objects.create(sessao=self.sessao, texto='Item original', ordem=1)
+
+        response = self.client.post(reverse('licitacoes:tr_duplicate', args=[self.termo.pk]))
+
+        duplicate = TermoReferencia.objects.get(nome='Copia de TR')
+        self.assertEqual(duplicate.sessoes.get().itens.get().texto, 'Item original')
+        self.assertRedirects(
+            response,
+            reverse('licitacoes:tr_detail', args=[duplicate.pk]),
             fetch_redirect_response=False,
         )
 

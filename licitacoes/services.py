@@ -6,7 +6,7 @@ import re
 from django.db import transaction
 from django.db.models import Max
 
-from .models import DfdItemTabela, EtpTic, ItemTR, SessaoTR, TabelaItemLinha, TermoReferencia
+from .models import Dfd, DfdItemTabela, EtpTic, ItemTR, SessaoTR, TabelaItemLinha, TermoReferencia
 
 
 ETP_TIC_SECOES = [
@@ -35,6 +35,7 @@ DFD_SECOES = [
     {
         'numero': 1,
         'titulo': 'Informacoes Preliminares',
+        'rotulo': 'Informacoes Preliminares',
         'descricao': '',
         'campos': ['informacoes_preliminares'],
         'numerar': False,
@@ -43,14 +44,16 @@ DFD_SECOES = [
         'numero': 2,
         'numero_documento': 1,
         'titulo': 'Descricao Sucinta do Objeto',
+        'rotulo': '1. Descricao Sucinta do Objeto',
         'descricao': 'Descreva o objeto e cadastre os itens da tabela quando houver.',
-        'campos': ['descricao_objeto'],
+        'campos': ['descricao_objeto', 'objeto_nao_luxo'],
         'numerar': True,
     },
     {
         'numero': 3,
         'numero_documento': 2,
         'titulo': 'Justificativa da Necessidade',
+        'rotulo': '2. Justificativa da Necessidade',
         'descricao': '',
         'campos': ['justificativa_necessidade'],
         'numerar': True,
@@ -59,6 +62,7 @@ DFD_SECOES = [
         'numero': 4,
         'numero_documento': 3,
         'titulo': 'Estimativa de Quantidade e Valores',
+        'rotulo': '3. Estimativa de Quantidade e Valores',
         'descricao': '',
         'campos': ['estimativa_quantidade_valores'],
         'numerar': True,
@@ -67,6 +71,7 @@ DFD_SECOES = [
         'numero': 5,
         'numero_documento': 4,
         'titulo': 'Vinculacao com outro DFD',
+        'rotulo': '4. Vinculacao com outro DFD',
         'descricao': '',
         'campos': ['vinculacao_outro_dfd'],
         'numerar': True,
@@ -74,6 +79,7 @@ DFD_SECOES = [
     {
         'numero': 6,
         'titulo': 'Responsaveis',
+        'rotulo': 'Responsaveis',
         'descricao': '',
         'campos': ['responsaveis'],
         'numerar': False,
@@ -85,6 +91,12 @@ DFD_SECOES_MAP = {secao['numero']: secao for secao in DFD_SECOES}
 def split_paragraphs(texto):
     blocos = re.split(r'\n\s*\n', (texto or '').strip())
     return [bloco.strip() for bloco in blocos if bloco.strip()]
+
+
+def format_dfd_item_1_2(texto):
+    texto = (texto or Dfd.OBJETO_NAO_LUXO_PADRAO).strip()
+    texto = re.sub(r'^\s*(?:item\s*)?1\.2\.?\s*[:.-]?\s*', '', texto, flags=re.IGNORECASE)
+    return f'1.2. {texto}' if texto else ''
 
 
 def etp_secao_preenchida(etp, numero):
@@ -181,15 +193,29 @@ def render_dfd_sections(dfd):
     tabela = list(DfdItemTabela.objects.filter(dfd=dfd).order_by('ordem', 'id')) if dfd.pk else []
     for secao in DFD_SECOES:
         entradas = []
+        entradas_apos_tabela = []
         campo = secao['campos'][0]
         texto = getattr(dfd, campo, '')
         if secao['numerar']:
             numero_documento = secao['numero_documento']
-            for idx, paragrafo in enumerate(split_paragraphs(texto), start=1):
-                entradas.append(f'{numero_documento}.{idx}. {paragrafo}')
+            if secao['numero'] == 2:
+                paragrafos = split_paragraphs(texto)
+                if paragrafos:
+                    entradas.append(f'{numero_documento}.1. ' + '\n\n'.join(paragrafos))
+                item_1_2 = format_dfd_item_1_2(dfd.objeto_nao_luxo)
+                entradas_apos_tabela = [item_1_2] if item_1_2 else []
+            else:
+                for idx, paragrafo in enumerate(split_paragraphs(texto), start=1):
+                    entradas.append(f'{numero_documento}.{idx}. {paragrafo}')
         else:
             entradas = split_paragraphs(texto)
-        secoes.append({**secao, 'entradas': entradas, 'tabela': tabela if secao['numero'] == 2 else []})
+        secoes.append({
+            **secao,
+            'entradas': entradas,
+            'entradas_apos_tabela': entradas_apos_tabela,
+            'alinhamento': 'center' if secao['numero'] == 6 else 'left' if secao['numero'] == 1 else 'justify',
+            'tabela': tabela if secao['numero'] == 2 else [],
+        })
     return secoes
 
 
@@ -278,14 +304,20 @@ def red_mark_segments(text):
             index += 1
             continue
 
-        end = text.find('*', index + 1)
-        if end > index + 1:
+        marker = '**' if text.startswith('**', index) else '*'
+        marker_len = len(marker)
+        content_start = index + marker_len
+        paragraph_break = text.find('\n\n', content_start)
+        end = text.find(marker, content_start)
+        closes_in_same_paragraph = end > content_start and (paragraph_break == -1 or end < paragraph_break)
+
+        if closes_in_same_paragraph:
             flush_buffer()
-            segments.append((text[index + 1:end], True))
-            index = end + 1
+            segments.append((text[content_start:end], True))
+            index = end + marker_len
             continue
 
-        match = re.match(r'\*([^\s*]+)', text[index:])
+        match = re.match(r'\*{1,2}([^\s*]+)', text[index:])
         if match:
             flush_buffer()
             segments.append((match.group(1), True))
@@ -476,6 +508,25 @@ def duplicate_item(item, target, action, target_sessao=None, child_position=None
         else:
             normalize_items(new_sessao, new_parent.id if new_parent else None)
 
+        return duplicate
+
+
+def duplicate_termo(termo):
+    with transaction.atomic():
+        termo = TermoReferencia.objects.get(pk=termo.pk)
+        duplicate = TermoReferencia.objects.create(
+            nome=f'Copia de {termo.nome}',
+            numero_processo=termo.numero_processo,
+            link=termo.link,
+        )
+        for sessao in termo.sessoes.order_by('ordem', 'id'):
+            new_sessao = SessaoTR.objects.create(
+                termo=duplicate,
+                titulo=sessao.titulo,
+                ordem=sessao.ordem,
+            )
+            for item in sessao.itens.filter(parent=None).order_by('ordem', 'id'):
+                _copy_item_tree(item, new_sessao, None, item.ordem)
         return duplicate
 
 

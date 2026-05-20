@@ -23,7 +23,7 @@ class DfdAdmin(admin.ModelAdmin):
 
 @admin.register(DfdItemTabela)
 class DfdItemTabelaAdmin(admin.ModelAdmin):
-    list_display = ('dfd', 'ordem', 'item', 'equipamento', 'quantidade')
+    list_display = ('dfd', 'ordem', 'especificacao', 'quantidade', 'valor_total')
     list_filter = ('dfd',)
 
 

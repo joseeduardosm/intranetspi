@@ -32,6 +32,7 @@ from .services import (
     item_parent_for_tipo,
     build_termo_tree,
     duplicate_item,
+    duplicate_termo,
     dfd_status_por_secao,
     etp_status_por_secao,
     move_item,
@@ -242,9 +243,15 @@ class DfdEditView(SuperuserRequiredMixin, UpdateView):
             dfd.secao_atual = min(secao + 1, len(DFD_SECOES))
         elif acao == 'anterior':
             dfd.secao_atual = max(secao - 1, 1)
+        elif acao == 'concluir':
+            dfd.secao_atual = secao
+            dfd.status = Dfd.Status.CONCLUIDO
         else:
             dfd.secao_atual = secao
         dfd.save()
+        if acao == 'concluir':
+            messages.success(self.request, 'DFD concluido.')
+            return redirect('licitacoes:dfd_preview', pk=dfd.pk)
         return redirect(f"{reverse('licitacoes:dfd_edit', args=[dfd.pk])}?secao={dfd.secao_atual}")
 
     def get_context_data(self, **kwargs):
@@ -403,6 +410,14 @@ class TermoDeleteView(SuperuserRequiredMixin, DeleteView):
     model = TermoReferencia
     template_name = 'licitacoes/confirm_delete.html'
     success_url = reverse_lazy('licitacoes:tr_list')
+
+
+class TermoDuplicateView(SuperuserRequiredMixin, View):
+    def post(self, request, pk):
+        termo = get_object_or_404(TermoReferencia, pk=pk)
+        duplicate = duplicate_termo(termo)
+        messages.success(request, 'TR duplicado.')
+        return redirect('licitacoes:tr_detail', pk=duplicate.pk)
 
 
 class TermoDetailView(SuperuserRequiredMixin, DetailView):
@@ -846,7 +861,29 @@ def _dfd_docx_response(dfd):
     from docx import Document
     from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Cm, Pt
+    from docx.shared import Cm, Pt, RGBColor
+
+    def apply_run_style(run, size=10):
+        run.font.name = 'Verdana'
+        run.font.size = Pt(size)
+
+    def add_marked_runs(paragraph, text, size=10):
+        for segment, is_red in red_mark_segments(text):
+            lines = segment.split('\n')
+            for idx, line in enumerate(lines):
+                if idx:
+                    paragraph.add_run().add_break()
+                if not line:
+                    continue
+                run = paragraph.add_run(line)
+                apply_run_style(run, size)
+                if is_red:
+                    run.font.color.rgb = RGBColor(255, 0, 0)
+
+    def apply_cell_font(cell, size=8):
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                apply_run_style(run, size)
 
     document = Document()
     normal = document.styles['Normal']
@@ -861,56 +898,90 @@ def _dfd_docx_response(dfd):
     p = document.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     r = p.add_run(f'DFD - {dfd.nome}')
+    apply_run_style(r)
     r.bold = True
-    r.font.size = Pt(12)
 
     meta = document.add_paragraph()
     meta.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    meta.add_run('Processo: ').bold = True
-    meta.add_run(dfd.numero_processo or '-')
-    meta.add_run(' | Status: ').bold = True
-    meta.add_run(dfd.get_status_display())
+    for text, bold in [
+        ('Processo: ', True),
+        (dfd.numero_processo or '-', False),
+        (' | Status: ', True),
+        (dfd.get_status_display(), False),
+    ]:
+        run = meta.add_run(text)
+        apply_run_style(run)
+        run.bold = bold
 
     for secao in render_dfd_sections(dfd):
+        if secao['numero'] == 1:
+            alignment = WD_ALIGN_PARAGRAPH.LEFT
+        elif secao['numero'] == 6:
+            alignment = WD_ALIGN_PARAGRAPH.CENTER
+        else:
+            alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         h = document.add_paragraph()
-        h.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        prefix = f"{secao['numero_documento']}. " if secao.get('numerar') else ''
-        run = h.add_run(f"{prefix}{secao['titulo']}")
+        h.alignment = alignment
+        run = h.add_run(secao['rotulo'])
+        apply_run_style(run)
         run.bold = True
 
         for entrada in secao['entradas'] or ['-']:
-            p = document.add_paragraph(entrada)
-            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p = document.add_paragraph()
+            add_marked_runs(p, entrada)
+            p.alignment = alignment
 
         if secao.get('tabela'):
-            table = document.add_table(rows=1, cols=6)
+            table = document.add_table(rows=1, cols=8)
             table.style = 'Table Grid'
-            headers = ['Item', 'Equipamento', 'CATMAT', 'SIAFISICO', 'Quantidade', 'Descricao']
+            headers = [
+                'Item',
+                'Especificacao',
+                'CATMAT',
+                'SIAFISICO',
+                'Unidade de medida',
+                'Quantidade',
+                'Valor Unitario',
+                'Valor total',
+            ]
             for idx, title in enumerate(headers):
                 cell = table.rows[0].cells[idx]
                 paragraph = cell.paragraphs[0]
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 header_run = paragraph.add_run(title)
+                apply_run_style(header_run, 8)
                 header_run.bold = True
-                header_run.font.size = Pt(8)
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
             for linha in secao['tabela']:
                 cells = table.add_row().cells
                 values = [
-                    linha.item or str(linha.ordem),
-                    linha.equipamento,
+                    str(linha.ordem),
+                    linha.especificacao,
                     linha.catmat or '-',
                     linha.siafisico or '-',
+                    linha.unidade_medida or '-',
                     str(linha.quantidade),
-                    linha.descricao or '-',
+                    str(linha.valor_unitario),
+                    str(linha.valor_total),
                 ]
                 for idx, value in enumerate(values):
-                    cells[idx].text = value
+                    if idx == 1:
+                        add_marked_runs(cells[idx].paragraphs[0], value, size=8)
+                    else:
+                        cells[idx].text = value
+                        apply_cell_font(cells[idx], 8)
                     cells[idx].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
                 cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
                 cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
                 cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
                 cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cells[5].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cells[6].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cells[7].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for entrada in secao.get('entradas_apos_tabela', []):
+            p = document.add_paragraph()
+            add_marked_runs(p, entrada)
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         document.add_paragraph('')
 
     buffer = BytesIO()

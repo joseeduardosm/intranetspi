@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load licitacoes_extras %}
 
 {% block content %}
   <div class="spi-page-title d-flex justify-content-between align-items-start">
@@ -15,13 +16,13 @@
   {% for secao in secoes_render %}
     <article class="card border-0 shadow-sm mb-3">
       <div class="card-body p-4">
-        <h2 class="h5">{% if secao.numerar %}{{ secao.numero_documento }}. {% endif %}{{ secao.titulo }}</h2>
+        <h2 class="h5 {% if secao.alinhamento == 'center' %}text-center{% endif %}">{{ secao.rotulo }}</h2>
         {% if secao.entradas %}
           <div class="vstack gap-2">
-            {% for entrada in secao.entradas %}<p class="mb-0 text-justify">{{ entrada|linebreaksbr }}</p>{% endfor %}
+            {% for entrada in secao.entradas %}<p class="mb-0 {% if secao.alinhamento == 'center' %}text-center{% else %}text-justify{% endif %}">{{ entrada|red_marks }}</p>{% endfor %}
           </div>
         {% else %}
-          <p class="text-muted mb-0">-</p>
+          <p class="text-muted mb-0 {% if secao.alinhamento == 'center' %}text-center{% endif %}">-</p>
         {% endif %}
         {% if secao.tabela %}
           <div class="table-responsive mt-3">
@@ -29,26 +30,35 @@
               <thead>
                 <tr>
                   <th>Item</th>
-                  <th>Equipamento</th>
+                  <th>Especificacao</th>
                   <th>CATMAT</th>
                   <th>SIAFISICO</th>
+                  <th>Unidade de medida</th>
                   <th>Quantidade</th>
-                  <th>Descricao</th>
+                  <th>Valor Unitario</th>
+                  <th>Valor total</th>
                 </tr>
               </thead>
               <tbody>
                 {% for linha in secao.tabela %}
                   <tr>
-                    <td>{{ linha.item|default:linha.ordem }}</td>
-                    <td>{{ linha.equipamento }}</td>
+                    <td>{{ linha.ordem }}</td>
+                    <td>{{ linha.especificacao|red_marks }}</td>
                     <td>{{ linha.catmat|default:"-" }}</td>
                     <td>{{ linha.siafisico|default:"-" }}</td>
+                    <td>{{ linha.unidade_medida|default:"-" }}</td>
                     <td>{{ linha.quantidade }}</td>
-                    <td>{{ linha.descricao|linebreaksbr }}</td>
+                    <td>{{ linha.valor_unitario }}</td>
+                    <td>{{ linha.valor_total }}</td>
                   </tr>
                 {% endfor %}
               </tbody>
             </table>
+          </div>
+        {% endif %}
+        {% if secao.entradas_apos_tabela %}
+          <div class="vstack gap-2 mt-3">
+            {% for entrada in secao.entradas_apos_tabela %}<p class="mb-0 text-justify">{{ entrada|red_marks }}</p>{% endfor %}
           </div>
         {% endif %}
       </div>

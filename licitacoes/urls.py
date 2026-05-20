@@ -27,6 +27,7 @@ urlpatterns = [
     path('tr/novo/', views.TermoCreateView.as_view(), name='tr_create'),
     path('tr/<int:pk>/', views.TermoDetailView.as_view(), name='tr_detail'),
     path('tr/<int:pk>/editar/', views.TermoUpdateView.as_view(), name='tr_update'),
+    path('tr/<int:pk>/duplicar/', views.TermoDuplicateView.as_view(), name='tr_duplicate'),
     path('tr/<int:pk>/exportar-docx/', views.TermoExportDocxView.as_view(), name='tr_export'),
     path('tr/<int:pk>/excluir/', views.TermoDeleteView.as_view(), name='tr_delete'),
     path('tr/<int:termo_pk>/sessoes/nova/', views.SessaoCreateView.as_view(), name='sessao_create'),

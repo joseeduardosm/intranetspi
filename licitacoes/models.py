@@ -50,6 +50,11 @@ class Dfd(models.Model):
         RASCUNHO = 'RASCUNHO', 'Rascunho'
         CONCLUIDO = 'CONCLUIDO', 'Concluido'
 
+    OBJETO_NAO_LUXO_PADRAO = (
+        '1.2. O objeto desta contratação não se enquadra como sendo de bem de luxo, '
+        'conforme Decreto nº 67.985, de 27 de setembro de 2023.'
+    )
+
     nome = models.CharField(max_length=180)
     numero_processo = models.CharField('Numero do processo', max_length=120)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.RASCUNHO)
@@ -57,6 +62,7 @@ class Dfd(models.Model):
 
     informacoes_preliminares = models.TextField(blank=True)
     descricao_objeto = models.TextField(blank=True)
+    objeto_nao_luxo = models.TextField('Item 1.2', default=OBJETO_NAO_LUXO_PADRAO, blank=True)
     justificativa_necessidade = models.TextField(blank=True)
     estimativa_quantidade_valores = models.TextField(blank=True)
     vinculacao_outro_dfd = models.TextField(blank=True)
@@ -75,12 +81,13 @@ class Dfd(models.Model):
 class DfdItemTabela(models.Model):
     dfd = models.ForeignKey(Dfd, on_delete=models.CASCADE, related_name='itens_tabela')
     ordem = models.PositiveIntegerField(default=1)
-    item = models.CharField(max_length=40, blank=True)
-    equipamento = models.CharField(max_length=180)
+    especificacao = models.TextField('Especificacao')
     catmat = models.CharField('CATMAT', max_length=120, blank=True)
     siafisico = models.CharField('SIAFISICO', max_length=120, blank=True)
-    quantidade = models.PositiveIntegerField(default=1)
-    descricao = models.TextField('Descricao', blank=True)
+    unidade_medida = models.CharField('Unidade de medida', max_length=120, blank=True)
+    quantidade = models.DecimalField('Quantidade', max_digits=14, decimal_places=2)
+    valor_unitario = models.DecimalField('Valor unitario', max_digits=14, decimal_places=2)
+    valor_total = models.DecimalField('Valor total', max_digits=14, decimal_places=2)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -88,7 +95,7 @@ class DfdItemTabela(models.Model):
         ordering = ['ordem', 'id']
 
     def __str__(self):
-        return f'{self.item or self.ordem} - {self.equipamento}'
+        return f'{self.ordem} - {self.especificacao[:60]}'
 
 
 class TermoReferencia(models.Model):

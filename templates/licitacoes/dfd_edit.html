@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load licitacoes_extras %}
 
 {% block content %}
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
@@ -17,7 +18,7 @@
       <div class="list-group spi-sticky">
         {% for secao in secoes %}
           <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if secao.numero == secao_numero %}active{% endif %}" href="{% url 'licitacoes:dfd_edit' dfd.pk %}?secao={{ secao.numero }}">
-            <span>{{ secao.numero }}. {{ secao.titulo }}</span>
+            <span>{{ secao.rotulo }}</span>
             <span class="badge rounded-pill text-bg-light">{{ secao.status }}</span>
           </a>
         {% endfor %}
@@ -26,23 +27,83 @@
     <section class="col-12 col-xl-9">
       <div class="spi-stepper spi-stepper-compact mb-3">
         {% for secao in secoes %}
-          <a class="spi-stepper-item {{ secao.status }} {% if secao.numero == secao_numero %}active{% endif %}" href="{% url 'licitacoes:dfd_edit' dfd.pk %}?secao={{ secao.numero }}">{{ secao.numero }}</a>
+          <a class="spi-stepper-item {{ secao.status }} {% if secao.numero == secao_numero %}active{% endif %}" href="{% url 'licitacoes:dfd_edit' dfd.pk %}?secao={{ secao.numero }}">{% if secao.numerar %}{{ secao.numero_documento }}{% elif secao.numero == 1 %}Info{% else %}Resp{% endif %}</a>
         {% endfor %}
       </div>
       <form method="post" class="card border-0 shadow-sm">
         <div class="card-body p-4">
           {% csrf_token %}
-          <h2 class="h4 mb-2">{{ secao_atual.numero }}. {{ secao_atual.titulo }}</h2>
+          <h2 class="h4 mb-2">{{ secao_atual.rotulo }}</h2>
           {% if secao_atual.descricao %}<p class="text-muted">{{ secao_atual.descricao }}</p>{% endif %}
           <div class="row g-3">
             {% for field in form %}
-              <div class="col-12">
-                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-              </div>
+              {% if field.name != 'objeto_nao_luxo' %}
+                <div class="col-12">
+                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                  {{ field }}
+                  {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+              {% endif %}
             {% endfor %}
           </div>
+          {% if secao_numero == 2 %}
+            <section class="mt-4" id="dfd-tabela">
+              <div class="d-flex justify-content-between align-items-center gap-3 mb-2">
+                <h3 class="h5 mb-0">Tabela de itens</h3>
+                <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:dfd_tabela_create' dfd.pk %}">+ item</a>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0 spi-dfd-table">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Especificacao</th>
+                      <th>CATMAT</th>
+                      <th>SIAFISICO</th>
+                      <th>Unidade de medida</th>
+                      <th>Quantidade</th>
+                      <th>Valor Unitario</th>
+                      <th>Valor total</th>
+                      <th class="text-end">Acoes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for linha in itens_tabela %}
+                      <tr>
+                        <td>{{ linha.ordem }}</td>
+                        <td>{{ linha.especificacao|red_marks }}</td>
+                        <td>{{ linha.catmat|default:"-" }}</td>
+                        <td>{{ linha.siafisico|default:"-" }}</td>
+                        <td>{{ linha.unidade_medida|default:"-" }}</td>
+                        <td>{{ linha.quantidade }}</td>
+                        <td>{{ linha.valor_unitario }}</td>
+                        <td>{{ linha.valor_total }}</td>
+                        <td class="text-end">
+                          <div class="btn-group btn-group-sm">
+                            <a class="btn btn-outline-secondary" href="{% url 'licitacoes:dfd_tabela_update' dfd.pk linha.pk %}">Editar</a>
+                            <a class="btn btn-outline-danger" href="{% url 'licitacoes:dfd_tabela_delete' dfd.pk linha.pk %}">Excluir</a>
+                          </div>
+                        </td>
+                      </tr>
+                    {% empty %}
+                      <tr><td colspan="9" class="text-muted">Nenhum item cadastrado na tabela.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <div class="row g-3 mt-1">
+              {% for field in form %}
+                {% if field.name == 'objeto_nao_luxo' %}
+                  <div class="col-12">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% endif %}
           {% if secao_atual.numerar %}
             <div class="form-text mt-3">Separe paragrafos por linha em branco para gerar numeracao automatica.</div>
           {% endif %}
@@ -54,55 +115,10 @@
           <div class="d-flex gap-2">
             <button class="btn btn-outline-primary" name="_acao" value="salvar">Salvar</button>
             {% if secao_numero < 6 %}<button class="btn btn-primary" name="_acao" value="proximo">Proximo</button>{% endif %}
-            <button class="btn btn-success" form="dfd-concluir" type="submit">Concluir</button>
+            <button class="btn btn-success" name="_acao" value="concluir" type="submit">Concluir</button>
           </div>
         </div>
       </form>
-      <form id="dfd-concluir" method="post" action="{% url 'licitacoes:dfd_concluir' dfd.pk %}">{% csrf_token %}</form>
-
-      {% if secao_numero == 2 %}
-        <section class="card border-0 shadow-sm mt-4" id="dfd-tabela">
-          <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3">
-            <h3 class="h5 mb-0">Tabela de itens</h3>
-            <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:dfd_tabela_create' dfd.pk %}">+ item</a>
-          </div>
-          <div class="table-responsive">
-            <table class="table table-sm table-bordered align-middle mb-0 spi-dfd-table">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Equipamento</th>
-                  <th>CATMAT</th>
-                  <th>SIAFISICO</th>
-                  <th>Quantidade</th>
-                  <th>Descricao</th>
-                  <th class="text-end">Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for linha in itens_tabela %}
-                  <tr>
-                    <td>{{ linha.item|default:linha.ordem }}</td>
-                    <td>{{ linha.equipamento }}</td>
-                    <td>{{ linha.catmat|default:"-" }}</td>
-                    <td>{{ linha.siafisico|default:"-" }}</td>
-                    <td>{{ linha.quantidade }}</td>
-                    <td>{{ linha.descricao|linebreaksbr }}</td>
-                    <td class="text-end">
-                      <div class="btn-group btn-group-sm">
-                        <a class="btn btn-outline-secondary" href="{% url 'licitacoes:dfd_tabela_update' dfd.pk linha.pk %}">Editar</a>
-                        <a class="btn btn-outline-danger" href="{% url 'licitacoes:dfd_tabela_delete' dfd.pk linha.pk %}">Excluir</a>
-                      </div>
-                    </td>
-                  </tr>
-                {% empty %}
-                  <tr><td colspan="7" class="text-muted">Nenhum item cadastrado na tabela.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      {% endif %}
     </section>
   </div>
 {% endblock %}
