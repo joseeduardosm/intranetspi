@@ -3,7 +3,7 @@
 {% block content %}
   <div class="spi-page-title d-flex justify-content-between align-items-start">
     <div>
-      <h1>Mover item</h1>
+      <h1>{% if modo == 'duplicar' %}Duplicar item{% else %}Mover item{% endif %}</h1>
       <p>{{ item.texto|truncatechars:120 }}</p>
     </div>
     <a class="btn btn-light" href="{% url 'licitacoes:tr_detail' termo.pk %}">Voltar</a>
@@ -23,14 +23,24 @@
           {{ form.action }}
           {% for error in form.action.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
         </div>
+        <div class="col-12 col-xl-4">
+          <label class="form-label" for="{{ form.child_position.id_for_label }}">Posicao dentro do destino</label>
+          {{ form.child_position }}
+          {% if form.child_position.help_text %}<div class="form-text">{{ form.child_position.help_text }}</div>{% endif %}
+          {% for error in form.child_position.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
       </div>
       <div class="alert alert-secondary mt-4 mb-0">
-        Ao escolher uma sessao como destino, o item sera movido para o fim da raiz daquela sessao. Ao escolher um item, use a acao para mover apos ele ou como subitem.
+        {% if modo == 'duplicar' %}
+          Ao escolher uma sessao como destino, o item duplicado sera criado na raiz daquela sessao. Ao escolher um item, use a acao para duplicar apos ele ou como subitem. A posicao vale para insercao como subitem: use 1 para inserir antes do primeiro filho.
+        {% else %}
+          Ao escolher uma sessao como destino, o item sera movido para a raiz daquela sessao. Ao escolher um item, use a acao para mover apos ele ou como subitem. A posicao vale para insercao como subitem: use 1 para inserir antes do primeiro filho.
+        {% endif %}
       </div>
     </div>
     <div class="card-footer bg-white d-flex justify-content-end gap-2">
       <a class="btn btn-light" href="{% url 'licitacoes:tr_detail' termo.pk %}">Cancelar</a>
-      <button class="btn btn-primary" type="submit">Mover e renumerar</button>
+      <button class="btn btn-primary" type="submit">{% if modo == 'duplicar' %}Duplicar e renumerar{% else %}Mover e renumerar{% endif %}</button>
     </div>
   </form>
 {% endblock %}

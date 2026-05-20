@@ -45,6 +45,52 @@ class EtpTic(models.Model):
         return self.nome
 
 
+class Dfd(models.Model):
+    class Status(models.TextChoices):
+        RASCUNHO = 'RASCUNHO', 'Rascunho'
+        CONCLUIDO = 'CONCLUIDO', 'Concluido'
+
+    nome = models.CharField(max_length=180)
+    numero_processo = models.CharField('Numero do processo', max_length=120)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.RASCUNHO)
+    secao_atual = models.PositiveIntegerField(default=1)
+
+    informacoes_preliminares = models.TextField(blank=True)
+    descricao_objeto = models.TextField(blank=True)
+    justificativa_necessidade = models.TextField(blank=True)
+    estimativa_quantidade_valores = models.TextField(blank=True)
+    vinculacao_outro_dfd = models.TextField(blank=True)
+    responsaveis = models.TextField(blank=True)
+
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-atualizado_em', '-id']
+
+    def __str__(self):
+        return self.nome
+
+
+class DfdItemTabela(models.Model):
+    dfd = models.ForeignKey(Dfd, on_delete=models.CASCADE, related_name='itens_tabela')
+    ordem = models.PositiveIntegerField(default=1)
+    item = models.CharField(max_length=40, blank=True)
+    equipamento = models.CharField(max_length=180)
+    catmat = models.CharField('CATMAT', max_length=120, blank=True)
+    siafisico = models.CharField('SIAFISICO', max_length=120, blank=True)
+    quantidade = models.PositiveIntegerField(default=1)
+    descricao = models.TextField('Descricao', blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['ordem', 'id']
+
+    def __str__(self):
+        return f'{self.item or self.ordem} - {self.equipamento}'
+
+
 class TermoReferencia(models.Model):
     nome = models.CharField(max_length=180)
     numero_processo = models.CharField('Numero do processo', max_length=120)
@@ -98,5 +144,23 @@ class ItemTR(models.Model):
 
     def __str__(self):
         return self.texto[:80]
+
+
+class TabelaItemLinha(models.Model):
+    item = models.ForeignKey(ItemTR, on_delete=models.CASCADE, related_name='tabela_linhas')
+    ordem = models.PositiveIntegerField(default=1)
+    descricao = models.TextField('Descricao')
+    catmat_catser = models.CharField('CATMAT/CATSER', max_length=120, blank=True)
+    siafisico = models.CharField('Siafisico', max_length=120, blank=True)
+    unidade_fornecimento = models.CharField('Unidade de Fornecimento', max_length=120, blank=True)
+    quantidade = models.DecimalField('Quantidade', max_digits=14, decimal_places=2)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['ordem', 'id']
+
+    def __str__(self):
+        return f'{self.ordem} - {self.descricao[:60]}'
 
 # Create your models here.

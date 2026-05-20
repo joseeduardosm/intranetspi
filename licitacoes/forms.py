@@ -2,8 +2,8 @@ import re
 
 from django import forms
 
-from .models import EtpTic, ItemTR, SessaoTR, TermoReferencia
-from .services import ETP_TIC_SECOES_MAP
+from .models import Dfd, DfdItemTabela, EtpTic, ItemTR, SessaoTR, TabelaItemLinha, TermoReferencia
+from .services import DFD_SECOES_MAP, ETP_TIC_SECOES_MAP
 
 
 BOOTSTRAP_INPUT = 'form-control form-control-lg'
@@ -64,6 +64,40 @@ class EtpTicSecaoForm(BootstrapModelForm):
             self.fields['declaracao_viabilidade'].disabled = True
 
 
+class DfdCreateForm(BootstrapModelForm):
+    class Meta:
+        model = Dfd
+        fields = ['nome', 'numero_processo']
+
+
+class DfdSecaoForm(BootstrapModelForm):
+    class Meta:
+        model = Dfd
+        fields = '__all__'
+        widgets = {
+            'informacoes_preliminares': forms.Textarea(attrs={'rows': 10}),
+            'descricao_objeto': forms.Textarea(attrs={'rows': 10}),
+            'justificativa_necessidade': forms.Textarea(attrs={'rows': 10}),
+            'estimativa_quantidade_valores': forms.Textarea(attrs={'rows': 10}),
+            'vinculacao_outro_dfd': forms.Textarea(attrs={'rows': 10}),
+            'responsaveis': forms.Textarea(attrs={'rows': 10}),
+        }
+
+    def __init__(self, *args, section_fields=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        allowed = set(section_fields or [])
+        for name in list(self.fields):
+            if name not in allowed:
+                self.fields.pop(name)
+
+
+class DfdItemTabelaForm(BootstrapModelForm):
+    class Meta:
+        model = DfdItemTabela
+        fields = ['item', 'equipamento', 'catmat', 'siafisico', 'quantidade', 'descricao']
+        widgets = {'descricao': forms.Textarea(attrs={'rows': 6})}
+
+
 class TermoReferenciaForm(BootstrapModelForm):
     class Meta:
         model = TermoReferencia
@@ -89,6 +123,13 @@ class ItemTRForm(BootstrapModelForm):
         return texto
 
 
+class TabelaItemLinhaForm(BootstrapModelForm):
+    class Meta:
+        model = TabelaItemLinha
+        fields = ['descricao', 'catmat_catser', 'siafisico', 'unidade_fornecimento', 'quantidade']
+        widgets = {'descricao': forms.Textarea(attrs={'rows': 10})}
+
+
 class ItemMoveForm(forms.Form):
     target = forms.CharField(label='Destino', required=True)
     action = forms.ChoiceField(
@@ -98,9 +139,17 @@ class ItemMoveForm(forms.Form):
             ('child', 'Mover como subitem do item destino'),
         ],
     )
+    child_position = forms.IntegerField(
+        label='Posicao dentro do destino',
+        min_value=1,
+        required=False,
+        help_text='Use somente ao mover como subitem. Deixe vazio para inserir no final.',
+    )
 
-    def __init__(self, *args, termo=None, item=None, **kwargs):
+    def __init__(self, *args, termo=None, item=None, action_label='Mover', **kwargs):
         super().__init__(*args, **kwargs)
+        action_label = action_label.strip()
+        action_lower = action_label.lower()
         choices = []
         blocked = {item.id} if item else set()
         if item:
@@ -117,17 +166,31 @@ class ItemMoveForm(forms.Form):
                 label = f"{'  ' * row['depth']}{prefix} {row_item.texto[:100]}"
                 choices.append((f'item:{row_item.id}', label))
         self.fields['target'].widget = forms.Select(choices=choices, attrs={'class': 'form-select form-select-lg'})
+        self.fields['action'].choices = [
+            ('after', f'{action_label} apos o item destino'),
+            ('child', f'{action_label} como subitem do item destino'),
+        ]
         self.fields['action'].widget.attrs.update({'class': 'form-select form-select-lg'})
+        self.fields['child_position'].widget.attrs.update({
+            'class': BOOTSTRAP_INPUT,
+            'placeholder': 'Ex.: 1',
+        })
+        self.session_action_error = f'Para {action_lower} para uma sessao, use a opcao de subitem/raiz do destino.'
 
     def clean(self):
         cleaned = super().clean()
         target = cleaned.get('target') or ''
         action = cleaned.get('action')
         if target.startswith('sessao:') and action != 'child':
-            raise forms.ValidationError('Para mover para uma sessao, use a opcao de subitem/raiz do destino.')
+            raise forms.ValidationError(self.session_action_error)
         return cleaned
 
 
 def form_for_etp_section(numero, *args, **kwargs):
     kwargs['section_fields'] = ETP_TIC_SECOES_MAP[numero]['campos']
     return EtpTicSecaoForm(*args, **kwargs)
+
+
+def form_for_dfd_section(numero, *args, **kwargs):
+    kwargs['section_fields'] = DFD_SECOES_MAP[numero]['campos']
+    return DfdSecaoForm(*args, **kwargs)

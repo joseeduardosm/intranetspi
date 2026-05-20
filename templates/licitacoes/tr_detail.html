@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load licitacoes_extras %}
 
 {% block content %}
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
@@ -23,7 +24,7 @@
     </aside>
     <section class="col-12 col-xl-10">
       {% for bloco in tree %}
-        <article id="sessao-{{ bloco.sessao.pk }}" class="card border-0 shadow-sm mb-4">
+        <article id="sessao-{{ bloco.sessao.pk }}" class="card border-0 shadow-sm mb-4 spi-tr-section">
           <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3">
             <h2 class="h5 mb-0">{{ bloco.sessao.ordem }}. {{ bloco.sessao.titulo }}</h2>
             <div class="d-flex flex-wrap gap-2">
@@ -43,20 +44,74 @@
               </thead>
               <tbody>
                 {% for row in bloco.rows %}
-                  <tr id="item-{{ row.item.pk }}">
+                  <tr id="item-{{ row.item.pk }}" tabindex="-1">
                     <td>{% if row.enum_prefix %}<strong>{{ row.enum_prefix }}</strong>{% else %}{{ row.indice }}.{% endif %}</td>
-                    <td><div style="padding-left: {{ row.indent }}rem;">{{ row.item.texto|linebreaksbr }}</div></td>
+                    <td><div style="padding-left: {{ row.indent }}rem;">{{ row.item.texto|red_marks }}</div></td>
                     <td class="text-end">
                       <div class="btn-group btn-group-sm">
                         <a class="btn btn-outline-primary" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}">+ subitem</a>
                         <a class="btn btn-outline-primary" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}?tipo=INCISO">+ inciso</a>
                         <a class="btn btn-outline-primary" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}?tipo=ALINEA">+ alinea</a>
+                        {% if row.pode_tabela_itens %}
+                          <a class="btn btn-outline-primary" href="#tabela-itens-{{ row.item.pk }}">Tabela itens</a>
+                        {% endif %}
                         <a class="btn btn-outline-secondary" href="{% url 'licitacoes:item_move' row.item.sessao.pk row.item.pk %}">Mover para</a>
+                        <a class="btn btn-outline-secondary" href="{% url 'licitacoes:item_duplicate' row.item.sessao.pk row.item.pk %}">Duplicar</a>
                         <a class="btn btn-outline-secondary" href="{% url 'licitacoes:item_update' row.item.sessao.pk row.item.pk %}">Editar</a>
                         <a class="btn btn-outline-danger" href="{% url 'licitacoes:item_delete' row.item.sessao.pk row.item.pk %}">Excluir</a>
                       </div>
                     </td>
                   </tr>
+                  {% if row.pode_tabela_itens %}
+                    <tr id="tabela-itens-{{ row.item.pk }}" class="spi-tabela-itens-row">
+                      <td></td>
+                      <td colspan="2">
+                        <div class="border rounded bg-light p-3">
+                          <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                            <h3 class="h6 mb-0">Itens da tabela do item 1.1</h3>
+                            <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:tabela_item_create' row.item.sessao.pk row.item.pk %}">+ item</a>
+                          </div>
+                          {% if row.tabela_linhas %}
+                            <div class="table-responsive">
+                              <table class="table table-sm table-bordered align-middle bg-white mb-0 spi-tabela-itens-table">
+                                <thead>
+                                  <tr>
+                                    <th>Item</th>
+                                    <th>Descricao</th>
+                                    <th>CATMAT/CATSER</th>
+                                    <th>Siafisico</th>
+                                    <th>Unidade de Fornecimento</th>
+                                    <th>Quantidade</th>
+                                    <th class="text-end">Acoes</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {% for linha in row.tabela_linhas %}
+                                    <tr>
+                                      <td>{{ linha.ordem }}</td>
+                                      <td>{{ linha.descricao|red_marks }}</td>
+                                      <td>{{ linha.catmat_catser|default:"-" }}</td>
+                                      <td>{{ linha.siafisico|default:"-" }}</td>
+                                      <td>{{ linha.unidade_fornecimento|default:"-" }}</td>
+                                      <td>{{ linha.quantidade }}</td>
+                                      <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                          <a class="btn btn-outline-secondary" href="{% url 'licitacoes:tabela_item_update' row.item.sessao.pk row.item.pk linha.pk %}">Editar</a>
+                                          <a class="btn btn-outline-danger" href="{% url 'licitacoes:tabela_item_delete' row.item.sessao.pk row.item.pk linha.pk %}">Excluir</a>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  {% endfor %}
+                                </tbody>
+                              </table>
+                            </div>
+                          {% else %}
+                            <p class="text-muted mb-0">Nenhum item lancado na tabela.</p>
+                          {% endif %}
+                        </div>
+                      </td>
+                    </tr>
+                  {% endif %}
                 {% empty %}
                   <tr><td colspan="3" class="text-muted">Nenhum item nesta sessao.</td></tr>
                 {% endfor %}
@@ -69,4 +124,17 @@
       {% endfor %}
     </section>
   </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (!window.location.hash || !window.location.hash.startsWith('#item-')) {
+        return;
+      }
+      var target = document.getElementById(window.location.hash.slice(1));
+      if (!target) {
+        return;
+      }
+      target.scrollIntoView({ block: 'start' });
+      target.focus({ preventScroll: true });
+    });
+  </script>
 {% endblock %}

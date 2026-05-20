@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start">
+    <div>
+      <h1>Preview DFD</h1>
+      <p>{{ dfd.nome }} - {{ dfd.numero_processo }}</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-primary" href="{% url 'licitacoes:dfd_edit' dfd.pk %}?secao={{ dfd.secao_atual }}">Editar</a>
+      <a class="btn btn-outline-secondary" href="{% url 'licitacoes:dfd_export' dfd.pk %}">DOCX</a>
+      <a class="btn btn-light" href="{% url 'licitacoes:dfd_list' %}">Voltar</a>
+    </div>
+  </div>
+  {% for secao in secoes_render %}
+    <article class="card border-0 shadow-sm mb-3">
+      <div class="card-body p-4">
+        <h2 class="h5">{% if secao.numerar %}{{ secao.numero_documento }}. {% endif %}{{ secao.titulo }}</h2>
+        {% if secao.entradas %}
+          <div class="vstack gap-2">
+            {% for entrada in secao.entradas %}<p class="mb-0 text-justify">{{ entrada|linebreaksbr }}</p>{% endfor %}
+          </div>
+        {% else %}
+          <p class="text-muted mb-0">-</p>
+        {% endif %}
+        {% if secao.tabela %}
+          <div class="table-responsive mt-3">
+            <table class="table table-sm table-bordered align-middle mb-0 spi-dfd-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Equipamento</th>
+                  <th>CATMAT</th>
+                  <th>SIAFISICO</th>
+                  <th>Quantidade</th>
+                  <th>Descricao</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for linha in secao.tabela %}
+                  <tr>
+                    <td>{{ linha.item|default:linha.ordem }}</td>
+                    <td>{{ linha.equipamento }}</td>
+                    <td>{{ linha.catmat|default:"-" }}</td>
+                    <td>{{ linha.siafisico|default:"-" }}</td>
+                    <td>{{ linha.quantidade }}</td>
+                    <td>{{ linha.descricao|linebreaksbr }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+    </article>
+  {% endfor %}
+{% endblock %}
