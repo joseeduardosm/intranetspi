@@ -530,6 +530,37 @@ def duplicate_termo(termo):
         return duplicate
 
 
+def duplicate_dfd(dfd):
+    with transaction.atomic():
+        dfd = Dfd.objects.get(pk=dfd.pk)
+        duplicate = Dfd.objects.create(
+            nome=f'Copia de {dfd.nome}',
+            numero_processo=dfd.numero_processo,
+            status=dfd.status,
+            secao_atual=dfd.secao_atual,
+            informacoes_preliminares=dfd.informacoes_preliminares,
+            descricao_objeto=dfd.descricao_objeto,
+            objeto_nao_luxo=dfd.objeto_nao_luxo,
+            justificativa_necessidade=dfd.justificativa_necessidade,
+            estimativa_quantidade_valores=dfd.estimativa_quantidade_valores,
+            vinculacao_outro_dfd=dfd.vinculacao_outro_dfd,
+            responsaveis=dfd.responsaveis,
+        )
+        for item in dfd.itens_tabela.order_by('ordem', 'id'):
+            DfdItemTabela.objects.create(
+                dfd=duplicate,
+                ordem=item.ordem,
+                especificacao=item.especificacao,
+                catmat=item.catmat,
+                siafisico=item.siafisico,
+                unidade_medida=item.unidade_medida,
+                quantidade=item.quantidade,
+                valor_unitario=item.valor_unitario,
+                valor_total=item.valor_total,
+            )
+        return duplicate
+
+
 def _copy_item_tree(item, sessao, parent, ordem):
     duplicate = ItemTR.objects.create(
         sessao=sessao,

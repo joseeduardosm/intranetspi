@@ -30,7 +30,8 @@
               <td><span class="badge text-bg-secondary">{{ etp.get_status_display }}</span></td>
               <td>{{ etp.secao_atual }}</td>
               <td class="text-end">
-                <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:etp_edit' etp.pk %}?secao={{ etp.secao_atual }}">Editar</a>
+                <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:etp_edit' etp.pk %}">Editar</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:etp_edit' etp.pk %}?secao={{ etp.secao_atual }}">Secoes</a>
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:etp_preview' etp.pk %}">Preview</a>
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:etp_export' etp.pk %}">DOCX</a>
                 <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:etp_delete' etp.pk %}">Excluir</a>

@@ -2,6 +2,30 @@
 
 Todas as mudancas importantes do Aplicacoes SPI serao documentadas neste arquivo.
 
+## [0.4.0] - 2026-05-22
+
+### Adicionado
+
+- Adicionado modulo Noticias com CRUD para superusuarios, imagem destaque, status de rascunho, agendada e publicada, campo fixada e anexos PDF.
+- Adicionada home publica de noticias com carousel, cards laterais, pagina de detalhe, pagina "todas as noticias" paginada e comando `publicar_noticias_agendadas`.
+- Adicionado modulo de gestao da navbar com menus e submenus, ordenacao, status ativo/inativo, links internos/externos e opcao de abrir em nova aba.
+- Adicionado botao para duplicar DFD, copiando campos e itens da tabela vinculada.
+- Adicionado suporte a upload de midia via `MEDIA_URL` e `MEDIA_ROOT`.
+
+### Alterado
+
+- Alterada a raiz e a home do sistema para abrir a tela publica de noticias.
+- Alterada a barra superior para a identidade "Intranet SPI" com menus dinamicos cadastrados no banco.
+- Ajustado o fluxo de edicao de DFD e ETP TIC para abrir primeiro os dados basicos, mantendo o acesso as secoes por botao separado.
+- Ajustado o layout da home de noticias para usar o slider e cards laterais sem lista inferior.
+- Ajustada a exibicao de imagem destaque: slider preenche o quadro por deformacao e cards laterais preenchem por capa.
+- Ajustado o anexo PDF da noticia para exibir link de acesso ao final do texto.
+- Tornada a URL da navbar opcional para menus pai usados apenas como dropdown.
+
+### Configuracao
+
+- Adicionada dependencia `Pillow` para suporte a `ImageField`.
+
 ## [0.3.0] - 2026-05-20
 
 ### Adicionado

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ noticia.titulo }} - Noticias{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'noticias/css/noticias.css' %}">{% endblock %}
+
+{% block content %}
+  <article class="noticia-detail">
+    <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+      <div>
+        <h1>{{ noticia.titulo }}</h1>
+        <p>{{ noticia.data_publicacao|date:"d/m/Y H:i" }}</p>
+      </div>
+      <a class="btn btn-light" href="{% url 'noticias:public_list' %}">Voltar</a>
+    </div>
+
+    <figure class="noticia-detail-hero">
+      <img src="{{ noticia.imagem_destaque.url }}" alt="{{ noticia.titulo }}">
+    </figure>
+
+    <div class="noticia-detail-body card border-0 shadow-sm">
+      <div class="card-body p-4 p-lg-5">
+        {{ noticia.texto_noticia|linebreaks }}
+        {% if noticia.anexo_pdf %}
+          <section class="noticia-pdf-anexo" aria-label="PDF anexo">
+            <iframe class="noticia-pdf-viewer" src="{% url 'noticias:pdf' noticia.pk %}" title="{{ noticia.titulo }} - PDF anexo"></iframe>
+            <a class="noticia-pdf-link" href="{% url 'noticias:pdf' noticia.pk %}" target="_blank" rel="noopener">
+              {{ noticia.anexo_pdf.name|cut:"noticias/anexos/" }}
+            </a>
+          </section>
+        {% endif %}
+      </div>
+    </div>
+
+    <section class="noticia-future-slots">
+      <div>Galeria de imagens</div>
+      <div>Anexos</div>
+      <div>Videos</div>
+      <div>Noticias relacionadas</div>
+    </section>
+  </article>
+{% endblock %}

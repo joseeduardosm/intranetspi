@@ -7,7 +7,8 @@
       <p>{{ etp.nome }} - {{ etp.numero_processo }}</p>
     </div>
     <div class="d-flex gap-2">
-      <a class="btn btn-primary" href="{% url 'licitacoes:etp_edit' etp.pk %}?secao={{ etp.secao_atual }}">Editar</a>
+      <a class="btn btn-primary" href="{% url 'licitacoes:etp_edit' etp.pk %}">Editar</a>
+      <a class="btn btn-outline-secondary" href="{% url 'licitacoes:etp_edit' etp.pk %}?secao={{ etp.secao_atual }}">Secoes</a>
       <a class="btn btn-outline-secondary" href="{% url 'licitacoes:etp_export' etp.pk %}">DOCX</a>
       <a class="btn btn-light" href="{% url 'licitacoes:etp_list' %}">Voltar</a>
     </div>

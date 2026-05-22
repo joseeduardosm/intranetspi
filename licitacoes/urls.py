@@ -18,6 +18,7 @@ urlpatterns = [
     path('dfd/<int:pk>/editar/', views.DfdEditView.as_view(), name='dfd_edit'),
     path('dfd/<int:pk>/preview/', views.DfdPreviewView.as_view(), name='dfd_preview'),
     path('dfd/<int:pk>/concluir/', views.DfdConcluirView.as_view(), name='dfd_concluir'),
+    path('dfd/<int:pk>/duplicar/', views.DfdDuplicateView.as_view(), name='dfd_duplicate'),
     path('dfd/<int:pk>/exportar-docx/', views.DfdExportDocxView.as_view(), name='dfd_export'),
     path('dfd/<int:pk>/excluir/', views.DfdDeleteView.as_view(), name='dfd_delete'),
     path('dfd/<int:dfd_pk>/tabela/novo/', views.DfdItemTabelaCreateView.as_view(), name='dfd_tabela_create'),

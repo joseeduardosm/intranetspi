@@ -5,6 +5,7 @@ from django.urls import reverse
 from .models import Dfd, DfdItemTabela, EtpTic, ItemTR, SessaoTR, TabelaItemLinha, TermoReferencia
 from .services import (
     build_item_rows,
+    duplicate_dfd,
     duplicate_item,
     duplicate_termo,
     item_parent_for_tipo,
@@ -34,6 +35,33 @@ class EtpTicTests(TestCase):
         secao = render_etp_sections(etp)[1]
         self.assertEqual(secao['entradas'][0], '2.1. Primeiro paragrafo.')
         self.assertEqual(secao['entradas'][1], '2.2. Segundo paragrafo.')
+
+    def test_editar_etp_sem_secao_abre_dados_basicos(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', descricao_necessidade='Necessidade.')
+
+        response = self.client.get(reverse('licitacoes:etp_edit', args=[etp.pk]))
+
+        self.assertContains(response, 'Editar ETP TIC')
+        self.assertContains(response, 'name="nome"')
+        self.assertNotContains(response, 'Descricao da Necessidade')
+
+    def test_salvar_dados_basicos_etp_redireciona_para_preview(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', link='https://example.com')
+
+        response = self.client.post(
+            reverse('licitacoes:etp_edit', args=[etp.pk]),
+            {'nome': 'ETP atualizado', 'numero_processo': '002/2026', 'link': ''},
+        )
+
+        etp.refresh_from_db()
+        self.assertEqual(etp.nome, 'ETP atualizado')
+        self.assertRedirects(response, reverse('licitacoes:etp_preview', args=[etp.pk]), fetch_redirect_response=False)
 
 
 class DfdTests(TestCase):
@@ -101,6 +129,33 @@ class DfdTests(TestCase):
             f"{reverse('licitacoes:dfd_edit', args=[dfd.pk])}?secao=1",
             fetch_redirect_response=False,
         )
+
+    def test_editar_dfd_sem_secao_abre_dados_basicos(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        dfd = Dfd.objects.create(nome='DFD', numero_processo='001/2026', descricao_objeto='Objeto.')
+
+        response = self.client.get(reverse('licitacoes:dfd_edit', args=[dfd.pk]))
+
+        self.assertContains(response, 'Editar DFD')
+        self.assertContains(response, 'name="nome"')
+        self.assertNotContains(response, 'Descricao Sucinta do Objeto')
+
+    def test_salvar_dados_basicos_dfd_redireciona_para_preview(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        dfd = Dfd.objects.create(nome='DFD', numero_processo='001/2026')
+
+        response = self.client.post(
+            reverse('licitacoes:dfd_edit', args=[dfd.pk]),
+            {'nome': 'DFD atualizado', 'numero_processo': '002/2026'},
+        )
+
+        dfd.refresh_from_db()
+        self.assertEqual(dfd.nome, 'DFD atualizado')
+        self.assertRedirects(response, reverse('licitacoes:dfd_preview', args=[dfd.pk]), fetch_redirect_response=False)
 
     def test_editar_dfd_avanca_para_proxima_secao(self):
         User = get_user_model()
@@ -304,6 +359,66 @@ class DfdTests(TestCase):
         self.assertIn('vermelho', red_texts)
         self.assertIn('destacado', red_texts)
         self.assertIn('especial', red_texts)
+
+    def test_duplicar_dfd_copia_campos_e_tabela(self):
+        dfd = Dfd.objects.create(
+            nome='DFD',
+            numero_processo='001/2026',
+            status=Dfd.Status.CONCLUIDO,
+            secao_atual=4,
+            informacoes_preliminares='Orgao: SEDS',
+            descricao_objeto='Objeto.',
+            objeto_nao_luxo='1.2. Item nao luxo.',
+            justificativa_necessidade='Necessidade.',
+            estimativa_quantidade_valores='Estimativa.',
+            vinculacao_outro_dfd='Sem vinculacao.',
+            responsaveis='Responsavel.',
+        )
+        DfdItemTabela.objects.create(
+            dfd=dfd,
+            ordem=1,
+            especificacao='Notebook',
+            catmat='123',
+            siafisico='456',
+            unidade_medida='Unidade',
+            quantidade='2.00',
+            valor_unitario='100.50',
+            valor_total='201.00',
+        )
+
+        duplicate = duplicate_dfd(dfd)
+
+        self.assertEqual(duplicate.nome, 'Copia de DFD')
+        self.assertEqual(duplicate.numero_processo, dfd.numero_processo)
+        self.assertEqual(duplicate.status, dfd.status)
+        self.assertEqual(duplicate.secao_atual, 4)
+        self.assertEqual(duplicate.descricao_objeto, 'Objeto.')
+        self.assertEqual(duplicate.itens_tabela.get().especificacao, 'Notebook')
+        self.assertNotEqual(duplicate.itens_tabela.get().pk, dfd.itens_tabela.get().pk)
+
+    def test_duplicar_dfd_pela_listagem_volta_para_edicao_do_duplicado(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        dfd = Dfd.objects.create(nome='DFD', numero_processo='001/2026', secao_atual=3)
+        DfdItemTabela.objects.create(
+            dfd=dfd,
+            ordem=1,
+            especificacao='Notebook',
+            quantidade='2.00',
+            valor_unitario='100.50',
+            valor_total='201.00',
+        )
+
+        response = self.client.post(reverse('licitacoes:dfd_duplicate', args=[dfd.pk]))
+
+        duplicate = Dfd.objects.get(nome='Copia de DFD')
+        self.assertEqual(duplicate.itens_tabela.get().especificacao, 'Notebook')
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:dfd_edit', args=[duplicate.pk])}?secao=3",
+            fetch_redirect_response=False,
+        )
 
 
 class RedMarkTests(TestCase):

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{% if object %}Editar item da navbar{% else %}Novo item da navbar{% endif %}</h1>
+      <p>Configure menus e submenus da barra de navegacao.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'navbar:manage_list' %}">Voltar</a>
+  </div>
+
+  <form method="post" class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="row g-3">
+        {% for field in form %}
+          <div class="col-12 {% if field.name == 'ordem' or field.name == 'parent' %}col-xl-6{% endif %}">
+            {% if field.name == 'ativo' or field.name == 'abrir_nova_aba' %}
+              <div class="form-check mt-2">
+                {{ field }}
+                <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              </div>
+            {% else %}
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+            {% endif %}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-end gap-2 p-3">
+      <a class="btn btn-light" href="{% url 'navbar:manage_list' %}">Cancelar</a>
+      <button class="btn btn-primary" type="submit">Salvar</button>
+    </div>
+  </form>
+{% endblock %}

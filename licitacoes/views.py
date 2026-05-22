@@ -31,6 +31,7 @@ from .services import (
     build_item_rows,
     item_parent_for_tipo,
     build_termo_tree,
+    duplicate_dfd,
     duplicate_item,
     duplicate_termo,
     dfd_status_por_secao,
@@ -124,9 +125,20 @@ class EtpTicCreateView(SuperuserRequiredMixin, CreateView):
 
 class EtpTicEditView(SuperuserRequiredMixin, UpdateView):
     model = EtpTic
-    form_class = EtpTicSecaoForm
-    template_name = 'licitacoes/etp_edit.html'
     context_object_name = 'etp'
+
+    def _edita_secao(self):
+        return 'secao' in self.request.GET
+
+    def get_template_names(self):
+        if self._edita_secao():
+            return ['licitacoes/etp_edit.html']
+        return ['licitacoes/form.html']
+
+    def get_form_class(self):
+        if self._edita_secao():
+            return EtpTicSecaoForm
+        return EtpTicCreateForm
 
     def _secao_numero(self):
         try:
@@ -137,10 +149,15 @@ class EtpTicEditView(SuperuserRequiredMixin, UpdateView):
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs['section_fields'] = ETP_TIC_SECOES_MAP[self._secao_numero()]['campos']
+        if self._edita_secao():
+            kwargs['section_fields'] = ETP_TIC_SECOES_MAP[self._secao_numero()]['campos']
         return kwargs
 
     def form_valid(self, form):
+        if not self._edita_secao():
+            self.object = form.save()
+            return redirect('licitacoes:etp_preview', pk=self.object.pk)
+
         etp = form.save(commit=False)
         secao = self._secao_numero()
         acao = self.request.POST.get('_acao', 'salvar')
@@ -155,6 +172,11 @@ class EtpTicEditView(SuperuserRequiredMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        if not self._edita_secao():
+            context['titulo'] = 'Editar ETP TIC'
+            context['voltar_url'] = reverse('licitacoes:etp_preview', args=[self.object.pk])
+            return context
+
         secao_numero = self._secao_numero()
         status = etp_status_por_secao(self.object)
         context['secao_numero'] = secao_numero
@@ -219,9 +241,20 @@ class DfdCreateView(SuperuserRequiredMixin, CreateView):
 
 class DfdEditView(SuperuserRequiredMixin, UpdateView):
     model = Dfd
-    form_class = DfdSecaoForm
-    template_name = 'licitacoes/dfd_edit.html'
     context_object_name = 'dfd'
+
+    def _edita_secao(self):
+        return 'secao' in self.request.GET
+
+    def get_template_names(self):
+        if self._edita_secao():
+            return ['licitacoes/dfd_edit.html']
+        return ['licitacoes/form.html']
+
+    def get_form_class(self):
+        if self._edita_secao():
+            return DfdSecaoForm
+        return DfdCreateForm
 
     def _secao_numero(self):
         try:
@@ -232,10 +265,15 @@ class DfdEditView(SuperuserRequiredMixin, UpdateView):
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs['section_fields'] = DFD_SECOES_MAP[self._secao_numero()]['campos']
+        if self._edita_secao():
+            kwargs['section_fields'] = DFD_SECOES_MAP[self._secao_numero()]['campos']
         return kwargs
 
     def form_valid(self, form):
+        if not self._edita_secao():
+            self.object = form.save()
+            return redirect('licitacoes:dfd_preview', pk=self.object.pk)
+
         dfd = form.save(commit=False)
         secao = self._secao_numero()
         acao = self.request.POST.get('_acao', 'salvar')
@@ -256,6 +294,11 @@ class DfdEditView(SuperuserRequiredMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        if not self._edita_secao():
+            context['titulo'] = 'Editar DFD'
+            context['voltar_url'] = reverse('licitacoes:dfd_preview', args=[self.object.pk])
+            return context
+
         secao_numero = self._secao_numero()
         status = dfd_status_por_secao(self.object)
         context['secao_numero'] = secao_numero
@@ -289,6 +332,14 @@ class DfdDeleteView(SuperuserRequiredMixin, DeleteView):
     model = Dfd
     template_name = 'licitacoes/confirm_delete.html'
     success_url = reverse_lazy('licitacoes:dfd_list')
+
+
+class DfdDuplicateView(SuperuserRequiredMixin, View):
+    def post(self, request, pk):
+        dfd = get_object_or_404(Dfd, pk=pk)
+        duplicate = duplicate_dfd(dfd)
+        messages.success(request, 'DFD duplicado.')
+        return redirect(f"{reverse('licitacoes:dfd_edit', args=[duplicate.pk])}?secao={duplicate.secao_atual}")
 
 
 class DfdItemTabelaCreateView(SuperuserRequiredMixin, CreateView):

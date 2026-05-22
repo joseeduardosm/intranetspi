@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Todas as noticias - Aplicações SPI{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'noticias/css/noticias.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="noticias-page">
+    <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+      <div>
+        <h1>Todas as noticias</h1>
+        <p>Comunicados, informes e atualizacoes institucionais.</p>
+      </div>
+      <a class="btn btn-light" href="{% url 'noticias:public_list' %}">Voltar</a>
+    </div>
+
+    <section class="noticias-list-grid">
+      {% for noticia in noticias %}
+        <a class="noticias-list-card" href="{% url 'noticias:public_detail' noticia.pk %}">
+          <img src="{{ noticia.imagem_destaque.url }}" alt="{{ noticia.titulo }}">
+          <span>
+            <strong>{{ noticia.titulo }}</strong>
+            <small>{{ noticia.data_publicacao|date:"d/m/Y H:i" }}</small>
+          </span>
+        </a>
+      {% empty %}
+        <div class="card border-0 shadow-sm">
+          <div class="card-body p-4 text-muted">Nenhuma noticia publicada no momento.</div>
+        </div>
+      {% endfor %}
+    </section>
+
+    {% if is_paginated %}
+      <nav class="noticias-pagination" aria-label="Paginacao de noticias">
+        {% if page_obj.has_previous %}
+          <a class="btn btn-outline-secondary" href="?page={{ page_obj.previous_page_number }}">Anterior</a>
+        {% else %}
+          <span class="btn btn-outline-secondary disabled">Anterior</span>
+        {% endif %}
+        <span class="noticias-pagination-status">Pagina {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+          <a class="btn btn-outline-secondary" href="?page={{ page_obj.next_page_number }}">Proxima</a>
+        {% else %}
+          <span class="btn btn-outline-secondary disabled">Proxima</span>
+        {% endif %}
+      </nav>
+    {% endif %}
+  </div>
+{% endblock %}

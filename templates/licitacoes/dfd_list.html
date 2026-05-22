@@ -30,8 +30,13 @@
               <td><span class="badge text-bg-secondary">{{ dfd.get_status_display }}</span></td>
               <td>{{ dfd.secao_atual }}</td>
               <td class="text-end">
-                <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:dfd_edit' dfd.pk %}?secao={{ dfd.secao_atual }}">Editar</a>
+                <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:dfd_edit' dfd.pk %}">Editar</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:dfd_edit' dfd.pk %}?secao={{ dfd.secao_atual }}">Secoes</a>
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:dfd_preview' dfd.pk %}">Preview</a>
+                <form class="d-inline" method="post" action="{% url 'licitacoes:dfd_duplicate' dfd.pk %}">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">Duplicar</button>
+                </form>
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:dfd_export' dfd.pk %}">DOCX</a>
                 <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:dfd_delete' dfd.pk %}">Excluir</a>
               </td>

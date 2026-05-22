@@ -8,7 +8,8 @@
       <p>{{ dfd.nome }} - {{ dfd.numero_processo }}</p>
     </div>
     <div class="d-flex gap-2">
-      <a class="btn btn-primary" href="{% url 'licitacoes:dfd_edit' dfd.pk %}?secao={{ dfd.secao_atual }}">Editar</a>
+      <a class="btn btn-primary" href="{% url 'licitacoes:dfd_edit' dfd.pk %}">Editar</a>
+      <a class="btn btn-outline-secondary" href="{% url 'licitacoes:dfd_edit' dfd.pk %}?secao={{ dfd.secao_atual }}">Secoes</a>
       <a class="btn btn-outline-secondary" href="{% url 'licitacoes:dfd_export' dfd.pk %}">DOCX</a>
       <a class="btn btn-light" href="{% url 'licitacoes:dfd_list' %}">Voltar</a>
     </div>
