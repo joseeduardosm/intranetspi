@@ -30,10 +30,11 @@
             <div class="d-flex flex-wrap gap-2">
               <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:item_create' bloco.sessao.pk %}">+ item</a>
               <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:sessao_update' termo.pk bloco.sessao.pk %}">Editar sessao</a>
+              <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:sessao_clear_items' termo.pk bloco.sessao.pk %}">Limpar filhos</a>
               <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:sessao_delete' termo.pk bloco.sessao.pk %}">Excluir sessao</a>
             </div>
           </div>
-          <div class="table-responsive">
+          <div class="spi-tr-table-wrap">
             <table class="table align-middle mb-0 spi-tr-table">
               <thead>
                 <tr>
@@ -45,20 +46,26 @@
               <tbody>
                 {% for row in bloco.rows %}
                   <tr id="item-{{ row.item.pk }}" tabindex="-1">
-                    <td>{% if row.enum_prefix %}<strong>{{ row.enum_prefix }}</strong>{% else %}{{ row.indice }}.{% endif %}</td>
-                    <td><div style="padding-left: {{ row.indent }}rem;">{{ row.item.texto|red_marks }}</div></td>
+                    <td>{% if row.is_subsecao %}{% elif row.enum_prefix %}<strong>{{ row.enum_prefix }}</strong>{% else %}{{ row.indice }}.{% endif %}</td>
+                    <td><div class="{% if row.is_subsecao %}spi-subsecao-row{% endif %}" style="padding-left: {{ row.indent }}rem;">{{ row.item.texto|red_marks }}</div></td>
                     <td class="text-end">
-                      <div class="btn-group btn-group-sm">
-                        <a class="btn btn-outline-primary" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}">+ subitem</a>
-                        <a class="btn btn-outline-primary" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}?tipo=INCISO">+ inciso</a>
-                        <a class="btn btn-outline-primary" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}?tipo=ALINEA">+ alinea</a>
-                        {% if row.pode_tabela_itens %}
-                          <a class="btn btn-outline-primary" href="#tabela-itens-{{ row.item.pk }}">Tabela itens</a>
-                        {% endif %}
-                        <a class="btn btn-outline-secondary" href="{% url 'licitacoes:item_move' row.item.sessao.pk row.item.pk %}">Mover para</a>
-                        <a class="btn btn-outline-secondary" href="{% url 'licitacoes:item_duplicate' row.item.sessao.pk row.item.pk %}">Duplicar</a>
-                        <a class="btn btn-outline-secondary" href="{% url 'licitacoes:item_update' row.item.sessao.pk row.item.pk %}">Editar</a>
-                        <a class="btn btn-outline-danger" href="{% url 'licitacoes:item_delete' row.item.sessao.pk row.item.pk %}">Excluir</a>
+                      <div class="spi-action-menu">
+                        <button class="btn btn-sm btn-outline-secondary spi-action-menu-toggle" type="button" aria-label="Acoes do item" aria-expanded="false">...</button>
+                        <div class="spi-action-menu-panel" role="menu" hidden>
+                          {% if not row.is_subsecao %}
+                            <a class="btn btn-sm btn-outline-primary" role="menuitem" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}">+ subitem</a>
+                            <a class="btn btn-sm btn-outline-primary" role="menuitem" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}?tipo=INCISO">+ inciso</a>
+                            <a class="btn btn-sm btn-outline-primary" role="menuitem" href="{% url 'licitacoes:item_child_create' row.item.sessao.pk row.item.pk %}?tipo=ALINEA">+ alinea</a>
+                          {% endif %}
+                          {% if row.pode_tabela_itens %}
+                            <a class="btn btn-sm btn-outline-primary" role="menuitem" href="#tabela-itens-{{ row.item.pk }}">Tabela itens</a>
+                          {% endif %}
+                          <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'licitacoes:item_move' row.item.sessao.pk row.item.pk %}">Mover para</a>
+                          <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'licitacoes:item_duplicate' row.item.sessao.pk row.item.pk %}">Duplicar</a>
+                          <a class="btn btn-sm btn-outline-danger" role="menuitem" href="{% url 'licitacoes:item_clear_children' row.item.sessao.pk row.item.pk %}">Limpar filhos</a>
+                          <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'licitacoes:item_update' row.item.sessao.pk row.item.pk %}">Editar</a>
+                          <a class="btn btn-sm btn-outline-danger" role="menuitem" href="{% url 'licitacoes:item_delete' row.item.sessao.pk row.item.pk %}">Excluir</a>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -135,6 +142,86 @@
       }
       target.scrollIntoView({ block: 'start' });
       target.focus({ preventScroll: true });
+    });
+
+    function positionTrActionMenu(menu) {
+      var toggle = menu.querySelector('.spi-action-menu-toggle');
+      var panel = menu.querySelector('.spi-action-menu-panel');
+      if (!toggle || !panel) {
+        return;
+      }
+      var rect = toggle.getBoundingClientRect();
+      var maxTop = Math.max(8, window.innerHeight - panel.offsetHeight - 8);
+      panel.style.right = 'auto';
+      panel.style.left = Math.max(8, rect.right - panel.offsetWidth) + 'px';
+      panel.style.top = Math.min(maxTop, Math.max(8, rect.top + (rect.height / 2) - (panel.offsetHeight / 2))) + 'px';
+    }
+
+    function closeTrActionMenus(exceptToggle) {
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(function (menu) {
+        if (!exceptToggle || !menu.contains(exceptToggle)) {
+          menu.classList.remove('is-open');
+          var panel = menu.querySelector('.spi-action-menu-panel');
+          if (panel) {
+            panel.hidden = true;
+            panel.style.left = '';
+            panel.style.right = '';
+            panel.style.top = '';
+          }
+          var openToggle = menu.querySelector('.spi-action-menu-toggle');
+          if (openToggle) {
+            openToggle.setAttribute('aria-expanded', 'false');
+          }
+        }
+      });
+    }
+
+    document.addEventListener('click', function (event) {
+      var toggle = event.target.closest('.spi-action-menu-toggle');
+      closeTrActionMenus(toggle);
+      if (!toggle) {
+        return;
+      }
+      var menu = toggle.closest('.spi-action-menu');
+      var isOpen = menu.classList.toggle('is-open');
+      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      var panel = menu.querySelector('.spi-action-menu-panel');
+      if (panel) {
+        panel.hidden = !isOpen;
+      }
+      if (isOpen) {
+        positionTrActionMenu(menu);
+      }
+      event.preventDefault();
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(function (menu) {
+        menu.classList.remove('is-open');
+        var panel = menu.querySelector('.spi-action-menu-panel');
+        if (panel) {
+          panel.hidden = true;
+          panel.style.left = '';
+          panel.style.right = '';
+          panel.style.top = '';
+        }
+        var toggle = menu.querySelector('.spi-action-menu-toggle');
+        if (toggle) {
+          toggle.setAttribute('aria-expanded', 'false');
+          toggle.focus();
+        }
+      });
+    });
+
+    window.addEventListener('scroll', function () {
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(positionTrActionMenu);
+    }, true);
+
+    window.addEventListener('resize', function () {
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(positionTrActionMenu);
     });
   </script>
 {% endblock %}

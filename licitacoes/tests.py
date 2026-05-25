@@ -2,13 +2,19 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Dfd, DfdItemTabela, EtpTic, ItemTR, SessaoTR, TabelaItemLinha, TermoReferencia
+from .models import Dfd, DfdItemTabela, EtpTic, ItemEtpTic, ItemTR, SessaoEtpTic, SessaoTR, TabelaItemLinha, TermoReferencia
 from .services import (
+    build_etp_item_rows,
     build_item_rows,
+    clear_etp_item_children,
+    clear_item_children,
     duplicate_dfd,
+    duplicate_etp,
+    duplicate_etp_item,
     duplicate_item,
     duplicate_termo,
     item_parent_for_tipo,
+    move_etp_item,
     move_item,
     red_marked_html,
     render_dfd_sections,
@@ -40,7 +46,7 @@ class EtpTicTests(TestCase):
         User = get_user_model()
         User.objects.create_superuser(username='admin', password='123')
         self.client.login(username='admin', password='123')
-        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', descricao_necessidade='Necessidade.')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
 
         response = self.client.get(reverse('licitacoes:etp_edit', args=[etp.pk]))
 
@@ -52,7 +58,7 @@ class EtpTicTests(TestCase):
         User = get_user_model()
         User.objects.create_superuser(username='admin', password='123')
         self.client.login(username='admin', password='123')
-        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', link='https://example.com')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', link='https://example.com', usa_editor_dinamico=True)
 
         response = self.client.post(
             reverse('licitacoes:etp_edit', args=[etp.pk]),
@@ -62,6 +68,366 @@ class EtpTicTests(TestCase):
         etp.refresh_from_db()
         self.assertEqual(etp.nome, 'ETP atualizado')
         self.assertRedirects(response, reverse('licitacoes:etp_preview', args=[etp.pk]), fetch_redirect_response=False)
+
+    def test_criar_etp_novo_nasce_dinamico_sem_sessoes(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+
+        response = self.client.post(
+            reverse('licitacoes:etp_create'),
+            {'nome': 'ETP novo', 'numero_processo': '001/2026', 'link': ''},
+        )
+
+        etp = EtpTic.objects.get(nome='ETP novo')
+        self.assertTrue(etp.usa_editor_dinamico)
+        self.assertEqual(etp.sessoes.count(), 0)
+        self.assertRedirects(response, reverse('licitacoes:etp_detail', args=[etp.pk]), fetch_redirect_response=False)
+
+    def test_etp_legado_nao_edita_e_abre_preview(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP legado', numero_processo='001/2026', descricao_necessidade='Necessidade.')
+
+        response = self.client.get(reverse('licitacoes:etp_edit', args=[etp.pk]))
+        preview = self.client.get(reverse('licitacoes:etp_preview', args=[etp.pk]))
+
+        self.assertRedirects(response, reverse('licitacoes:etp_preview', args=[etp.pk]), fetch_redirect_response=False)
+        self.assertContains(preview, 'ETP TIC legado disponivel somente para visualizacao.')
+        self.assertContains(preview, 'Necessidade.')
+
+    def test_etp_dinamico_cria_sessao_item_e_subitem(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+
+        response_sessao = self.client.post(reverse('licitacoes:etp_sessao_create', args=[etp.pk]), {'titulo': 'Objeto'})
+        sessao = etp.sessoes.get()
+        response_item = self.client.post(reverse('licitacoes:etp_item_create', args=[sessao.pk]), {'texto': 'Item'})
+        item = sessao.itens.get(texto='Item')
+        response_subitem = self.client.post(reverse('licitacoes:etp_item_child_create', args=[sessao.pk, item.pk]), {'texto': 'Subitem'})
+
+        rows = build_etp_item_rows(sessao)
+        found = {row['item'].texto: row for row in rows}
+        self.assertRedirects(response_sessao, f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#sessao-etp-{sessao.pk}", fetch_redirect_response=False)
+        self.assertRedirects(response_item, f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#item-etp-{item.pk}", fetch_redirect_response=False)
+        self.assertRedirects(response_subitem, f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#item-etp-{sessao.itens.get(texto='Subitem').pk}", fetch_redirect_response=False)
+        self.assertEqual(found['Item']['indice'], '1.1')
+        self.assertEqual(found['Subitem']['indice'], '1.1.1')
+
+    def test_criar_subitens_etp_por_marcador_hash_duplo(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        parent = ItemEtpTic.objects.create(sessao=sessao, texto='Memoria RAM', ordem=1)
+
+        response = self.client.post(
+            reverse('licitacoes:etp_item_child_create', args=[sessao.pk, parent.pk]),
+            {
+                'texto': (
+                    '##Deverao ser fornecidos no minimo 384 GBytes de memoria RAM por servidor.\n'
+                    '##Padrao minimo do tipo DDR-4 ECC 2666MHz ou superior.'
+                )
+            },
+        )
+
+        filhos = list(parent.filhos.order_by('ordem', 'id'))
+        self.assertEqual(len(filhos), 2)
+        self.assertEqual(filhos[0].texto, 'Deverao ser fornecidos no minimo 384 GBytes de memoria RAM por servidor.')
+        self.assertEqual(filhos[1].texto, 'Padrao minimo do tipo DDR-4 ECC 2666MHz ou superior.')
+        self.assertNotIn('##', filhos[0].texto)
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#item-etp-{filhos[0].pk}",
+            fetch_redirect_response=False,
+        )
+
+    def test_criar_item_etp_com_subitens_por_marcadores_hash(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        parent = ItemEtpTic.objects.create(sessao=sessao, texto='Hardware', ordem=1)
+
+        response = self.client.post(
+            reverse('licitacoes:etp_item_child_create', args=[sessao.pk, parent.pk]),
+            {
+                'texto': (
+                    '#SLOTS PCI\n'
+                    '##Padrao PCI-Express ou superior.\n'
+                    '##Disponibilizar no minimo 02 slots PCI-Express livres.'
+                )
+            },
+        )
+
+        item = parent.filhos.get(texto='SLOTS PCI')
+        filhos = list(item.filhos.order_by('ordem', 'id'))
+        self.assertEqual(item.ordem, 1)
+        self.assertEqual(len(filhos), 2)
+        self.assertEqual(filhos[0].texto, 'Padrao PCI-Express ou superior.')
+        self.assertEqual(filhos[1].texto, 'Disponibilizar no minimo 02 slots PCI-Express livres.')
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#item-etp-{item.pk}",
+            fetch_redirect_response=False,
+        )
+
+    def test_criar_hierarquia_etp_por_marcadores_ate_cinco_niveis(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        parent = ItemEtpTic.objects.create(sessao=sessao, texto='Item base', ordem=1)
+
+        response = self.client.post(
+            reverse('licitacoes:etp_item_child_create', args=[sessao.pk, parent.pk]),
+            {
+                'texto': (
+                    '#Nivel 1\n'
+                    '##Nivel 2\n'
+                    '###Nivel 3\n'
+                    '####Nivel 4\n'
+                    '#####Nivel 5\n'
+                    '#Outro nivel 1'
+                )
+            },
+        )
+
+        rows = build_etp_item_rows(sessao)
+        found = {row['item'].texto: row for row in rows}
+        self.assertEqual(found['Nivel 1']['indice'], '1.1.1')
+        self.assertEqual(found['Nivel 2']['indice'], '1.1.1.1')
+        self.assertEqual(found['Nivel 3']['indice'], '1.1.1.1.1')
+        self.assertEqual(found['Nivel 4']['indice'], '1.1.1.1.1.1')
+        self.assertEqual(found['Nivel 5']['indice'], '1.1.1.1.1.1.1')
+        self.assertEqual(found['Outro nivel 1']['indice'], '1.1.2')
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#item-etp-{found['Nivel 1']['item'].pk}",
+            fetch_redirect_response=False,
+        )
+
+    def test_criar_hierarquia_etp_por_marcadores_em_item_raiz(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+
+        response = self.client.post(
+            reverse('licitacoes:etp_item_create', args=[sessao.pk]),
+            {
+                'texto': (
+                    '#Item raiz\n'
+                    '##Subitem\n'
+                    '###Subitem interno\n'
+                    '#Outro item raiz'
+                )
+            },
+        )
+
+        rows = build_etp_item_rows(sessao)
+        found = {row['item'].texto: row for row in rows}
+        self.assertEqual(found['Item raiz']['indice'], '1.1')
+        self.assertEqual(found['Subitem']['indice'], '1.1.1')
+        self.assertEqual(found['Subitem interno']['indice'], '1.1.1.1')
+        self.assertEqual(found['Outro item raiz']['indice'], '1.2')
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#item-etp-{found['Item raiz']['item'].pk}",
+            fetch_redirect_response=False,
+        )
+
+    def test_criar_etp_com_subsecao_e_inciso_por_marcadores(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+
+        response = self.client.post(
+            reverse('licitacoes:etp_item_create', args=[sessao.pk]),
+            {
+                'texto': (
+                    '@Garantia da contratação\n'
+                    '#Será exigida a garantia.\n'
+                    '**Caução em dinheiro.\n'
+                    '$$Em moeda corrente.\n'
+                    '**Fiança bancária.\n'
+                    '@Sustentabilidade\n'
+                    '#Além dos critérios, devem ser atendidos requisitos.'
+                )
+            },
+        )
+
+        rows = build_etp_item_rows(sessao)
+        found = {row['item'].texto: row for row in rows}
+        self.assertTrue(found['Garantia da contratação']['is_subsecao'])
+        self.assertEqual(found['Garantia da contratação']['indice'], '')
+        self.assertEqual(found['Será exigida a garantia.']['indice'], '1.1')
+        self.assertEqual(found['Caução em dinheiro.']['enum_prefix'], 'I.')
+        self.assertEqual(found['Em moeda corrente.']['enum_prefix'], 'a)')
+        self.assertEqual(found['Fiança bancária.']['enum_prefix'], 'II.')
+        self.assertEqual(found['Além dos critérios, devem ser atendidos requisitos.']['indice'], '1.2')
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#item-etp-{found['Garantia da contratação']['item'].pk}",
+            fetch_redirect_response=False,
+        )
+
+    def test_editar_etp_com_marcadores_substitui_item_e_renumera_irmaos(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        raiz = ItemEtpTic.objects.create(sessao=sessao, texto='Raiz', ordem=1)
+        alvo = ItemEtpTic.objects.create(sessao=sessao, parent=raiz, texto='Alvo', ordem=1)
+        filho_antigo = ItemEtpTic.objects.create(sessao=sessao, parent=alvo, texto='Filho antigo', ordem=1)
+        posterior = ItemEtpTic.objects.create(sessao=sessao, parent=raiz, texto='Posterior', ordem=2)
+
+        response = self.client.post(
+            reverse('licitacoes:etp_item_update', args=[sessao.pk, alvo.pk]),
+            {'texto': '#Novo\n##Detalhe\n#Outro'},
+        )
+
+        alvo.refresh_from_db()
+        rows = build_etp_item_rows(sessao)
+        found = {row['item'].texto: row for row in rows}
+        self.assertEqual(alvo.texto, 'Novo')
+        self.assertEqual(found['Novo']['indice'], '1.1.1')
+        self.assertEqual(found['Detalhe']['indice'], '1.1.1.1')
+        self.assertEqual(found['Outro']['indice'], '1.1.2')
+        self.assertEqual(found['Posterior']['indice'], '1.1.3')
+        self.assertFalse(ItemEtpTic.objects.filter(pk=filho_antigo.pk).exists())
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#item-etp-{alvo.pk}",
+            fetch_redirect_response=False,
+        )
+
+    def test_mover_e_duplicar_item_etp_dinamico(self):
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        destino = ItemEtpTic.objects.create(sessao=sessao, texto='Destino', ordem=1)
+        item = ItemEtpTic.objects.create(sessao=sessao, texto='Movido', ordem=2)
+        child = ItemEtpTic.objects.create(sessao=sessao, parent=item, texto='Filho', ordem=1)
+
+        move_etp_item(item, destino, 'child')
+        item.refresh_from_db()
+        duplicate = duplicate_etp_item(item, destino, 'after')
+
+        self.assertEqual(item.parent_id, destino.id)
+        self.assertEqual(duplicate.texto, 'Movido')
+        self.assertEqual(duplicate.filhos.get().texto, child.texto)
+
+    def test_limpar_filhos_etp_remove_subitens_e_preserva_item(self):
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        item = ItemEtpTic.objects.create(sessao=sessao, texto='Item', ordem=1)
+        child = ItemEtpTic.objects.create(sessao=sessao, parent=item, texto='Subitem', ordem=1)
+        grandchild = ItemEtpTic.objects.create(sessao=sessao, parent=child, texto='Neto', ordem=1)
+
+        removed = clear_etp_item_children(item)
+
+        self.assertEqual(removed, 2)
+        self.assertTrue(ItemEtpTic.objects.filter(pk=item.pk).exists())
+        self.assertFalse(ItemEtpTic.objects.filter(pk__in=[child.pk, grandchild.pk]).exists())
+
+    def test_limpar_filhos_etp_pela_view_volta_para_item(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        item = ItemEtpTic.objects.create(sessao=sessao, texto='Item', ordem=1)
+        child = ItemEtpTic.objects.create(sessao=sessao, parent=item, texto='Subitem', ordem=1)
+
+        response = self.client.post(reverse('licitacoes:etp_item_clear_children', args=[sessao.pk, item.pk]))
+
+        self.assertFalse(ItemEtpTic.objects.filter(pk=child.pk).exists())
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#item-etp-{item.pk}",
+            fetch_redirect_response=False,
+        )
+
+    def test_limpar_filhos_da_sessao_etp_preserva_sessao_e_remove_itens(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        item = ItemEtpTic.objects.create(sessao=sessao, texto='Item', ordem=1)
+        child = ItemEtpTic.objects.create(sessao=sessao, parent=item, texto='Subitem', ordem=1)
+
+        response = self.client.post(reverse('licitacoes:etp_sessao_clear_items', args=[etp.pk, sessao.pk]))
+
+        self.assertTrue(SessaoEtpTic.objects.filter(pk=sessao.pk).exists())
+        self.assertFalse(ItemEtpTic.objects.filter(pk__in=[item.pk, child.pk]).exists())
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#sessao-etp-{sessao.pk}",
+            fetch_redirect_response=False,
+        )
+
+    def test_duplicar_etp_dinamico_copia_sessoes_e_itens(self):
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        item = ItemEtpTic.objects.create(sessao=sessao, texto='Item', ordem=1)
+        ItemEtpTic.objects.create(sessao=sessao, parent=item, texto='Subitem', ordem=1)
+
+        duplicate = duplicate_etp(etp)
+
+        self.assertTrue(duplicate.usa_editor_dinamico)
+        self.assertEqual(duplicate.nome, 'Copia de ETP')
+        new_sessao = duplicate.sessoes.get()
+        new_item = new_sessao.itens.get(parent=None)
+        self.assertEqual(new_item.texto, 'Item')
+        self.assertEqual(new_item.filhos.get().texto, 'Subitem')
+
+    def test_exporta_etp_dinamico_docx(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        ItemEtpTic.objects.create(sessao=sessao, texto='Texto *vermelho*', ordem=1)
+
+        response = self.client.get(reverse('licitacoes:etp_export', args=[etp.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+    def test_exporta_etp_dinamico_com_subsecao_e_inciso_docx(self):
+        from io import BytesIO
+
+        from docx import Document
+
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        subsecao = ItemEtpTic.objects.create(sessao=sessao, tipo=ItemEtpTic.Tipo.SUBSECAO, texto='Garantia da contratação', ordem=1)
+        item = ItemEtpTic.objects.create(sessao=sessao, texto='Será exigida a garantia.', ordem=2)
+        inciso = ItemEtpTic.objects.create(sessao=sessao, parent=item, tipo=ItemEtpTic.Tipo.INCISO, texto='Caução em dinheiro.', ordem=1)
+        ItemEtpTic.objects.create(sessao=sessao, parent=inciso, tipo=ItemEtpTic.Tipo.ALINEA, texto='Em moeda corrente.', ordem=1)
+
+        response = self.client.get(reverse('licitacoes:etp_export', args=[etp.pk]))
+
+        document = Document(BytesIO(response.content))
+        texts = [paragraph.text for paragraph in document.paragraphs]
+        self.assertIn(subsecao.texto, texts)
+        self.assertIn('1.1. Será exigida a garantia.', texts)
+        self.assertIn('I. Caução em dinheiro.', texts)
+        self.assertIn('a) Em moeda corrente.', texts)
 
 
 class DfdTests(TestCase):
@@ -456,7 +822,7 @@ class TrTests(TestCase):
         found = {row['item'].id: row for row in rows}
         self.assertEqual(found[item.id]['indice'], '1.1')
         self.assertEqual(found[sub.id]['indice'], '1.1.1')
-        self.assertEqual(found[inciso.id]['enum_prefix'], 'I)')
+        self.assertEqual(found[inciso.id]['enum_prefix'], 'I.')
         self.assertEqual(found[alinea.id]['enum_prefix'], 'a)')
         self.assertTrue(found[item.id]['pode_tabela_itens'])
         self.assertFalse(found[sub.id]['pode_tabela_itens'])
@@ -470,8 +836,72 @@ class TrTests(TestCase):
         rows = build_item_rows(self.sessao)
         found = {row['item'].id: row for row in rows}
         self.assertEqual(segundo.parent_id, sub.id)
-        self.assertEqual(found[primeiro.id]['enum_prefix'], 'I)')
-        self.assertEqual(found[segundo.id]['enum_prefix'], 'II)')
+        self.assertEqual(found[primeiro.id]['enum_prefix'], 'I.')
+        self.assertEqual(found[segundo.id]['enum_prefix'], 'II.')
+
+    def test_criar_tr_com_subsecao_e_inciso_por_marcadores(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+
+        response = self.client.post(
+            reverse('licitacoes:item_create', args=[self.sessao.pk]),
+            {
+                'texto': (
+                    '@Garantia da contratação\n'
+                    '#Será exigida a garantia.\n'
+                    '**Caução em dinheiro.\n'
+                    '$$Em moeda corrente.\n'
+                    '**Fiança bancária.\n'
+                    '@Sustentabilidade\n'
+                    '#Além dos critérios, devem ser atendidos requisitos.'
+                )
+            },
+        )
+
+        rows = build_item_rows(self.sessao)
+        found = {row['item'].texto: row for row in rows}
+        self.assertTrue(found['Garantia da contratação']['is_subsecao'])
+        self.assertEqual(found['Garantia da contratação']['indice'], '')
+        self.assertEqual(found['Será exigida a garantia.']['indice'], '1.1')
+        self.assertEqual(found['Caução em dinheiro.']['enum_prefix'], 'I.')
+        self.assertEqual(found['Em moeda corrente.']['enum_prefix'], 'a)')
+        self.assertEqual(found['Fiança bancária.']['enum_prefix'], 'II.')
+        self.assertEqual(found['Além dos critérios, devem ser atendidos requisitos.']['indice'], '1.2')
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:tr_detail', args=[self.termo.pk])}#item-{found['Garantia da contratação']['item'].pk}",
+            fetch_redirect_response=False,
+        )
+
+    def test_editar_tr_com_marcadores_substitui_item_e_renumera_irmaos(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        raiz = ItemTR.objects.create(sessao=self.sessao, texto='Raiz', ordem=1)
+        alvo = ItemTR.objects.create(sessao=self.sessao, parent=raiz, texto='Alvo', ordem=1)
+        filho_antigo = ItemTR.objects.create(sessao=self.sessao, parent=alvo, texto='Filho antigo', ordem=1)
+        posterior = ItemTR.objects.create(sessao=self.sessao, parent=raiz, texto='Posterior', ordem=2)
+
+        response = self.client.post(
+            reverse('licitacoes:item_update', args=[self.sessao.pk, alvo.pk]),
+            {'texto': '#Novo\n##Detalhe\n#Outro'},
+        )
+
+        alvo.refresh_from_db()
+        rows = build_item_rows(self.sessao)
+        found = {row['item'].texto: row for row in rows}
+        self.assertEqual(alvo.texto, 'Novo')
+        self.assertEqual(found['Novo']['indice'], '1.1.1')
+        self.assertEqual(found['Detalhe']['indice'], '1.1.1.1')
+        self.assertEqual(found['Outro']['indice'], '1.1.2')
+        self.assertEqual(found['Posterior']['indice'], '1.1.3')
+        self.assertFalse(ItemTR.objects.filter(pk=filho_antigo.pk).exists())
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:tr_detail', args=[self.termo.pk])}#item-{alvo.pk}",
+            fetch_redirect_response=False,
+        )
 
     def test_mover_bloqueia_descendente_e_renumera(self):
         a = ItemTR.objects.create(sessao=self.sessao, texto='A', ordem=1)
@@ -518,6 +948,17 @@ class TrTests(TestCase):
         self.assertEqual(duplicate_child.filhos.get().texto, 'Neto')
         self.assertEqual(duplicate.tabela_linhas.get().descricao, 'Notebook')
 
+    def test_limpar_filhos_tr_remove_subitens_e_preserva_item(self):
+        item = ItemTR.objects.create(sessao=self.sessao, texto='Item', ordem=1)
+        child = ItemTR.objects.create(sessao=self.sessao, parent=item, texto='Subitem', ordem=1)
+        grandchild = ItemTR.objects.create(sessao=self.sessao, parent=child, texto='Neto', ordem=1)
+
+        removed = clear_item_children(item)
+
+        self.assertEqual(removed, 2)
+        self.assertTrue(ItemTR.objects.filter(pk=item.pk).exists())
+        self.assertFalse(ItemTR.objects.filter(pk__in=[child.pk, grandchild.pk]).exists())
+
     def test_duplicar_tr_copia_sessoes_itens_e_tabelas(self):
         sessao_2 = SessaoTR.objects.create(termo=self.termo, titulo='Outra sessao', ordem=2)
         item = ItemTR.objects.create(sessao=self.sessao, texto='Item original', ordem=1)
@@ -535,6 +976,23 @@ class TrTests(TestCase):
         self.assertNotEqual(new_item.pk, item.pk)
         self.assertEqual(new_item.filhos.get().texto, child.texto)
         self.assertEqual(new_item.tabela_linhas.get().descricao, 'Notebook')
+
+    def test_limpar_filhos_da_sessao_tr_preserva_sessao_e_remove_itens(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        item = ItemTR.objects.create(sessao=self.sessao, texto='Item', ordem=1)
+        child = ItemTR.objects.create(sessao=self.sessao, parent=item, texto='Subitem', ordem=1)
+
+        response = self.client.post(reverse('licitacoes:sessao_clear_items', args=[self.termo.pk, self.sessao.pk]))
+
+        self.assertTrue(SessaoTR.objects.filter(pk=self.sessao.pk).exists())
+        self.assertFalse(ItemTR.objects.filter(pk__in=[item.pk, child.pk]).exists())
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:tr_detail', args=[self.termo.pk])}#sessao-{self.sessao.pk}",
+            fetch_redirect_response=False,
+        )
 
     def test_tabela_item_create_disponivel_somente_no_item_1_1(self):
         User = get_user_model()
@@ -603,6 +1061,28 @@ class TrTests(TestCase):
         red_run = next(run for run in runs if run.text == 'vermelho')
 
         self.assertEqual(str(red_run.font.color.rgb), 'FF0000')
+
+    def test_exporta_tr_com_subsecao_e_inciso_docx(self):
+        from io import BytesIO
+
+        from docx import Document
+
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        subsecao = ItemTR.objects.create(sessao=self.sessao, tipo=ItemTR.Tipo.SUBSECAO, texto='Garantia da contratação', ordem=1)
+        item = ItemTR.objects.create(sessao=self.sessao, texto='Será exigida a garantia.', ordem=2)
+        inciso = ItemTR.objects.create(sessao=self.sessao, parent=item, tipo=ItemTR.Tipo.INCISO, texto='Caução em dinheiro.', ordem=1)
+        ItemTR.objects.create(sessao=self.sessao, parent=inciso, tipo=ItemTR.Tipo.ALINEA, texto='Em moeda corrente.', ordem=1)
+
+        response = self.client.get(reverse('licitacoes:tr_export', args=[self.termo.pk]))
+
+        document = Document(BytesIO(response.content))
+        texts = [paragraph.text for paragraph in document.paragraphs]
+        self.assertIn(subsecao.texto, texts)
+        self.assertIn('1.1. Será exigida a garantia.', texts)
+        self.assertIn('I. Caução em dinheiro.', texts)
+        self.assertIn('a) Em moeda corrente.', texts)
 
     def test_duplicar_item_pela_view_volta_para_item_duplicado(self):
         User = get_user_model()
@@ -684,6 +1164,22 @@ class TrTests(TestCase):
         )
 
         item = ItemTR.objects.get(texto='Subitem novo')
+        self.assertRedirects(
+            response,
+            f"{reverse('licitacoes:tr_detail', args=[self.termo.pk])}#item-{item.pk}",
+            fetch_redirect_response=False,
+        )
+
+    def test_limpar_filhos_tr_pela_view_volta_para_item(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        item = ItemTR.objects.create(sessao=self.sessao, texto='Item pai', ordem=1)
+        child = ItemTR.objects.create(sessao=self.sessao, parent=item, texto='Subitem', ordem=1)
+
+        response = self.client.post(reverse('licitacoes:item_clear_children', args=[self.sessao.pk, item.pk]))
+
+        self.assertFalse(ItemTR.objects.filter(pk=child.pk).exists())
         self.assertRedirects(
             response,
             f"{reverse('licitacoes:tr_detail', args=[self.termo.pk])}#item-{item.pk}",

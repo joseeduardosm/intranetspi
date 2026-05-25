@@ -76,5 +76,39 @@
         </tbody>
       </table>
     </div>
+    {% if is_paginated %}
+      <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div class="text-muted small">
+          Pagina {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} - {{ page_obj.paginator.count }} noticias
+        </div>
+        <nav aria-label="Paginacao de noticias">
+          <ul class="pagination pagination-sm mb-0">
+            <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+              {% if page_obj.has_previous %}
+                <a class="page-link" href="?{% if status_atual %}status={{ status_atual }}&amp;{% endif %}page={{ page_obj.previous_page_number }}" aria-label="Pagina anterior">&lt;</a>
+              {% else %}
+                <span class="page-link" aria-hidden="true">&lt;</span>
+              {% endif %}
+            </li>
+            {% for page_number in pagination_pages %}
+              <li class="page-item {% if page_number == page_obj.number %}active{% endif %}">
+                {% if page_number == page_obj.number %}
+                  <span class="page-link">{{ page_number }}</span>
+                {% else %}
+                  <a class="page-link" href="?{% if status_atual %}status={{ status_atual }}&amp;{% endif %}page={{ page_number }}">{{ page_number }}</a>
+                {% endif %}
+              </li>
+            {% endfor %}
+            <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+              {% if page_obj.has_next %}
+                <a class="page-link" href="?{% if status_atual %}status={{ status_atual }}&amp;{% endif %}page={{ page_obj.next_page_number }}" aria-label="Proxima pagina">&gt;</a>
+              {% else %}
+                <span class="page-link" aria-hidden="true">&gt;</span>
+              {% endif %}
+            </li>
+          </ul>
+        </nav>
+      </div>
+    {% endif %}
   </div>
 {% endblock %}

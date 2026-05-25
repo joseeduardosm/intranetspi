@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% load licitacoes_extras %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{{ etp.nome }}</h1>
+      <p>Processo {{ etp.numero_processo }}{% if etp.link %} - <a href="{{ etp.link }}" target="_blank" rel="noopener">abrir link</a>{% endif %}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 justify-content-end">
+      <a class="btn btn-primary" href="{% url 'licitacoes:etp_sessao_create' etp.pk %}">Nova sessao</a>
+      <a class="btn btn-outline-secondary" href="{% url 'licitacoes:etp_export' etp.pk %}">DOCX</a>
+      <a class="btn btn-outline-secondary" href="{% url 'licitacoes:etp_edit' etp.pk %}">Editar ETP TIC</a>
+      <a class="btn btn-light" href="{% url 'licitacoes:etp_list' %}">Voltar</a>
+    </div>
+  </div>
+  <div class="row g-4">
+    <aside class="col-12 col-xl-2">
+      <div class="list-group spi-sticky">
+        {% for bloco in tree %}
+          <a class="list-group-item list-group-item-action" href="#sessao-etp-{{ bloco.sessao.pk }}">{{ bloco.sessao.ordem }}. {{ bloco.sessao.titulo }}</a>
+        {% endfor %}
+      </div>
+    </aside>
+    <section class="col-12 col-xl-10">
+      {% for bloco in tree %}
+        <article id="sessao-etp-{{ bloco.sessao.pk }}" class="card border-0 shadow-sm mb-4 spi-tr-section">
+          <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3">
+            <h2 class="h5 mb-0">{{ bloco.sessao.ordem }}. {{ bloco.sessao.titulo }}</h2>
+            <div class="d-flex flex-wrap gap-2">
+              <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:etp_item_create' bloco.sessao.pk %}">+ item</a>
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:etp_sessao_update' etp.pk bloco.sessao.pk %}">Editar sessao</a>
+              <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:etp_sessao_clear_items' etp.pk bloco.sessao.pk %}">Limpar filhos</a>
+              <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:etp_sessao_delete' etp.pk bloco.sessao.pk %}">Excluir sessao</a>
+            </div>
+          </div>
+          <div class="table-responsive spi-etp-table-wrap">
+            <table class="table align-middle mb-0 spi-tr-table spi-etp-table">
+              <thead>
+                <tr>
+                  <th class="spi-index-col">Indice</th>
+                  <th>Texto</th>
+                  <th class="text-end spi-etp-actions-col">Acoes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in bloco.rows %}
+                  <tr id="item-etp-{{ row.item.pk }}" tabindex="-1">
+                    <td>{% if row.is_subsecao %}{% elif row.enum_prefix %}<strong>{{ row.enum_prefix }}</strong>{% else %}{{ row.indice }}.{% endif %}</td>
+                    <td><div class="spi-etp-item-text {% if row.is_subsecao %}spi-subsecao-row{% endif %}" style="padding-left: {{ row.indent }}rem;">{{ row.item.texto|red_marks }}</div></td>
+                    <td class="text-end">
+                      <div class="spi-action-menu">
+                        <button class="btn btn-sm btn-outline-secondary spi-action-menu-toggle" type="button" aria-label="Acoes do item" aria-expanded="false">...</button>
+                        <div class="spi-action-menu-panel" role="menu" hidden>
+                          {% if not row.is_subsecao %}
+                            <a class="btn btn-sm btn-outline-primary" role="menuitem" href="{% url 'licitacoes:etp_item_child_create' row.item.sessao.pk row.item.pk %}">+ subitem</a>
+                          {% endif %}
+                          <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'licitacoes:etp_item_move' row.item.sessao.pk row.item.pk %}">Mover para</a>
+                          <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'licitacoes:etp_item_duplicate' row.item.sessao.pk row.item.pk %}">Duplicar</a>
+                          <a class="btn btn-sm btn-outline-danger" role="menuitem" href="{% url 'licitacoes:etp_item_clear_children' row.item.sessao.pk row.item.pk %}">Limpar filhos</a>
+                          <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'licitacoes:etp_item_update' row.item.sessao.pk row.item.pk %}">Editar</a>
+                          <a class="btn btn-sm btn-outline-danger" role="menuitem" href="{% url 'licitacoes:etp_item_delete' row.item.sessao.pk row.item.pk %}">Excluir</a>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="3" class="text-muted">Nenhum item nesta sessao.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      {% empty %}
+        <div class="alert alert-info">Nenhuma sessao cadastrada neste ETP TIC.</div>
+      {% endfor %}
+    </section>
+  </div>
+  <script>
+    function centralizarHashEtp() {
+      if (!window.location.hash || (!window.location.hash.startsWith('#item-etp-') && !window.location.hash.startsWith('#sessao-etp-'))) {
+        return;
+      }
+      var target = document.getElementById(window.location.hash.slice(1));
+      if (!target) {
+        return;
+      }
+      window.requestAnimationFrame(function () {
+        target.scrollIntoView({ block: 'center' });
+        target.focus({ preventScroll: true });
+      });
+    }
+
+    function centralizarHashEtpAposScrollNativo() {
+      centralizarHashEtp();
+      window.setTimeout(centralizarHashEtp, 80);
+      window.setTimeout(centralizarHashEtp, 240);
+    }
+
+    document.addEventListener('DOMContentLoaded', centralizarHashEtpAposScrollNativo);
+    window.addEventListener('pageshow', centralizarHashEtpAposScrollNativo);
+    window.addEventListener('hashchange', centralizarHashEtpAposScrollNativo);
+    window.addEventListener('load', centralizarHashEtpAposScrollNativo);
+
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+
+    document.addEventListener('click', function (event) {
+      var toggle = event.target.closest('.spi-action-menu-toggle');
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(function (menu) {
+        if (!toggle || !menu.contains(toggle)) {
+          menu.classList.remove('is-open');
+          var panel = menu.querySelector('.spi-action-menu-panel');
+          if (panel) {
+            panel.hidden = true;
+          }
+          var openToggle = menu.querySelector('.spi-action-menu-toggle');
+          if (openToggle) {
+            openToggle.setAttribute('aria-expanded', 'false');
+          }
+        }
+      });
+      if (!toggle) {
+        return;
+      }
+      var menu = toggle.closest('.spi-action-menu');
+      var isOpen = menu.classList.toggle('is-open');
+      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      var panel = menu.querySelector('.spi-action-menu-panel');
+      if (panel) {
+        panel.hidden = !isOpen;
+      }
+      event.preventDefault();
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(function (menu) {
+        menu.classList.remove('is-open');
+        var panel = menu.querySelector('.spi-action-menu-panel');
+        if (panel) {
+          panel.hidden = true;
+        }
+        var toggle = menu.querySelector('.spi-action-menu-toggle');
+        if (toggle) {
+          toggle.setAttribute('aria-expanded', 'false');
+          toggle.focus();
+        }
+      });
+    });
+  </script>
+{% endblock %}

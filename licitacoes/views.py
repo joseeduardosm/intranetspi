@@ -16,36 +16,68 @@ from .forms import (
     DfdSecaoForm,
     EtpTicCreateForm,
     EtpTicSecaoForm,
+    ItemEtpMoveForm,
+    ItemEtpTicForm,
     ItemMoveForm,
     ItemTRForm,
+    SessaoEtpTicForm,
     SessaoTRForm,
     TabelaItemLinhaForm,
     TermoReferenciaForm,
 )
-from .models import Dfd, DfdItemTabela, EtpTic, ItemTR, SessaoTR, TabelaItemLinha, TermoReferencia
+from .models import Dfd, DfdItemTabela, EtpTic, ItemEtpTic, ItemTR, SessaoEtpTic, SessaoTR, TabelaItemLinha, TermoReferencia
 from .services import (
     DFD_SECOES,
     DFD_SECOES_MAP,
     ETP_TIC_SECOES,
     ETP_TIC_SECOES_MAP,
+    build_etp_tree,
     build_item_rows,
+    clear_etp_item_children,
+    clear_item_children,
     item_parent_for_tipo,
     build_termo_tree,
     duplicate_dfd,
+    duplicate_etp,
+    duplicate_etp_item,
     duplicate_item,
     duplicate_termo,
     dfd_status_por_secao,
     etp_status_por_secao,
+    move_etp_item,
     move_item,
+    next_ordem_etp_item,
+    next_ordem_etp_sessao,
     next_ordem_item,
     next_ordem_sessao,
+    normalize_etp_items,
+    normalize_etp_sessoes,
     normalize_items,
     normalize_sessoes,
+    parse_bulk_item_markers,
     quantidade_text,
     red_mark_segments,
+    replace_item_with_marker_nodes,
     render_dfd_sections,
     render_etp_sections,
 )
+
+
+def _audit_user(request):
+    return request.user if request.user.is_authenticated else None
+
+
+def _touch_instance(instance, request):
+    instance.atualizado_por = _audit_user(request)
+    instance.save(update_fields=['atualizado_por', 'atualizado_em'])
+
+
+def _touch_etp(etp, request):
+    _touch_instance(etp, request)
+
+
+def _touch_termo(termo, request):
+    _touch_instance(termo, request)
 
 
 def item_focus_url(item):
@@ -90,6 +122,59 @@ def get_item_tabela_1_1(sessao_pk, item_pk):
     return item
 
 
+def create_bulk_marker_items(model, sessao, parent, nodes, tipo_enum, next_order):
+    first_item = None
+    created_count = 0
+    start_ordem = next_order(sessao, parent)
+
+    def create_nodes(current_nodes, current_parent, start_order=1):
+        nonlocal first_item, created_count
+        for offset, node in enumerate(current_nodes):
+            item = model.objects.create(
+                sessao=sessao,
+                parent=current_parent,
+                tipo=getattr(tipo_enum, node['tipo']),
+                texto=node['texto'],
+                ordem=start_order + offset,
+            )
+            created_count += 1
+            if first_item is None:
+                first_item = item
+            create_nodes(node['filhos'], item)
+
+    create_nodes(nodes, parent, start_ordem)
+    return first_item, created_count
+
+
+def starts_with_item_marker(texto):
+    first_line = next((line.strip() for line in (texto or '').splitlines() if line.strip()), '')
+    return first_line.startswith(('@', '#', '**', '$$'))
+
+
+def etp_item_focus_url(item):
+    return f"{reverse('licitacoes:etp_detail', args=[item.sessao.etp.pk])}#item-etp-{item.pk}"
+
+
+def etp_sessao_focus_url(sessao):
+    return f"{reverse('licitacoes:etp_detail', args=[sessao.etp.pk])}#sessao-etp-{sessao.pk}"
+
+
+def etp_item_delete_return_url(item):
+    siblings = list(item.sessao.itens.filter(parent_id=item.parent_id).exclude(pk=item.pk).order_by('ordem', 'id'))
+    next_item = next((sibling for sibling in siblings if (sibling.ordem, sibling.id) > (item.ordem, item.id)), None)
+    if next_item:
+        return etp_item_focus_url(next_item)
+
+    previous_items = [sibling for sibling in siblings if (sibling.ordem, sibling.id) < (item.ordem, item.id)]
+    if previous_items:
+        return etp_item_focus_url(previous_items[-1])
+
+    if item.parent:
+        return etp_item_focus_url(item.parent)
+
+    return etp_sessao_focus_url(item.sessao)
+
+
 class SuperuserRequiredMixin(UserPassesTestMixin):
     def test_func(self):
         return self.request.user.is_authenticated and self.request.user.is_superuser
@@ -103,6 +188,9 @@ class EtpTicListView(SuperuserRequiredMixin, ListView):
     model = EtpTic
     template_name = 'licitacoes/etp_list.html'
     context_object_name = 'etps'
+
+    def get_queryset(self):
+        return super().get_queryset().select_related('atualizado_por')
 
 
 class EtpTicCreateView(SuperuserRequiredMixin, CreateView):
@@ -118,9 +206,11 @@ class EtpTicCreateView(SuperuserRequiredMixin, CreateView):
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
+        self.object.atualizado_por = _audit_user(self.request)
         self.object.declaracao_viabilidade = EtpTic.DECLARACAO_PADRAO
+        self.object.usa_editor_dinamico = True
         self.object.save()
-        return redirect(f"{reverse('licitacoes:etp_edit', args=[self.object.pk])}?secao=1")
+        return redirect('licitacoes:etp_detail', pk=self.object.pk)
 
 
 class EtpTicEditView(SuperuserRequiredMixin, UpdateView):
@@ -130,13 +220,20 @@ class EtpTicEditView(SuperuserRequiredMixin, UpdateView):
     def _edita_secao(self):
         return 'secao' in self.request.GET
 
+    def dispatch(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if not self.object.usa_editor_dinamico:
+            messages.info(request, 'ETP TIC legado disponivel somente para visualizacao.')
+            return redirect('licitacoes:etp_preview', pk=self.object.pk)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_template_names(self):
-        if self._edita_secao():
+        if self._edita_secao() and not self.object.usa_editor_dinamico:
             return ['licitacoes/etp_edit.html']
         return ['licitacoes/form.html']
 
     def get_form_class(self):
-        if self._edita_secao():
+        if self._edita_secao() and not self.object.usa_editor_dinamico:
             return EtpTicSecaoForm
         return EtpTicCreateForm
 
@@ -155,7 +252,9 @@ class EtpTicEditView(SuperuserRequiredMixin, UpdateView):
 
     def form_valid(self, form):
         if not self._edita_secao():
-            self.object = form.save()
+            self.object = form.save(commit=False)
+            self.object.atualizado_por = _audit_user(self.request)
+            self.object.save()
             return redirect('licitacoes:etp_preview', pk=self.object.pk)
 
         etp = form.save(commit=False)
@@ -167,14 +266,15 @@ class EtpTicEditView(SuperuserRequiredMixin, UpdateView):
             etp.secao_atual = max(secao - 1, 1)
         else:
             etp.secao_atual = secao
+        etp.atualizado_por = _audit_user(self.request)
         etp.save()
         return redirect(f"{reverse('licitacoes:etp_edit', args=[etp.pk])}?secao={etp.secao_atual}")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        if not self._edita_secao():
+        if not self._edita_secao() or self.object.usa_editor_dinamico:
             context['titulo'] = 'Editar ETP TIC'
-            context['voltar_url'] = reverse('licitacoes:etp_preview', args=[self.object.pk])
+            context['voltar_url'] = reverse('licitacoes:etp_detail', args=[self.object.pk])
             return context
 
         secao_numero = self._secao_numero()
@@ -185,6 +285,23 @@ class EtpTicEditView(SuperuserRequiredMixin, UpdateView):
         return context
 
 
+class EtpTicDetailView(SuperuserRequiredMixin, DetailView):
+    model = EtpTic
+    template_name = 'licitacoes/etp_detail.html'
+    context_object_name = 'etp'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if not self.object.usa_editor_dinamico:
+            return redirect('licitacoes:etp_preview', pk=self.object.pk)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['tree'] = build_etp_tree(self.object)
+        return context
+
+
 class EtpTicPreviewView(SuperuserRequiredMixin, DetailView):
     model = EtpTic
     template_name = 'licitacoes/etp_preview.html'
@@ -192,7 +309,10 @@ class EtpTicPreviewView(SuperuserRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['secoes_render'] = render_etp_sections(self.object)
+        if self.object.usa_editor_dinamico:
+            context['tree'] = build_etp_tree(self.object)
+        else:
+            context['secoes_render'] = render_etp_sections(self.object)
         return context
 
 
@@ -200,7 +320,8 @@ class EtpTicConcluirView(SuperuserRequiredMixin, View):
     def post(self, request, pk):
         etp = get_object_or_404(EtpTic, pk=pk)
         etp.status = EtpTic.Status.CONCLUIDO
-        etp.save(update_fields=['status', 'atualizado_em'])
+        etp.atualizado_por = _audit_user(request)
+        etp.save(update_fields=['status', 'atualizado_por', 'atualizado_em'])
         messages.success(request, 'ETP TIC concluido.')
         return redirect('licitacoes:etp_preview', pk=pk)
 
@@ -214,7 +335,296 @@ class EtpTicDeleteView(SuperuserRequiredMixin, DeleteView):
 class EtpTicExportDocxView(SuperuserRequiredMixin, View):
     def get(self, request, pk):
         etp = get_object_or_404(EtpTic, pk=pk)
+        if etp.usa_editor_dinamico:
+            return _etp_dynamic_docx_response(etp)
         return _docx_response(f'ETP TIC - {etp.nome}', render_etp_sections(etp), f'etp_tic_{slugify(etp.nome) or etp.pk}.docx')
+
+
+class EtpTicDuplicateView(SuperuserRequiredMixin, View):
+    def post(self, request, pk):
+        etp = get_object_or_404(EtpTic, pk=pk)
+        duplicate = duplicate_etp(etp)
+        _touch_etp(duplicate, request)
+        messages.success(request, 'ETP TIC duplicado.')
+        if duplicate.usa_editor_dinamico:
+            return redirect('licitacoes:etp_detail', pk=duplicate.pk)
+        return redirect('licitacoes:etp_preview', pk=duplicate.pk)
+
+
+class SessaoEtpCreateView(SuperuserRequiredMixin, CreateView):
+    model = SessaoEtpTic
+    form_class = SessaoEtpTicForm
+    template_name = 'licitacoes/form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.etp = get_object_or_404(EtpTic, pk=kwargs['etp_pk'], usa_editor_dinamico=True)
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        self.object.etp = self.etp
+        self.object.ordem = next_ordem_etp_sessao(self.etp)
+        self.object.save()
+        _touch_etp(self.etp, self.request)
+        return redirect(etp_sessao_focus_url(self.object))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Nova sessao do ETP TIC'
+        context['voltar_url'] = reverse('licitacoes:etp_detail', args=[self.etp.pk])
+        return context
+
+
+class SessaoEtpUpdateView(SuperuserRequiredMixin, UpdateView):
+    model = SessaoEtpTic
+    form_class = SessaoEtpTicForm
+    template_name = 'licitacoes/form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.object = get_object_or_404(SessaoEtpTic, pk=kwargs['pk'], etp_id=kwargs['etp_pk'], etp__usa_editor_dinamico=True)
+        self.etp = self.object.etp
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_object(self, queryset=None):
+        return self.object
+
+    def get_success_url(self):
+        _touch_etp(self.etp, self.request)
+        return etp_sessao_focus_url(self.object)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Editar sessao do ETP TIC'
+        context['voltar_url'] = reverse('licitacoes:etp_detail', args=[self.etp.pk])
+        return context
+
+
+class SessaoEtpDeleteView(SuperuserRequiredMixin, DeleteView):
+    model = SessaoEtpTic
+    template_name = 'licitacoes/confirm_delete.html'
+
+    def get_queryset(self):
+        return SessaoEtpTic.objects.filter(etp_id=self.kwargs['etp_pk'], etp__usa_editor_dinamico=True)
+
+    def get_success_url(self):
+        etp = self.object.etp
+        normalize_etp_sessoes(etp)
+        _touch_etp(etp, self.request)
+        return reverse('licitacoes:etp_detail', args=[etp.pk])
+
+
+class SessaoEtpClearItemsView(SuperuserRequiredMixin, DeleteView):
+    model = SessaoEtpTic
+    template_name = 'licitacoes/confirm_delete.html'
+
+    def get_queryset(self):
+        return SessaoEtpTic.objects.filter(etp_id=self.kwargs['etp_pk'], etp__usa_editor_dinamico=True)
+
+    def form_valid(self, form):
+        removed = self.object.itens.count()
+        self.object.itens.all().delete()
+        _touch_etp(self.object.etp, self.request)
+        messages.success(self.request, f'{removed} item(ns) removido(s) da sessao.')
+        return redirect(etp_sessao_focus_url(self.object))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Limpar filhos da sessao'
+        context['descricao'] = 'Esta acao exclui todos os itens e subitens desta sessao e nao pode ser desfeita.'
+        context['pergunta'] = f'Confirma a exclusao de todos os itens da sessao "{self.object}"?'
+        context['botao_confirmar'] = 'Limpar filhos'
+        return context
+
+
+class ItemEtpCreateView(SuperuserRequiredMixin, CreateView):
+    model = ItemEtpTic
+    form_class = ItemEtpTicForm
+    template_name = 'licitacoes/form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.sessao = get_object_or_404(SessaoEtpTic, pk=kwargs['sessao_pk'], etp__usa_editor_dinamico=True)
+        self.parent = None
+        if kwargs.get('parent_pk'):
+            self.parent = get_object_or_404(ItemEtpTic, pk=kwargs['parent_pk'], sessao__etp=self.sessao.etp)
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        texto = self.request.POST.get('texto', '')
+        grupos_marcados = parse_bulk_item_markers(texto, max_hash_level=5)
+        if grupos_marcados:
+            sessao = self.parent.sessao if self.parent else self.sessao
+            first_item, created_count = create_bulk_marker_items(
+                ItemEtpTic,
+                sessao,
+                self.parent,
+                grupos_marcados,
+                ItemEtpTic.Tipo,
+                next_ordem_etp_item,
+            )
+            _touch_etp(first_item.sessao.etp, self.request)
+            messages.success(self.request, f'{created_count} item(ns) criado(s).')
+            return redirect(etp_item_focus_url(first_item))
+
+        self.object = form.save(commit=False)
+        self.object.sessao = self.parent.sessao if self.parent else self.sessao
+        self.object.parent = self.parent
+        self.object.ordem = next_ordem_etp_item(self.object.sessao, self.parent)
+        self.object.save()
+        _touch_etp(self.object.sessao.etp, self.request)
+        return redirect(etp_item_focus_url(self.object))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Novo item do ETP TIC'
+        context['ctrl_enter_submit'] = True
+        if self.parent:
+            context['voltar_url'] = etp_item_focus_url(self.parent)
+        else:
+            context['voltar_url'] = reverse('licitacoes:etp_detail', args=[self.sessao.etp.pk])
+        return context
+
+
+class ItemEtpUpdateView(SuperuserRequiredMixin, UpdateView):
+    model = ItemEtpTic
+    form_class = ItemEtpTicForm
+    template_name = 'licitacoes/form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.object = get_object_or_404(ItemEtpTic, pk=kwargs['pk'], sessao__etp__sessoes__id=kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_object(self, queryset=None):
+        return self.object
+
+    def form_valid(self, form):
+        texto = self.request.POST.get('texto', '')
+        grupos_marcados = parse_bulk_item_markers(texto, max_hash_level=5) if starts_with_item_marker(texto) else []
+        if grupos_marcados:
+            self.object, updated_count = replace_item_with_marker_nodes(self.object, grupos_marcados, ItemEtpTic.Tipo)
+            _touch_etp(self.object.sessao.etp, self.request)
+            messages.success(self.request, f'{updated_count} item(ns) atualizado(s).')
+            return redirect(etp_item_focus_url(self.object))
+
+        self.object = form.save()
+        _touch_etp(self.object.sessao.etp, self.request)
+        return redirect(etp_item_focus_url(self.object))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Editar item do ETP TIC'
+        context['ctrl_enter_submit'] = True
+        context['voltar_url'] = etp_item_focus_url(self.object)
+        return context
+
+
+class ItemEtpDeleteView(SuperuserRequiredMixin, DeleteView):
+    model = ItemEtpTic
+    template_name = 'licitacoes/confirm_delete.html'
+
+    def get_queryset(self):
+        return ItemEtpTic.objects.filter(sessao__etp__sessoes__id=self.kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True)
+
+    def form_valid(self, form):
+        sessao = self.object.sessao
+        parent_id = self.object.parent_id
+        return_url = etp_item_delete_return_url(self.object)
+        self.object.delete()
+        normalize_etp_sessoes(sessao.etp)
+        normalize_etp_items(sessao, parent_id)
+        _touch_etp(sessao.etp, self.request)
+        return redirect(return_url)
+
+
+class ItemEtpClearChildrenView(SuperuserRequiredMixin, DeleteView):
+    model = ItemEtpTic
+    template_name = 'licitacoes/confirm_delete.html'
+
+    def get_queryset(self):
+        return ItemEtpTic.objects.filter(sessao__etp__sessoes__id=self.kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True)
+
+    def form_valid(self, form):
+        removed = clear_etp_item_children(self.object)
+        _touch_etp(self.object.sessao.etp, self.request)
+        messages.success(self.request, f'{removed} subitem(ns) removido(s).')
+        return redirect(etp_item_focus_url(self.object))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Limpar filhos'
+        context['descricao'] = 'Esta acao exclui todos os subitens deste item e nao pode ser desfeita.'
+        context['pergunta'] = f'Confirma a exclusao de todos os subitens de "{self.object}"?'
+        context['botao_confirmar'] = 'Limpar filhos'
+        return context
+
+
+class ItemEtpMoveView(SuperuserRequiredMixin, View):
+    template_name = 'licitacoes/etp_item_move.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.item = get_object_or_404(ItemEtpTic, pk=kwargs['pk'], sessao__etp__sessoes__id=kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True)
+        self.etp = self.item.sessao.etp
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        form = ItemEtpMoveForm(etp=self.etp, item=self.item)
+        return _render(request, self.template_name, {'form': form, 'item': self.item, 'etp': self.etp, 'modo': 'mover'})
+
+    def post(self, request, *args, **kwargs):
+        form = ItemEtpMoveForm(request.POST, etp=self.etp, item=self.item)
+        if form.is_valid():
+            target_token = form.cleaned_data['target']
+            action = form.cleaned_data['action']
+            child_position = form.cleaned_data.get('child_position')
+            target = None
+            target_sessao = None
+            if target_token.startswith('item:'):
+                target = get_object_or_404(ItemEtpTic, pk=int(target_token.split(':', 1)[1]), sessao__etp=self.etp)
+            else:
+                target_sessao = get_object_or_404(SessaoEtpTic, pk=int(target_token.split(':', 1)[1]), etp=self.etp)
+                action = 'child'
+            try:
+                move_etp_item(self.item, target, action, target_sessao=target_sessao, child_position=child_position)
+                _touch_etp(self.etp, request)
+                messages.success(request, 'Item movido e estrutura renumerada.')
+                return redirect(etp_item_focus_url(self.item))
+            except ValueError as exc:
+                form.add_error(None, str(exc))
+        return _render(request, self.template_name, {'form': form, 'item': self.item, 'etp': self.etp, 'modo': 'mover'})
+
+
+class ItemEtpDuplicateView(SuperuserRequiredMixin, View):
+    template_name = 'licitacoes/etp_item_move.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.item = get_object_or_404(ItemEtpTic, pk=kwargs['pk'], sessao__etp__sessoes__id=kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True)
+        self.etp = self.item.sessao.etp
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        form = ItemEtpMoveForm(etp=self.etp, item=self.item, action_label='Duplicar')
+        return _render(request, self.template_name, {'form': form, 'item': self.item, 'etp': self.etp, 'modo': 'duplicar'})
+
+    def post(self, request, *args, **kwargs):
+        form = ItemEtpMoveForm(request.POST, etp=self.etp, item=self.item, action_label='Duplicar')
+        if form.is_valid():
+            target_token = form.cleaned_data['target']
+            action = form.cleaned_data['action']
+            child_position = form.cleaned_data.get('child_position')
+            target = None
+            target_sessao = None
+            if target_token.startswith('item:'):
+                target = get_object_or_404(ItemEtpTic, pk=int(target_token.split(':', 1)[1]), sessao__etp=self.etp)
+            else:
+                target_sessao = get_object_or_404(SessaoEtpTic, pk=int(target_token.split(':', 1)[1]), etp=self.etp)
+                action = 'child'
+            try:
+                duplicate = duplicate_etp_item(self.item, target, action, target_sessao=target_sessao, child_position=child_position)
+                _touch_etp(self.etp, request)
+                messages.success(request, 'Item duplicado com subitens e estrutura renumerada.')
+                return redirect(etp_item_focus_url(duplicate))
+            except ValueError as exc:
+                form.add_error(None, str(exc))
+        return _render(request, self.template_name, {'form': form, 'item': self.item, 'etp': self.etp, 'modo': 'duplicar'})
 
 
 class DfdListView(SuperuserRequiredMixin, ListView):
@@ -426,6 +836,9 @@ class TermoListView(SuperuserRequiredMixin, ListView):
     template_name = 'licitacoes/tr_list.html'
     context_object_name = 'termos'
 
+    def get_queryset(self):
+        return super().get_queryset().select_related('atualizado_por')
+
 
 class TermoCreateView(SuperuserRequiredMixin, CreateView):
     model = TermoReferencia
@@ -434,6 +847,12 @@ class TermoCreateView(SuperuserRequiredMixin, CreateView):
 
     def get_success_url(self):
         return reverse('licitacoes:tr_detail', args=[self.object.pk])
+
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        self.object.atualizado_por = _audit_user(self.request)
+        self.object.save()
+        return redirect(self.get_success_url())
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -449,6 +868,12 @@ class TermoUpdateView(SuperuserRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse('licitacoes:tr_detail', args=[self.object.pk])
+
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        self.object.atualizado_por = _audit_user(self.request)
+        self.object.save()
+        return redirect(self.get_success_url())
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -467,6 +892,7 @@ class TermoDuplicateView(SuperuserRequiredMixin, View):
     def post(self, request, pk):
         termo = get_object_or_404(TermoReferencia, pk=pk)
         duplicate = duplicate_termo(termo)
+        _touch_termo(duplicate, request)
         messages.success(request, 'TR duplicado.')
         return redirect('licitacoes:tr_detail', pk=duplicate.pk)
 
@@ -496,6 +922,7 @@ class SessaoCreateView(SuperuserRequiredMixin, CreateView):
         self.object.termo = self.termo
         self.object.ordem = next_ordem_sessao(self.termo)
         self.object.save()
+        _touch_termo(self.termo, self.request)
         return redirect('licitacoes:tr_detail', pk=self.termo.pk)
 
     def get_context_data(self, **kwargs):
@@ -519,6 +946,7 @@ class SessaoUpdateView(SuperuserRequiredMixin, UpdateView):
         return self.object
 
     def get_success_url(self):
+        _touch_termo(self.termo, self.request)
         return reverse('licitacoes:tr_detail', args=[self.termo.pk])
 
     def get_context_data(self, **kwargs):
@@ -538,7 +966,31 @@ class SessaoDeleteView(SuperuserRequiredMixin, DeleteView):
     def get_success_url(self):
         termo = self.object.termo
         normalize_sessoes(termo)
+        _touch_termo(termo, self.request)
         return reverse('licitacoes:tr_detail', args=[termo.pk])
+
+
+class SessaoClearItemsView(SuperuserRequiredMixin, DeleteView):
+    model = SessaoTR
+    template_name = 'licitacoes/confirm_delete.html'
+
+    def get_queryset(self):
+        return SessaoTR.objects.filter(termo_id=self.kwargs['termo_pk'])
+
+    def form_valid(self, form):
+        removed = self.object.itens.count()
+        self.object.itens.all().delete()
+        _touch_termo(self.object.termo, self.request)
+        messages.success(self.request, f'{removed} item(ns) removido(s) da sessao.')
+        return redirect(sessao_focus_url(self.object))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Limpar filhos da sessao'
+        context['descricao'] = 'Esta acao exclui todos os itens e subitens desta sessao e nao pode ser desfeita.'
+        context['pergunta'] = f'Confirma a exclusao de todos os itens da sessao "{self.object}"?'
+        context['botao_confirmar'] = 'Limpar filhos'
+        return context
 
 
 class ItemCreateView(SuperuserRequiredMixin, CreateView):
@@ -557,6 +1009,23 @@ class ItemCreateView(SuperuserRequiredMixin, CreateView):
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
+        texto = self.request.POST.get('texto', '')
+        grupos_marcados = parse_bulk_item_markers(texto, max_hash_level=4)
+        if grupos_marcados:
+            parent = item_parent_for_tipo(self.parent, self.tipo)
+            sessao = parent.sessao if parent else self.sessao
+            first_item, created_count = create_bulk_marker_items(
+                ItemTR,
+                sessao,
+                parent,
+                grupos_marcados,
+                ItemTR.Tipo,
+                next_ordem_item,
+            )
+            _touch_termo(first_item.sessao.termo, self.request)
+            messages.success(self.request, f'{created_count} item(ns) criado(s).')
+            return redirect(item_focus_url(first_item))
+
         self.object = form.save(commit=False)
         parent = item_parent_for_tipo(self.parent, self.tipo)
         self.object.sessao = parent.sessao if parent else self.sessao
@@ -564,6 +1033,7 @@ class ItemCreateView(SuperuserRequiredMixin, CreateView):
         self.object.tipo = self.tipo
         self.object.ordem = next_ordem_item(self.object.sessao, parent)
         self.object.save()
+        _touch_termo(self.object.sessao.termo, self.request)
         return redirect(item_focus_url(self.object))
 
     def get_context_data(self, **kwargs):
@@ -591,7 +1061,16 @@ class ItemUpdateView(SuperuserRequiredMixin, UpdateView):
         return self.object
 
     def form_valid(self, form):
+        texto = self.request.POST.get('texto', '')
+        grupos_marcados = parse_bulk_item_markers(texto, max_hash_level=4) if starts_with_item_marker(texto) else []
+        if grupos_marcados:
+            self.object, updated_count = replace_item_with_marker_nodes(self.object, grupos_marcados, ItemTR.Tipo)
+            _touch_termo(self.object.sessao.termo, self.request)
+            messages.success(self.request, f'{updated_count} item(ns) atualizado(s).')
+            return redirect(item_focus_url(self.object))
+
         self.object = form.save()
+        _touch_termo(self.object.sessao.termo, self.request)
         return redirect(item_focus_url(self.object))
 
     def get_context_data(self, **kwargs):
@@ -616,7 +1095,30 @@ class ItemDeleteView(SuperuserRequiredMixin, DeleteView):
         self.object.delete()
         normalize_sessoes(sessao.termo)
         normalize_items(sessao, parent_id)
+        _touch_termo(sessao.termo, self.request)
         return redirect(return_url)
+
+
+class ItemClearChildrenView(SuperuserRequiredMixin, DeleteView):
+    model = ItemTR
+    template_name = 'licitacoes/confirm_delete.html'
+
+    def get_queryset(self):
+        return ItemTR.objects.filter(sessao__termo__sessoes__id=self.kwargs['sessao_pk'])
+
+    def form_valid(self, form):
+        removed = clear_item_children(self.object)
+        _touch_termo(self.object.sessao.termo, self.request)
+        messages.success(self.request, f'{removed} subitem(ns) removido(s).')
+        return redirect(item_focus_url(self.object))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Limpar filhos'
+        context['descricao'] = 'Esta acao exclui todos os subitens deste item e nao pode ser desfeita.'
+        context['pergunta'] = f'Confirma a exclusao de todos os subitens de "{self.object}"?'
+        context['botao_confirmar'] = 'Limpar filhos'
+        return context
 
 
 class ItemMoveView(SuperuserRequiredMixin, View):
@@ -646,6 +1148,7 @@ class ItemMoveView(SuperuserRequiredMixin, View):
                 action = 'child'
             try:
                 move_item(self.item, target, action, target_sessao=target_sessao, child_position=child_position)
+                _touch_termo(self.termo, request)
                 messages.success(request, 'Item movido e estrutura renumerada.')
                 return redirect(item_focus_url(self.item))
             except ValueError as exc:
@@ -680,6 +1183,7 @@ class ItemDuplicateView(SuperuserRequiredMixin, View):
                 action = 'child'
             try:
                 duplicate = duplicate_item(self.item, target, action, target_sessao=target_sessao, child_position=child_position)
+                _touch_termo(self.termo, request)
                 messages.success(request, 'Item duplicado com subitens e estrutura renumerada.')
                 return redirect(item_focus_url(duplicate))
             except ValueError as exc:
@@ -701,6 +1205,7 @@ class TabelaItemCreateView(SuperuserRequiredMixin, CreateView):
         self.object.item = self.item
         self.object.ordem = (self.item.tabela_linhas.aggregate(max_ordem=Max('ordem'))['max_ordem'] or 0) + 1
         self.object.save()
+        _touch_termo(self.item.sessao.termo, self.request)
         return redirect(tabela_item_url(self.item))
 
     def get_context_data(self, **kwargs):
@@ -724,6 +1229,7 @@ class TabelaItemUpdateView(SuperuserRequiredMixin, UpdateView):
         return self.object
 
     def get_success_url(self):
+        _touch_termo(self.item.sessao.termo, self.request)
         return tabela_item_url(self.item)
 
     def get_context_data(self, **kwargs):
@@ -751,6 +1257,7 @@ class TabelaItemDeleteView(SuperuserRequiredMixin, DeleteView):
             if linha.ordem != idx:
                 linha.ordem = idx
                 linha.save(update_fields=['ordem'])
+        _touch_termo(self.item.sessao.termo, self.request)
         return redirect(tabela_item_url(self.item))
 
     def get_context_data(self, **kwargs):
@@ -817,12 +1324,15 @@ class TermoExportDocxView(SuperuserRequiredMixin, View):
                 p = document.add_paragraph(f"{bloco['sessao'].ordem}.1. -")
                 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             for row in rows:
-                prefix = row['enum_prefix'] or f"{row['indice']}."
                 p = document.add_paragraph()
                 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                run_prefix = p.add_run(f'{prefix} ')
-                run_prefix.bold = True
-                add_marked_runs(p, row['item'].texto or '')
+                if row.get('is_subsecao'):
+                    p.add_run(row['item'].texto or '').bold = True
+                else:
+                    prefix = row['enum_prefix'] or f"{row['indice']}."
+                    run_prefix = p.add_run(f'{prefix} ')
+                    run_prefix.bold = True
+                    add_marked_runs(p, row['item'].texto or '')
 
                 if row['indice'] == '1.1' and row.get('tabela_linhas'):
                     doc_table = document.add_table(rows=1, cols=6)
@@ -905,6 +1415,79 @@ def _docx_response(titulo, secoes, filename):
     buffer.seek(0)
     response = HttpResponse(buffer.getvalue(), content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _etp_dynamic_docx_response(etp):
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Cm, Pt, RGBColor
+
+    document = Document()
+    normal = document.styles['Normal']
+    normal.font.name = 'Verdana'
+    normal.font.size = Pt(10)
+    section = document.sections[0]
+    section.top_margin = Cm(1.8)
+    section.bottom_margin = Cm(1.8)
+    section.left_margin = Cm(2)
+    section.right_margin = Cm(2)
+
+    p = document.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    r = p.add_run(f'ETP TIC - {etp.nome}')
+    r.bold = True
+    r.font.size = Pt(12)
+
+    meta = document.add_paragraph()
+    meta.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    meta.add_run('Processo: ').bold = True
+    meta.add_run(etp.numero_processo or '-')
+    if etp.link:
+        link = document.add_paragraph()
+        link.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        link.add_run('Link: ').bold = True
+        link.add_run(etp.link)
+
+    def add_marked_runs(paragraph, text):
+        for segment, is_red in red_mark_segments(text):
+            lines = segment.split('\n')
+            for idx, line in enumerate(lines):
+                if idx:
+                    paragraph.add_run().add_break()
+                if not line:
+                    continue
+                run = paragraph.add_run(line)
+                if is_red:
+                    run.font.color.rgb = RGBColor(255, 0, 0)
+
+    for bloco in build_etp_tree(etp):
+        h = document.add_paragraph()
+        h.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        run = h.add_run(f"{bloco['sessao'].ordem}. {bloco['sessao'].titulo}")
+        run.bold = True
+
+        rows = bloco['rows']
+        if not rows:
+            p = document.add_paragraph(f"{bloco['sessao'].ordem}.1. -")
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        for row in rows:
+            p = document.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            if row.get('is_subsecao'):
+                p.add_run(row['item'].texto or '').bold = True
+            else:
+                prefix = row.get('enum_prefix') or f"{row['indice']}."
+                run_prefix = p.add_run(f'{prefix} ')
+                run_prefix.bold = True
+                add_marked_runs(p, row['item'].texto or '')
+        document.add_paragraph('')
+
+    buffer = BytesIO()
+    document.save(buffer)
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    response['Content-Disposition'] = f'attachment; filename="etp_tic_{slugify(etp.nome) or etp.pk}.docx"'
     return response
 
 

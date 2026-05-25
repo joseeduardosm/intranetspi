@@ -24,10 +24,9 @@
               <div class="carousel-item {% if forloop.first %}active{% endif %}">
                 <a class="noticias-hero-link" href="{% url 'noticias:public_detail' noticia.pk %}">
                   <img src="{{ noticia.imagem_destaque.url }}" class="noticias-hero-img" alt="{{ noticia.titulo }}">
-                  <span class="noticias-overlay"></span>
                   <span class="noticias-hero-caption">
                     {% if noticia.fixada %}<span class="noticias-kicker">Destaque</span>{% endif %}
-                    <strong>{{ noticia.titulo }}</strong>
+                    <strong class="noticias-fit-title" data-fit-title>{{ noticia.titulo }}</strong>
                   </span>
                 </a>
               </div>
@@ -50,8 +49,7 @@
             {% if slot.noticia %}
               <a class="noticias-card" href="{% url 'noticias:public_detail' slot.noticia.pk %}">
                 <img src="{{ slot.noticia.imagem_destaque.url }}" alt="{{ slot.noticia.titulo }}">
-                <span class="noticias-overlay"></span>
-                <span class="noticias-card-title">{{ slot.noticia.titulo }}</span>
+                <span class="noticias-card-title noticias-fit-title" data-fit-title>{{ slot.noticia.titulo }}</span>
               </a>
             {% else %}
               <div class="noticias-empty-card" aria-hidden="true"></div>
@@ -68,4 +66,43 @@
       </div>
     {% endif %}
   </div>
+{% endblock %}
+
+{% block extra_js %}
+  <script>
+    (() => {
+      const fitTitle = (title) => {
+        const parent = title.parentElement;
+        if (!parent) return;
+
+        const max = Number(title.dataset.maxSize || getComputedStyle(title).getPropertyValue('--fit-title-max') || 64);
+        const min = Number(title.dataset.minSize || getComputedStyle(title).getPropertyValue('--fit-title-min') || 13);
+        let low = min;
+        let high = max;
+
+        title.style.fontSize = `${max}px`;
+        title.style.whiteSpace = 'nowrap';
+
+        for (let step = 0; step < 12; step += 1) {
+          const mid = (low + high) / 2;
+          title.style.fontSize = `${mid}px`;
+          if (title.scrollWidth <= title.clientWidth) {
+            low = mid;
+          } else {
+            high = mid;
+          }
+        }
+
+        title.style.fontSize = `${Math.floor(low)}px`;
+      };
+
+      const fitAllTitles = () => document.querySelectorAll('[data-fit-title]').forEach(fitTitle);
+
+      window.addEventListener('load', fitAllTitles);
+      window.addEventListener('resize', fitAllTitles);
+      document.querySelectorAll('#noticiasCarousel').forEach((carousel) => {
+        carousel.addEventListener('slid.bs.carousel', fitAllTitles);
+      });
+    })();
+  </script>
 {% endblock %}

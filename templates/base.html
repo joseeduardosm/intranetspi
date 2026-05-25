@@ -74,6 +74,21 @@
       <div class="container-fluid px-4 py-3 text-muted small">Aplicações SPI</div>
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((element) => {
+        new bootstrap.Tooltip(element, {
+          trigger: element.dataset.bsTrigger || 'hover focus'
+        });
+      });
+
+      document.addEventListener('click', (event) => {
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((element) => {
+          if (element !== event.target && !element.contains(event.target)) {
+            bootstrap.Tooltip.getInstance(element)?.hide();
+          }
+        });
+      });
+    </script>
     {% block extra_js %}{% endblock %}
   </body>
 </html>

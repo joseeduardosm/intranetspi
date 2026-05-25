@@ -291,6 +291,43 @@ class NoticiasTests(TestCase):
         self.assertTrue(duplicate.fixada)
         self.assertRedirects(response, reverse('noticias:update', args=[duplicate.pk]), fetch_redirect_response=False)
 
+    def test_gerenciamento_paginate_vinte_noticias_por_pagina(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        for idx in range(21):
+            self.criar_noticia(
+                titulo=f'Noticia gerenciada {idx}',
+                data_publicacao=timezone.now() - timedelta(minutes=idx),
+            )
+
+        response = self.client.get(reverse('noticias:manage_list'))
+        page_2_response = self.client.get(f"{reverse('noticias:manage_list')}?page=2")
+
+        self.assertEqual(len(response.context['noticias']), 20)
+        self.assertTrue(response.context['is_paginated'])
+        self.assertContains(response, 'Pagina 1 de 2')
+        self.assertContains(response, '&gt;')
+        self.assertEqual(len(page_2_response.context['noticias']), 1)
+
+    def test_gerenciamento_paginacao_compacta_acima_de_dez_paginas(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        for idx in range(221):
+            self.criar_noticia(
+                titulo=f'Noticia longa {idx}',
+                status=Noticia.Status.RASCUNHO,
+                data_publicacao=None,
+            )
+
+        response = self.client.get(f"{reverse('noticias:manage_list')}?status={Noticia.Status.RASCUNHO}&page=6")
+
+        self.assertEqual(response.context['pagination_pages'], [1, 2, 6, 11, 12])
+        self.assertContains(response, f'status={Noticia.Status.RASCUNHO}&amp;page=7')
+        self.assertContains(response, f'status={Noticia.Status.RASCUNHO}&amp;page=11')
+        self.assertNotContains(response, f'status={Noticia.Status.RASCUNHO}&amp;page=3')
+
     def test_comando_publica_somente_agendadas_vencidas(self):
         vencida = self.criar_noticia(
             titulo='Agendada vencida',

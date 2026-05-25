@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load licitacoes_extras %}
 
 {% block content %}
   <div class="spi-page-title d-flex justify-content-between align-items-start">
@@ -7,25 +8,53 @@
       <p>{{ etp.nome }} - {{ etp.numero_processo }}</p>
     </div>
     <div class="d-flex gap-2">
-      <a class="btn btn-primary" href="{% url 'licitacoes:etp_edit' etp.pk %}">Editar</a>
-      <a class="btn btn-outline-secondary" href="{% url 'licitacoes:etp_edit' etp.pk %}?secao={{ etp.secao_atual }}">Secoes</a>
+      {% if etp.usa_editor_dinamico %}
+        <a class="btn btn-primary" href="{% url 'licitacoes:etp_detail' etp.pk %}">Abrir</a>
+        <a class="btn btn-outline-secondary" href="{% url 'licitacoes:etp_edit' etp.pk %}">Editar</a>
+      {% endif %}
       <a class="btn btn-outline-secondary" href="{% url 'licitacoes:etp_export' etp.pk %}">DOCX</a>
       <a class="btn btn-light" href="{% url 'licitacoes:etp_list' %}">Voltar</a>
     </div>
   </div>
-  {% for secao in secoes_render %}
-    <article class="card border-0 shadow-sm mb-3">
-      <div class="card-body p-4">
-        <h2 class="h5">{{ secao.numero }}. {{ secao.titulo }}</h2>
-        {% if secao.descricao %}<p class="text-muted">{{ secao.descricao }}</p>{% endif %}
-        {% if secao.entradas %}
-          <div class="vstack gap-2">
-            {% for entrada in secao.entradas %}<p class="mb-0 text-justify">{{ entrada }}</p>{% endfor %}
-          </div>
-        {% else %}
-          <p class="text-muted mb-0">-</p>
-        {% endif %}
-      </div>
-    </article>
-  {% endfor %}
+  {% if not etp.usa_editor_dinamico %}
+    <div class="alert alert-secondary">ETP TIC legado disponivel somente para visualizacao.</div>
+    {% for secao in secoes_render %}
+      <article class="card border-0 shadow-sm mb-3">
+        <div class="card-body p-4">
+          <h2 class="h5">{{ secao.numero }}. {{ secao.titulo }}</h2>
+          {% if secao.descricao %}<p class="text-muted">{{ secao.descricao }}</p>{% endif %}
+          {% if secao.entradas %}
+            <div class="vstack gap-2">
+              {% for entrada in secao.entradas %}<p class="mb-0 text-justify">{{ entrada }}</p>{% endfor %}
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">-</p>
+          {% endif %}
+        </div>
+      </article>
+    {% endfor %}
+  {% else %}
+    {% for bloco in tree %}
+      <article class="card border-0 shadow-sm mb-3">
+        <div class="card-body p-4">
+          <h2 class="h5">{{ bloco.sessao.ordem }}. {{ bloco.sessao.titulo }}</h2>
+          {% for row in bloco.rows %}
+            <p class="mb-2 text-justify {% if row.is_subsecao %}spi-subsecao-row{% endif %}">
+              {% if row.is_subsecao %}
+                {{ row.item.texto|red_marks }}
+              {% elif row.enum_prefix %}
+                <strong>{{ row.enum_prefix }}</strong> {{ row.item.texto|red_marks }}
+              {% else %}
+                <strong>{{ row.indice }}.</strong> {{ row.item.texto|red_marks }}
+              {% endif %}
+            </p>
+          {% empty %}
+            <p class="text-muted mb-0">-</p>
+          {% endfor %}
+        </div>
+      </article>
+    {% empty %}
+      <div class="alert alert-info">Nenhuma sessao cadastrada neste ETP TIC.</div>
+    {% endfor %}
+  {% endif %}
 {% endblock %}

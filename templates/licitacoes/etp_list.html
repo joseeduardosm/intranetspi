@@ -17,7 +17,15 @@
             <th>Nome</th>
             <th>Processo</th>
             <th>Status</th>
-            <th>Secao</th>
+            <th>Modo</th>
+            <th>
+              Atualizado em
+              <button class="btn btn-sm btn-link p-0 align-baseline spi-tooltip-help" type="button" data-bs-toggle="tooltip" data-bs-trigger="click" data-bs-placement="top" title="Data e hora da alteracao mais recente do ETP TIC ou de seu conteudo.">?</button>
+            </th>
+            <th>
+              Alterado por
+              <button class="btn btn-sm btn-link p-0 align-baseline spi-tooltip-help" type="button" data-bs-toggle="tooltip" data-bs-trigger="click" data-bs-placement="top" title="Usuario que realizou a alteracao mais recente registrada.">?</button>
+            </th>
             <th class="text-end">Acoes</th>
           </tr>
         </thead>
@@ -28,17 +36,27 @@
               <td>{{ etp.nome }}</td>
               <td>{{ etp.numero_processo }}</td>
               <td><span class="badge text-bg-secondary">{{ etp.get_status_display }}</span></td>
-              <td>{{ etp.secao_atual }}</td>
+              <td>{% if etp.usa_editor_dinamico %}Dinamico{% else %}Legado{% endif %}</td>
+              <td>{{ etp.atualizado_em|date:"d/m/Y H:i" }}</td>
+              <td>{% if etp.atualizado_por %}{{ etp.atualizado_por.get_full_name|default:etp.atualizado_por.username }}{% else %}-{% endif %}</td>
               <td class="text-end">
-                <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:etp_edit' etp.pk %}">Editar</a>
-                <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:etp_edit' etp.pk %}?secao={{ etp.secao_atual }}">Secoes</a>
-                <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:etp_preview' etp.pk %}">Preview</a>
-                <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:etp_export' etp.pk %}">DOCX</a>
-                <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:etp_delete' etp.pk %}">Excluir</a>
+                {% if etp.usa_editor_dinamico %}
+                  <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:etp_detail' etp.pk %}" data-bs-toggle="tooltip" data-bs-trigger="click" title="Abrir o editor dinamico">Abrir</a>
+                  <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:etp_edit' etp.pk %}" data-bs-toggle="tooltip" data-bs-trigger="click" title="Editar dados principais">Editar</a>
+                {% else %}
+                  <a class="btn btn-sm btn-primary" href="{% url 'licitacoes:etp_preview' etp.pk %}" data-bs-toggle="tooltip" data-bs-trigger="click" title="Visualizar ETP TIC legado">Visualizar</a>
+                {% endif %}
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:etp_preview' etp.pk %}" data-bs-toggle="tooltip" data-bs-trigger="click" title="Abrir preview do documento">Preview</a>
+                <form class="d-inline" method="post" action="{% url 'licitacoes:etp_duplicate' etp.pk %}">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-secondary" type="submit" data-bs-toggle="tooltip" data-bs-trigger="click" title="Criar uma copia deste ETP TIC">Duplicar</button>
+                </form>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:etp_export' etp.pk %}" data-bs-toggle="tooltip" data-bs-trigger="click" title="Exportar em DOCX">DOCX</a>
+                <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:etp_delete' etp.pk %}" data-bs-toggle="tooltip" data-bs-trigger="click" title="Excluir este ETP TIC">Excluir</a>
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="6" class="text-muted">Nenhum ETP TIC cadastrado.</td></tr>
+            <tr><td colspan="8" class="text-muted">Nenhum ETP TIC cadastrado.</td></tr>
           {% endfor %}
         </tbody>
       </table>

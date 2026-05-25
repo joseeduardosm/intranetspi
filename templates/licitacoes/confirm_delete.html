@@ -2,17 +2,34 @@
 
 {% block content %}
   <div class="spi-page-title">
-    <h1>Confirmar exclusao</h1>
-    <p>Esta acao nao pode ser desfeita.</p>
+    <h1>{{ titulo|default:"Confirmar exclusao" }}</h1>
+    <p>{{ descricao|default:"Esta acao nao pode ser desfeita." }}</p>
   </div>
-  <form method="post" class="card border-danger shadow-sm">
+  <form method="post" class="card border-danger shadow-sm" id="licitacoes-confirm-form">
     <div class="card-body p-4">
       {% csrf_token %}
-      <p class="fs-5 mb-0">Confirma a exclusao de <strong>{{ object }}</strong>?</p>
+      <p class="fs-5 mb-0">{% if pergunta %}{{ pergunta }}{% else %}Confirma a exclusao de <strong>{{ object }}</strong>?{% endif %}</p>
     </div>
     <div class="card-footer bg-white d-flex justify-content-end gap-2">
-      <button class="btn btn-danger" type="submit">Excluir</button>
+      <button class="btn btn-danger" type="submit">{{ botao_confirmar|default:"Excluir" }}</button>
       <a class="btn btn-light" href="javascript:history.back()">Cancelar</a>
     </div>
   </form>
+  <script>
+    document.addEventListener('keydown', function (event) {
+      if (!event.ctrlKey || event.key !== 'Enter') {
+        return;
+      }
+      var form = document.getElementById('licitacoes-confirm-form');
+      if (!form) {
+        return;
+      }
+      event.preventDefault();
+      if (form.requestSubmit) {
+        form.requestSubmit();
+      } else {
+        form.submit();
+      }
+    });
+  </script>
 {% endblock %}

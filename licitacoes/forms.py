@@ -2,7 +2,17 @@ import re
 
 from django import forms
 
-from .models import Dfd, DfdItemTabela, EtpTic, ItemTR, SessaoTR, TabelaItemLinha, TermoReferencia
+from .models import (
+    Dfd,
+    DfdItemTabela,
+    EtpTic,
+    ItemEtpTic,
+    ItemTR,
+    SessaoEtpTic,
+    SessaoTR,
+    TabelaItemLinha,
+    TermoReferencia,
+)
 from .services import DFD_SECOES_MAP, ETP_TIC_SECOES_MAP
 
 
@@ -119,6 +129,12 @@ class SessaoTRForm(BootstrapModelForm):
         fields = ['titulo']
 
 
+class SessaoEtpTicForm(BootstrapModelForm):
+    class Meta:
+        model = SessaoEtpTic
+        fields = ['titulo']
+
+
 class ItemTRForm(BootstrapModelForm):
     class Meta:
         model = ItemTR
@@ -130,6 +146,17 @@ class ItemTRForm(BootstrapModelForm):
         texto = re.sub(r'^\s*\d+(?:\.\d+)+(?:\.)?\s*[-–—:]?\s*', '', texto)
         texto = re.sub(r'^\s*(?:[IVXLCDM]+|[a-z])\)\s*', '', texto, flags=re.IGNORECASE)
         return texto
+
+
+class ItemEtpTicForm(BootstrapModelForm):
+    class Meta:
+        model = ItemEtpTic
+        fields = ['texto']
+        widgets = {'texto': forms.Textarea(attrs={'rows': 12})}
+
+    def clean_texto(self):
+        texto = (self.cleaned_data.get('texto') or '').strip()
+        return re.sub(r'^\s*\d+(?:\.\d+)+(?:\.)?\s*[-–—:]?\s*', '', texto)
 
 
 class TabelaItemLinhaForm(BootstrapModelForm):
@@ -171,7 +198,63 @@ class ItemMoveForm(forms.Form):
                 row_item = row['item']
                 if row_item.id in blocked:
                     continue
-                prefix = row['enum_prefix'] or f"{row['indice']}."
+                prefix = '' if row.get('is_subsecao') else row['enum_prefix'] or f"{row['indice']}."
+                label = f"{'  ' * row['depth']}{prefix} {row_item.texto[:100]}"
+                choices.append((f'item:{row_item.id}', label))
+        self.fields['target'].widget = forms.Select(choices=choices, attrs={'class': 'form-select form-select-lg'})
+        self.fields['action'].choices = [
+            ('after', f'{action_label} apos o item destino'),
+            ('child', f'{action_label} como subitem do item destino'),
+        ]
+        self.fields['action'].widget.attrs.update({'class': 'form-select form-select-lg'})
+        self.fields['child_position'].widget.attrs.update({
+            'class': BOOTSTRAP_INPUT,
+            'placeholder': 'Ex.: 1',
+        })
+        self.session_action_error = f'Para {action_lower} para uma sessao, use a opcao de subitem/raiz do destino.'
+
+    def clean(self):
+        cleaned = super().clean()
+        target = cleaned.get('target') or ''
+        action = cleaned.get('action')
+        if target.startswith('sessao:') and action != 'child':
+            raise forms.ValidationError(self.session_action_error)
+        return cleaned
+
+
+class ItemEtpMoveForm(forms.Form):
+    target = forms.CharField(label='Destino', required=True)
+    action = forms.ChoiceField(
+        label='Acao',
+        choices=[
+            ('after', 'Mover apos o item destino'),
+            ('child', 'Mover como subitem do item destino'),
+        ],
+    )
+    child_position = forms.IntegerField(
+        label='Posicao dentro do destino',
+        min_value=1,
+        required=False,
+        help_text='Use somente ao mover como subitem. Deixe vazio para inserir no final.',
+    )
+
+    def __init__(self, *args, etp=None, item=None, action_label='Mover', **kwargs):
+        super().__init__(*args, **kwargs)
+        action_label = action_label.strip()
+        action_lower = action_label.lower()
+        choices = []
+        blocked = {item.id} if item else set()
+        if item:
+            from .services import etp_item_descendant_ids
+
+            blocked |= etp_item_descendant_ids(item)
+        for sessao in etp.sessoes.order_by('ordem', 'id'):
+            choices.append((f'sessao:{sessao.id}', f'{sessao.ordem}. {sessao.titulo}'))
+            for row in __import__('licitacoes.services', fromlist=['build_etp_item_rows']).build_etp_item_rows(sessao):
+                row_item = row['item']
+                if row_item.id in blocked:
+                    continue
+                prefix = '' if row.get('is_subsecao') else row.get('enum_prefix') or f"{row['indice']}."
                 label = f"{'  ' * row['depth']}{prefix} {row_item.texto[:100]}"
                 choices.append((f'item:{row_item.id}', label))
         self.fields['target'].widget = forms.Select(choices=choices, attrs={'class': 'form-select form-select-lg'})

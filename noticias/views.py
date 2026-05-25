@@ -73,6 +73,7 @@ class NoticiaManageListView(SuperuserRequiredMixin, ListView):
     model = Noticia
     template_name = 'noticias/manage_list.html'
     context_object_name = 'noticias'
+    paginate_by = 20
 
     def get_queryset(self):
         queryset = Noticia.objects.all().order_by('-fixada', '-data_publicacao', '-id')
@@ -85,6 +86,19 @@ class NoticiaManageListView(SuperuserRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context['status_atual'] = self.request.GET.get('status', '')
         context['status_opcoes'] = Noticia.Status.choices
+        page_obj = context.get('page_obj')
+        if page_obj:
+            total_pages = page_obj.paginator.num_pages
+            current = page_obj.number
+            if total_pages <= 10:
+                pages = list(range(1, total_pages + 1))
+            else:
+                pages = [1, 2]
+                if current not in pages and current not in {total_pages - 1, total_pages}:
+                    pages.append(current)
+                pages.extend([total_pages - 1, total_pages])
+                pages = sorted(set(page for page in pages if 1 <= page <= total_pages))
+            context['pagination_pages'] = pages
         return context
 
 

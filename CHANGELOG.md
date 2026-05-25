@@ -2,6 +2,25 @@
 
 Todas as mudancas importantes do Aplicacoes SPI serao documentadas neste arquivo.
 
+## [0.5.0] - 2026-05-25
+
+### Adicionado
+
+- Adicionado editor dinâmico para ETP TIC, com sessões, itens, subitens, subseções, incisos, alíneas, movimentação, duplicação, limpeza de filhos e exportação DOCX.
+- Adicionadas colunas "Atualizado em" e "Alterado por" nas listagens de TR e ETP TIC.
+- Adicionado registro do último usuário que alterou TR e ETP TIC.
+- Adicionados tooltips acionados por clique nas ações das listagens de TR e ETP TIC.
+- Adicionado `AGENTS.md` com instruções do projeto para manter textos visíveis em português brasileiro com acentos.
+
+### Alterado
+
+- Ajustada a listagem de ETP TIC para diferenciar documentos dinâmicos e legados.
+- Ajustados menus de ação do detalhe do TR e do ETP TIC para melhor uso em tabelas extensas.
+- Removido o overlay escuro das imagens da página pública de notícias.
+- Alterado o título das notícias no carrossel e nos cards laterais para rodapé azul no tom da navbar.
+- Ajustado o tamanho automático dos títulos no rodapé das notícias para manter uma linha sem cortar letras com acentos, cedilha ou descendentes.
+- Atualizados textos e testes do módulo de notícias para novas regras de exibição e gerenciamento.
+
 ## [0.4.0] - 2026-05-22
 
 ### Adicionado

@@ -1,5 +1,6 @@
 .noticias-page {
   --noticias-feature-height: clamp(420px, calc(100vh - 230px), 680px);
+  --noticias-navbar-blue: #1f2d4a;
   max-width: 1540px;
   margin: 0 auto;
 }
@@ -42,7 +43,7 @@ body:has(.noticias-page) .spi-container {
   display: block;
   color: #fff;
   text-decoration: none;
-  background: #1f2d4a;
+  background: var(--noticias-navbar-blue);
 }
 
 .noticias-hero-link {
@@ -64,32 +65,43 @@ body:has(.noticias-page) .spi-container {
 }
 
 .noticias-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(15, 23, 42, .05), rgba(15, 23, 42, .78));
+  display: none;
 }
 
 .noticias-hero-caption {
   position: absolute;
-  left: 2rem;
-  right: 2rem;
-  bottom: 2rem;
-  display: grid;
-  gap: .5rem;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  min-height: clamp(54px, 7.4vw, 90px);
+  padding: .7rem 1.4rem;
+  background: var(--noticias-navbar-blue);
+  overflow: visible;
 }
 
 .noticias-hero-caption strong {
-  max-width: 900px;
-  font-size: clamp(2rem, 4vw, 4rem);
-  line-height: 1.02;
+  --fit-title-max: 45;
+  --fit-title-min: 18;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+  font-size: 45px;
+  font-weight: 700;
+  line-height: 1.28;
+  white-space: nowrap;
 }
 
 .noticias-kicker {
-  width: fit-content;
+  flex: 0 0 auto;
   padding: .35rem .65rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, .9);
-  color: #1f2d4a;
+  color: var(--noticias-navbar-blue);
   font-size: .8rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -121,11 +133,24 @@ body:has(.noticias-page) .spi-container {
 
 .noticias-card-title {
   position: absolute;
-  left: 1rem;
-  right: 1rem;
-  bottom: 1rem;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 54px;
+  padding: .75rem 1rem;
+  background: var(--noticias-navbar-blue);
+  display: flex;
+  align-items: center;
+  overflow: visible;
+  font-size: 28px;
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.28;
+  white-space: nowrap;
+}
+
+.noticias-card-title.noticias-fit-title {
+  --fit-title-max: 28;
+  --fit-title-min: 8;
 }
 
 .noticias-empty-card {
@@ -296,9 +321,14 @@ body:has(.noticias-page) .spi-container {
 
 @media (max-width: 767px) {
   .noticias-hero-caption {
-    left: 1rem;
-    right: 1rem;
-    bottom: 1rem;
+    min-height: 50px;
+    padding: .6rem .7rem;
+  }
+
+  .noticias-hero-caption strong {
+    --fit-title-max: 25;
+    --fit-title-min: 10;
+    font-size: 25px;
   }
 
   .noticias-side-grid,

@@ -1,17 +1,17 @@
 from django.contrib import admin
 
-from .models import Dfd, DfdItemTabela, EtpTic, ItemTR, SessaoTR, TabelaItemLinha, TermoReferencia
+from .models import Dfd, DfdItemTabela, EtpTic, ItemEtpTic, ItemTR, SessaoEtpTic, SessaoTR, TabelaItemLinha, TermoReferencia
 
 
 @admin.register(EtpTic)
 class EtpTicAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nome', 'numero_processo', 'status', 'secao_atual', 'atualizado_em')
+    list_display = ('id', 'nome', 'numero_processo', 'status', 'usa_editor_dinamico', 'secao_atual', 'atualizado_em', 'atualizado_por')
     search_fields = ('nome', 'numero_processo')
 
 
 @admin.register(TermoReferencia)
 class TermoReferenciaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nome', 'numero_processo', 'atualizado_em')
+    list_display = ('id', 'nome', 'numero_processo', 'atualizado_em', 'atualizado_por')
     search_fields = ('nome', 'numero_processo')
 
 
@@ -37,6 +37,18 @@ class SessaoTRAdmin(admin.ModelAdmin):
 class ItemTRAdmin(admin.ModelAdmin):
     list_display = ('sessao', 'parent', 'tipo', 'ordem', 'texto')
     list_filter = ('tipo', 'sessao')
+
+
+@admin.register(SessaoEtpTic)
+class SessaoEtpTicAdmin(admin.ModelAdmin):
+    list_display = ('etp', 'ordem', 'titulo')
+    list_filter = ('etp',)
+
+
+@admin.register(ItemEtpTic)
+class ItemEtpTicAdmin(admin.ModelAdmin):
+    list_display = ('sessao', 'parent', 'ordem', 'texto')
+    list_filter = ('sessao__etp',)
 
 
 @admin.register(TabelaItemLinha)

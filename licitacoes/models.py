@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -13,6 +14,7 @@ class EtpTic(models.Model):
     link = models.URLField('Link do processo', max_length=500, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.RASCUNHO)
     secao_atual = models.PositiveIntegerField(default=1)
+    usa_editor_dinamico = models.BooleanField(default=False)
 
     descricao_necessidade = models.TextField(blank=True)
     area_requisitante = models.CharField(max_length=180, blank=True)
@@ -37,12 +39,61 @@ class EtpTic(models.Model):
 
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    atualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='etps_tic_atualizados',
+    )
 
     class Meta:
         ordering = ['-atualizado_em', '-id']
 
     def __str__(self):
         return self.nome
+
+
+class SessaoEtpTic(models.Model):
+    etp = models.ForeignKey(EtpTic, on_delete=models.CASCADE, related_name='sessoes')
+    titulo = models.CharField(max_length=300)
+    ordem = models.PositiveIntegerField(default=1)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['ordem', 'id']
+
+    def __str__(self):
+        return f'{self.ordem}. {self.titulo}'
+
+
+class ItemEtpTic(models.Model):
+    class Tipo(models.TextChoices):
+        NUMERICO = 'NUMERICO', 'Item/Subitem'
+        SUBSECAO = 'SUBSECAO', 'Subsecao'
+        INCISO = 'INCISO', 'Inciso'
+        ALINEA = 'ALINEA', 'Alinea'
+
+    sessao = models.ForeignKey(SessaoEtpTic, on_delete=models.CASCADE, related_name='itens')
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='filhos',
+    )
+    tipo = models.CharField(max_length=12, choices=Tipo.choices, default=Tipo.NUMERICO)
+    texto = models.TextField()
+    ordem = models.PositiveIntegerField(default=1)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['ordem', 'id']
+
+    def __str__(self):
+        return self.texto[:80]
 
 
 class Dfd(models.Model):
@@ -104,6 +155,13 @@ class TermoReferencia(models.Model):
     link = models.URLField('Link do processo', max_length=500, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    atualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='termos_referencia_atualizados',
+    )
 
     class Meta:
         ordering = ['nome', 'id']
@@ -131,6 +189,7 @@ class ItemTR(models.Model):
         NUMERICO = 'NUMERICO', 'Item/Subitem'
         INCISO = 'INCISO', 'Inciso'
         ALINEA = 'ALINEA', 'Alinea'
+        SUBSECAO = 'SUBSECAO', 'Subsecao'
 
     sessao = models.ForeignKey(SessaoTR, on_delete=models.CASCADE, related_name='itens')
     parent = models.ForeignKey(

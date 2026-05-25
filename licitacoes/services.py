@@ -6,7 +6,17 @@ import re
 from django.db import transaction
 from django.db.models import Max
 
-from .models import Dfd, DfdItemTabela, EtpTic, ItemTR, SessaoTR, TabelaItemLinha, TermoReferencia
+from .models import (
+    Dfd,
+    DfdItemTabela,
+    EtpTic,
+    ItemEtpTic,
+    ItemTR,
+    SessaoEtpTic,
+    SessaoTR,
+    TabelaItemLinha,
+    TermoReferencia,
+)
 
 
 ETP_TIC_SECOES = [
@@ -223,7 +233,16 @@ def next_ordem_sessao(termo):
     return (termo.sessoes.aggregate(max_ordem=Max('ordem'))['max_ordem'] or 0) + 1
 
 
+def next_ordem_etp_sessao(etp):
+    return (etp.sessoes.aggregate(max_ordem=Max('ordem'))['max_ordem'] or 0) + 1
+
+
 def next_ordem_item(sessao, parent):
+    parent_id = parent.id if parent else None
+    return (sessao.itens.filter(parent_id=parent_id).aggregate(max_ordem=Max('ordem'))['max_ordem'] or 0) + 1
+
+
+def next_ordem_etp_item(sessao, parent):
     parent_id = parent.id if parent else None
     return (sessao.itens.filter(parent_id=parent_id).aggregate(max_ordem=Max('ordem'))['max_ordem'] or 0) + 1
 
@@ -235,7 +254,21 @@ def normalize_sessoes(termo):
             sessao.save(update_fields=['ordem'])
 
 
+def normalize_etp_sessoes(etp):
+    for idx, sessao in enumerate(etp.sessoes.order_by('ordem', 'id'), start=1):
+        if sessao.ordem != idx:
+            sessao.ordem = idx
+            sessao.save(update_fields=['ordem'])
+
+
 def normalize_items(sessao, parent_id):
+    for idx, item in enumerate(sessao.itens.filter(parent_id=parent_id).order_by('ordem', 'id'), start=1):
+        if item.ordem != idx:
+            item.ordem = idx
+            item.save(update_fields=['ordem'])
+
+
+def normalize_etp_items(sessao, parent_id):
     for idx, item in enumerate(sessao.itens.filter(parent_id=parent_id).order_by('ordem', 'id'), start=1):
         if item.ordem != idx:
             item.ordem = idx
@@ -273,10 +306,160 @@ def item_parent_for_tipo(parent, tipo):
 def enum_prefix(item, siblings):
     idx = sibling_index(item, siblings)
     if item.tipo == ItemTR.Tipo.INCISO:
-        return f'{int_to_roman(idx)})'
+        return f'{int_to_roman(idx)}.'
     if item.tipo == ItemTR.Tipo.ALINEA:
         return f'{chr(ord("a") + idx - 1)})'
     return ''
+
+
+def etp_sibling_index(item, siblings):
+    idx = 0
+    for sibling in siblings:
+        if sibling.tipo == item.tipo:
+            idx += 1
+        elif item.tipo != ItemEtpTic.Tipo.NUMERICO:
+            idx = 0
+        if sibling.id == item.id:
+            return idx
+    return 1
+
+
+def etp_enum_prefix(item, siblings):
+    if item.tipo == ItemEtpTic.Tipo.INCISO:
+        return f'{int_to_roman(etp_sibling_index(item, siblings))}.'
+    if item.tipo == ItemEtpTic.Tipo.ALINEA:
+        return f'{chr(ord("a") + etp_sibling_index(item, siblings) - 1)})'
+    return ''
+
+
+def parse_bulk_item_markers(texto, max_hash_level=4):
+    roots = []
+    stack = {}
+    current = None
+    last_numeric = None
+    last_inciso = None
+
+    for raw_line in (texto or '').splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        if line.startswith('@'):
+            item_text = line[1:].strip()
+            if not item_text:
+                continue
+            node = {'tipo': 'SUBSECAO', 'texto': item_text, 'filhos': []}
+            roots.append(node)
+            stack = {}
+            current = node
+            last_numeric = None
+            last_inciso = None
+            continue
+
+        if line.startswith('**'):
+            item_text = line[2:].strip()
+            if not item_text or last_numeric is None:
+                continue
+            node = {'tipo': 'INCISO', 'texto': item_text, 'filhos': []}
+            last_numeric['filhos'].append(node)
+            current = node
+            last_inciso = node
+            continue
+
+        if line.startswith('$$'):
+            item_text = line[2:].strip()
+            parent = last_inciso or last_numeric
+            if not item_text or parent is None:
+                continue
+            node = {'tipo': 'ALINEA', 'texto': item_text, 'filhos': []}
+            parent['filhos'].append(node)
+            current = node
+            continue
+
+        marker_level = 0
+        for char in line:
+            if char != '#':
+                break
+            marker_level += 1
+        if 1 <= marker_level <= max_hash_level:
+            item_text = line[marker_level:].strip()
+            if not item_text:
+                continue
+            node = {'tipo': 'NUMERICO', 'texto': item_text, 'filhos': []}
+            parent_level = max((level for level in stack if level < marker_level), default=None)
+            if parent_level is None:
+                roots.append(node)
+            else:
+                stack[parent_level]['filhos'].append(node)
+            stack = {level: value for level, value in stack.items() if level < marker_level}
+            stack[marker_level] = node
+            current = node
+            last_numeric = node
+            last_inciso = None
+            continue
+
+        if current:
+            current['texto'] = f"{current['texto']}\n{line}"
+
+    return roots
+
+
+def replace_item_with_marker_nodes(item, nodes, tipo_enum):
+    if not nodes:
+        return item, 0
+
+    model = item.__class__
+
+    with transaction.atomic():
+        item = model.objects.select_for_update().select_related('sessao', 'parent').get(pk=item.pk)
+        sessao = item.sessao
+        parent = item.parent
+        parent_id = item.parent_id
+        ordered_siblings = list(sessao.itens.filter(parent_id=parent_id).exclude(pk=item.pk).order_by('ordem', 'id'))
+        previous_siblings = [sibling for sibling in ordered_siblings if (sibling.ordem, sibling.id) < (item.ordem, item.id)]
+        next_siblings = [sibling for sibling in ordered_siblings if (sibling.ordem, sibling.id) > (item.ordem, item.id)]
+        created_count = 0
+
+        def create_children(current_nodes, current_parent):
+            nonlocal created_count
+            for offset, node in enumerate(current_nodes, start=1):
+                child = model.objects.create(
+                    sessao=sessao,
+                    parent=current_parent,
+                    tipo=getattr(tipo_enum, node['tipo']),
+                    texto=node['texto'],
+                    ordem=offset,
+                )
+                created_count += 1
+                create_children(node['filhos'], child)
+
+        first_node = nodes[0]
+        item.filhos.all().delete()
+        item.tipo = getattr(tipo_enum, first_node['tipo'])
+        item.texto = first_node['texto']
+        item.ordem = len(previous_siblings) + 1
+        item.save(update_fields=['tipo', 'texto', 'ordem', 'atualizado_em'])
+        created_count += 1
+        create_children(first_node['filhos'], item)
+
+        new_roots = []
+        for node in nodes[1:]:
+            root = model.objects.create(
+                sessao=sessao,
+                parent=parent,
+                tipo=getattr(tipo_enum, node['tipo']),
+                texto=node['texto'],
+                ordem=1,
+            )
+            created_count += 1
+            create_children(node['filhos'], root)
+            new_roots.append(root)
+
+        for idx, sibling in enumerate(previous_siblings + [item] + new_roots + next_siblings, start=1):
+            model.objects.filter(pk=sibling.pk).update(ordem=idx)
+
+    item.refresh_from_db()
+    return item, created_count
 
 
 def quantidade_text(value):
@@ -353,11 +536,13 @@ def build_item_rows(sessao):
         siblings = by_parent.get(parent_id, [])
         for item in siblings:
             idx = sibling_index(item, siblings)
-            indice = parent_index if item.tipo != ItemTR.Tipo.NUMERICO else f'{parent_index}.{idx}'
+            is_subsecao = item.tipo == ItemTR.Tipo.SUBSECAO
+            indice = '' if is_subsecao else parent_index if item.tipo != ItemTR.Tipo.NUMERICO else f'{parent_index}.{idx}'
             rows.append({
                 'item': item,
                 'indice': indice,
                 'enum_prefix': enum_prefix(item, siblings),
+                'is_subsecao': is_subsecao,
                 'pode_tabela_itens': indice == '1.1',
                 'depth': depth,
                 'indent': depth * 1.5,
@@ -388,6 +573,38 @@ def build_termo_tree(termo):
     return tree
 
 
+def build_etp_item_rows(sessao):
+    itens = list(sessao.itens.select_related('parent').order_by('parent_id', 'ordem', 'id'))
+    by_parent = defaultdict(list)
+    for item in itens:
+        by_parent[item.parent_id].append(item)
+    rows = []
+
+    def walk(parent_id, parent_index, depth):
+        siblings = by_parent.get(parent_id, [])
+        for item in siblings:
+            idx = etp_sibling_index(item, siblings)
+            is_subsecao = item.tipo == ItemEtpTic.Tipo.SUBSECAO
+            indice = '' if is_subsecao else parent_index if item.tipo != ItemEtpTic.Tipo.NUMERICO else f'{parent_index}.{idx}'
+            rows.append({
+                'item': item,
+                'indice': indice,
+                'enum_prefix': etp_enum_prefix(item, siblings),
+                'is_subsecao': is_subsecao,
+                'depth': depth,
+                'indent': depth * 1.5,
+            })
+            child_parent_index = indice if item.tipo == ItemEtpTic.Tipo.NUMERICO else parent_index
+            walk(item.id, child_parent_index, depth + 1)
+
+    walk(None, str(sessao.ordem), 0)
+    return rows
+
+
+def build_etp_tree(etp):
+    return [{'sessao': sessao, 'rows': build_etp_item_rows(sessao)} for sessao in etp.sessoes.all()]
+
+
 def item_descendant_ids(item):
     ids = set()
     stack = list(item.filhos.all())
@@ -396,6 +613,28 @@ def item_descendant_ids(item):
         ids.add(child.id)
         stack.extend(list(child.filhos.all()))
     return ids
+
+
+def etp_item_descendant_ids(item):
+    ids = set()
+    stack = list(item.filhos.all())
+    while stack:
+        child = stack.pop()
+        ids.add(child.id)
+        stack.extend(list(child.filhos.all()))
+    return ids
+
+
+def clear_item_children(item):
+    child_count = len(item_descendant_ids(item))
+    item.filhos.all().delete()
+    return child_count
+
+
+def clear_etp_item_children(item):
+    child_count = len(etp_item_descendant_ids(item))
+    item.filhos.all().delete()
+    return child_count
 
 
 def _insert_at_position(siblings, item, position):
@@ -511,6 +750,103 @@ def duplicate_item(item, target, action, target_sessao=None, child_position=None
         return duplicate
 
 
+def move_etp_item(item, target, action, target_sessao=None, child_position=None):
+    if action not in {'after', 'child'}:
+        raise ValueError('Acao de movimentacao invalida.')
+    if target and target.id == item.id:
+        raise ValueError('Nao e possivel mover um item para ele mesmo.')
+    if target and target.id in etp_item_descendant_ids(item):
+        raise ValueError('Nao e possivel mover um item para dentro de um descendente.')
+
+    old_sessao = item.sessao
+    old_parent_id = item.parent_id
+
+    with transaction.atomic():
+        item = ItemEtpTic.objects.select_for_update().get(pk=item.pk)
+        if action == 'child' and target:
+            new_sessao = target.sessao
+            new_parent = target
+            siblings = list(new_sessao.itens.filter(parent=new_parent).exclude(pk=item.pk).order_by('ordem', 'id'))
+            ordered = _insert_at_position(siblings, item, child_position)
+        elif target:
+            new_sessao = target.sessao
+            new_parent = target.parent
+            siblings = list(new_sessao.itens.filter(parent=new_parent).exclude(pk=item.pk).order_by('ordem', 'id'))
+            ordered = []
+            inserted = False
+            for sibling in siblings:
+                ordered.append(sibling)
+                if sibling.id == target.id:
+                    ordered.append(item)
+                    inserted = True
+            if not inserted:
+                ordered.append(item)
+        else:
+            new_sessao = target_sessao
+            new_parent = None
+            siblings = list(new_sessao.itens.filter(parent=None).exclude(pk=item.pk).order_by('ordem', 'id'))
+            ordered = _insert_at_position(siblings, item, child_position)
+
+        item.sessao = new_sessao
+        item.parent = new_parent
+        item.ordem = 1
+        item.save(update_fields=['sessao', 'parent', 'ordem', 'atualizado_em'])
+        _cascade_etp_sessao(item, new_sessao)
+
+        normalize_etp_items(old_sessao, old_parent_id)
+        normalize_etp_items(new_sessao, new_parent.id if new_parent else None)
+        if action == 'after' and target or action == 'child':
+            for idx, sibling in enumerate(ordered, start=1):
+                ItemEtpTic.objects.filter(pk=sibling.pk).update(ordem=idx)
+
+
+def duplicate_etp_item(item, target, action, target_sessao=None, child_position=None):
+    if action not in {'after', 'child'}:
+        raise ValueError('Acao de duplicacao invalida.')
+    if target and target.id == item.id:
+        raise ValueError('Nao e possivel duplicar um item para ele mesmo.')
+    if target and target.id in etp_item_descendant_ids(item):
+        raise ValueError('Nao e possivel duplicar um item para dentro de um descendente.')
+
+    with transaction.atomic():
+        item = ItemEtpTic.objects.select_related('sessao', 'parent').get(pk=item.pk)
+        if action == 'child' and target:
+            new_sessao = target.sessao
+            new_parent = target
+            ordered = list(new_sessao.itens.filter(parent=new_parent).order_by('ordem', 'id'))
+        elif target:
+            new_sessao = target.sessao
+            new_parent = target.parent
+            ordered = list(new_sessao.itens.filter(parent=new_parent).order_by('ordem', 'id'))
+        else:
+            new_sessao = target_sessao
+            new_parent = None
+            ordered = list(new_sessao.itens.filter(parent=None).order_by('ordem', 'id'))
+
+        duplicate = _copy_etp_item_tree(item, new_sessao, new_parent, 1)
+
+        if action == 'after' and target:
+            reordered = []
+            inserted = False
+            for sibling in ordered:
+                reordered.append(sibling)
+                if sibling.id == target.id:
+                    reordered.append(duplicate)
+                    inserted = True
+            if not inserted:
+                reordered.append(duplicate)
+            for idx, sibling in enumerate(reordered, start=1):
+                ItemEtpTic.objects.filter(pk=sibling.pk).update(ordem=idx)
+        elif action == 'child':
+            reordered = _insert_at_position(ordered, duplicate, child_position)
+            for idx, sibling in enumerate(reordered, start=1):
+                ItemEtpTic.objects.filter(pk=sibling.pk).update(ordem=idx)
+        else:
+            normalize_etp_items(new_sessao, new_parent.id if new_parent else None)
+
+        return duplicate
+
+
 def duplicate_termo(termo):
     with transaction.atomic():
         termo = TermoReferencia.objects.get(pk=termo.pk)
@@ -527,6 +863,48 @@ def duplicate_termo(termo):
             )
             for item in sessao.itens.filter(parent=None).order_by('ordem', 'id'):
                 _copy_item_tree(item, new_sessao, None, item.ordem)
+        return duplicate
+
+
+def duplicate_etp(etp):
+    with transaction.atomic():
+        etp = EtpTic.objects.get(pk=etp.pk)
+        duplicate = EtpTic.objects.create(
+            nome=f'Copia de {etp.nome}',
+            numero_processo=etp.numero_processo,
+            link=etp.link,
+            status=etp.status,
+            secao_atual=etp.secao_atual,
+            usa_editor_dinamico=etp.usa_editor_dinamico,
+            descricao_necessidade=etp.descricao_necessidade,
+            area_requisitante=etp.area_requisitante,
+            responsavel_area=etp.responsavel_area,
+            necessidades_negocio=etp.necessidades_negocio,
+            necessidades_tecnologicas=etp.necessidades_tecnologicas,
+            demais_requisitos=etp.demais_requisitos,
+            estimativa_demanda=etp.estimativa_demanda,
+            levantamento_solucoes=etp.levantamento_solucoes,
+            analise_comparativa_solucoes=etp.analise_comparativa_solucoes,
+            solucoes_inviaveis=etp.solucoes_inviaveis,
+            analise_comparativa_custos_tco=etp.analise_comparativa_custos_tco,
+            descricao_solucao_tic=etp.descricao_solucao_tic,
+            estimativa_custo_valor=etp.estimativa_custo_valor,
+            estimativa_custo_texto=etp.estimativa_custo_texto,
+            justificativa_tecnica=etp.justificativa_tecnica,
+            justificativa_economica=etp.justificativa_economica,
+            beneficios_contratacao=etp.beneficios_contratacao,
+            providencias_adotadas=etp.providencias_adotadas,
+            declaracao_viabilidade=etp.declaracao_viabilidade,
+            justificativa_viabilidade=etp.justificativa_viabilidade,
+        )
+        for sessao in etp.sessoes.order_by('ordem', 'id'):
+            new_sessao = SessaoEtpTic.objects.create(
+                etp=duplicate,
+                titulo=sessao.titulo,
+                ordem=sessao.ordem,
+            )
+            for item in sessao.itens.filter(parent=None).order_by('ordem', 'id'):
+                _copy_etp_item_tree(item, new_sessao, None, item.ordem)
         return duplicate
 
 
@@ -584,9 +962,30 @@ def _copy_item_tree(item, sessao, parent, ordem):
     return duplicate
 
 
+def _copy_etp_item_tree(item, sessao, parent, ordem):
+    duplicate = ItemEtpTic.objects.create(
+        sessao=sessao,
+        parent=parent,
+        tipo=item.tipo,
+        texto=item.texto,
+        ordem=ordem,
+    )
+    for idx, child in enumerate(item.filhos.order_by('ordem', 'id'), start=1):
+        _copy_etp_item_tree(child, sessao, duplicate, idx)
+    return duplicate
+
+
 def _cascade_sessao(item, sessao):
     for child in item.filhos.all():
         if child.sessao_id != sessao.id:
             child.sessao = sessao
             child.save(update_fields=['sessao'])
         _cascade_sessao(child, sessao)
+
+
+def _cascade_etp_sessao(item, sessao):
+    for child in item.filhos.all():
+        if child.sessao_id != sessao.id:
+            child.sessao = sessao
+            child.save(update_fields=['sessao'])
+        _cascade_etp_sessao(child, sessao)
