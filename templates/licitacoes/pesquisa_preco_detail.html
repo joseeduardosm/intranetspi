@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% load licitacoes_extras %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>Pesquisa de Preço</h1>
+      <p>{{ pesquisa.termo.nome }} - {{ pesquisa.get_tipo_display }}{% if pesquisa.vigencia_meses %} - {{ pesquisa.vigencia_meses }} meses{% endif %}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 justify-content-end">
+      <a class="btn btn-outline-secondary" href="{% url 'licitacoes:pesquisa_preco_export' pesquisa.termo.pk %}">XLSX</a>
+      <a class="btn btn-outline-danger" href="{% url 'licitacoes:pesquisa_preco_delete' pesquisa.termo.pk %}">Excluir pesquisa</a>
+      <a class="btn btn-outline-secondary" href="{% url 'licitacoes:tr_detail' pesquisa.termo.pk %}">Voltar ao TR</a>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body d-flex flex-wrap gap-4">
+      <div><span class="text-muted small d-block">Pesquisador</span><strong>{{ pesquisa.pesquisador_nome }}</strong></div>
+      <div><span class="text-muted small d-block">E-mail</span><strong>{{ pesquisa.pesquisador_email }}</strong></div>
+      <div><span class="text-muted small d-block">Cargo</span><strong>{{ pesquisa.pesquisador_cargo }}</strong></div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <section class="col-12 col-xl-4">
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white">
+          <h2 class="h5 mb-0">Adicionar fornecedor</h2>
+        </div>
+        <div class="card-body">
+          <form method="post" action="{% url 'licitacoes:pesquisa_preco_fornecedor_add' pesquisa.termo.pk %}">
+            {% csrf_token %}
+            <label class="form-label" for="{{ fornecedor_form.fornecedor.id_for_label }}">{{ fornecedor_form.fornecedor.label }}</label>
+            {{ fornecedor_form.fornecedor }}
+            {% for error in fornecedor_form.fornecedor.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            <div class="d-flex flex-wrap gap-2 mt-3">
+              <button class="btn btn-primary" type="submit">Adicionar</button>
+              <a class="btn btn-outline-secondary" href="{% url 'licitacoes:pesquisa_preco_fornecedor_create' pesquisa.termo.pk %}">Novo fornecedor</a>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white">
+          <h2 class="h5 mb-0">Itens herdados do item 1.1</h2>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Descrição</th>
+                  <th>Quantidade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in itens %}
+                  <tr>
+                    <td>{{ item.ordem }}</td>
+                    <td>{{ item.descricao }}</td>
+                    <td>{{ item.quantidade }}</td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="3" class="text-muted">Cadastre itens na tabela do item 1.1 do TR.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="col-12 col-xl-8">
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white">
+          <h2 class="h5 mb-0">Fornecedores</h2>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Fornecedor</th>
+                <th>Último contato</th>
+                <th>Dias sem resposta</th>
+                <th>Validade</th>
+                <th class="text-end">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in fornecedores %}
+                <tr class="{{ entry.row_class }}">
+                  <td>
+                    <strong>{{ entry.fornecedor.razao_social }}</strong><br>
+                    <small>
+                      {% if entry.fornecedor.email_contato %}
+                        {% for email in entry.fornecedor.email_contato|split_emails %}
+                          <a href="#" class="spi-copy-email" data-email="{{ email }}" title="Clique para copiar este e-mail">{{ email }}</a>{% if not forloop.last %}<br>{% endif %}
+                        {% endfor %}
+                      {% else %}
+                        -
+                      {% endif %}
+                      <span class="d-block">{{ entry.fornecedor.telefone|default:"-" }}</span>
+                    </small>
+                  </td>
+                  <td>{{ entry.ultimo_contato|date:"d/m/Y"|default:"-" }}</td>
+                  <td>{% if entry.dias_sem_resposta is not None %}{{ entry.dias_sem_resposta }}{% else %}-{% endif %}</td>
+                  <td>
+                    {% if entry.vencimento %}
+                      <span class="{% if entry.validade_alerta %}text-danger fw-bold{% endif %}">
+                        {{ entry.vencimento|date:"d/m/Y" }} ({{ entry.dias_validade }} dia{% if entry.dias_validade != 1 %}s{% endif %})
+                      </span>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    <div class="d-flex flex-wrap gap-2 justify-content-end">
+                      <form method="post" action="{% url 'licitacoes:pesquisa_preco_atualizar_contato' pesquisa.termo.pk entry.pesquisa_fornecedor.pk %}">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-outline-secondary" type="submit">Atualizar Último Contato</button>
+                      </form>
+                      {% if entry.tem_resposta and entry.pesquisa_fornecedor.documento_fornecedor %}
+                        <a class="btn btn-sm btn-outline-primary" href="{{ entry.pesquisa_fornecedor.documento_fornecedor.url }}" download>Orçamento</a>
+                      {% else %}
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'licitacoes:pesquisa_preco_orcamento' pesquisa.termo.pk entry.pesquisa_fornecedor.pk %}">Orçamento</a>
+                      {% endif %}
+                      <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:pesquisa_preco_fornecedor_update' pesquisa.termo.pk entry.fornecedor.pk %}">Editar</a>
+                      <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:pesquisa_preco_fornecedor_remove' pesquisa.termo.pk entry.pesquisa_fornecedor.pk %}">Remover</a>
+                    </div>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5" class="text-muted">Nenhum fornecedor vinculado.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white">
+          <h2 class="h5 mb-0">Quadro comparativo</h2>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-bordered align-middle mb-0 spi-pesquisa-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Quantidade</th>
+                <th>Descrição</th>
+                {% for entry in fornecedores %}
+                  <th>{{ entry.fornecedor.razao_social }} - Unitário</th>
+                  <th>{{ entry.fornecedor.razao_social }} - Total</th>
+                {% endfor %}
+                <th>Preço médio unitário</th>
+                <th>Total médio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for media in medias %}
+                <tr>
+                  <td>{{ media.item.ordem }}</td>
+                  <td>{{ media.item.quantidade }}</td>
+                  <td>{{ media.item.descricao }}</td>
+                  {% for entry in fornecedores %}
+                    {% for item_row in entry.itens %}
+                      {% if item_row.item.id == media.item.id %}
+                        <td>{{ item_row.preco_unitario|default:"-" }}</td>
+                        <td>{{ item_row.valor_total|default:"-" }}</td>
+                      {% endif %}
+                    {% endfor %}
+                  {% endfor %}
+                  <td>{{ media.preco_medio|default:"-" }}</td>
+                  <td>{{ media.valor_total_medio|default:"-" }}</td>
+                </tr>
+              {% endfor %}
+              <tr class="fw-bold">
+                <td colspan="3">{% if is_servico %}Total mensal{% else %}Total{% endif %}</td>
+                {% for entry in fornecedores %}
+                  <td colspan="2">{{ entry.total }}</td>
+                {% endfor %}
+                <td colspan="2">{{ total_medio }}</td>
+              </tr>
+              {% if is_servico %}
+                <tr class="fw-bold">
+                  <td colspan="3">Total para contratação ({{ pesquisa.vigencia_meses }} meses)</td>
+                  {% for entry in fornecedores %}
+                    <td colspan="2">{{ entry.total_contratacao }}</td>
+                  {% endfor %}
+                  <td colspan="2">{{ total_medio_contratacao }}</td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+    document.addEventListener('click', function (event) {
+      var link = event.target.closest('.spi-copy-email');
+      if (!link) {
+        return;
+      }
+      event.preventDefault();
+      var email = link.dataset.email || '';
+      var originalText = link.textContent;
+      function showCopied() {
+        link.textContent = 'E-mail copiado';
+        window.setTimeout(function () {
+          link.textContent = originalText;
+        }, 1400);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(email).then(showCopied);
+        return;
+      }
+      var input = document.createElement('input');
+      input.value = email;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      showCopied();
+    });
+  </script>
+{% endblock %}

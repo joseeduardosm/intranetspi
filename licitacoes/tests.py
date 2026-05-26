@@ -1,8 +1,29 @@
+from io import BytesIO
+
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 from django.test import TestCase
 from django.urls import reverse
+from openpyxl import load_workbook
 
-from .models import Dfd, DfdItemTabela, EtpTic, ItemEtpTic, ItemTR, SessaoEtpTic, SessaoTR, TabelaItemLinha, TermoReferencia
+from .models import (
+    Dfd,
+    DfdItemTabela,
+    EtpTic,
+    Fornecedor,
+    ItemEtpTic,
+    ItemTR,
+    PesquisaPreco,
+    PesquisaPrecoContato,
+    PesquisaPrecoFornecedor,
+    PesquisaPrecoItemValor,
+    SessaoEtpTic,
+    SessaoTR,
+    TabelaItemLinha,
+    TermoReferencia,
+)
+from .forms import FornecedorForm
 from .services import (
     build_etp_item_rows,
     build_item_rows,
@@ -16,6 +37,7 @@ from .services import (
     item_parent_for_tipo,
     move_etp_item,
     move_item,
+    pesquisa_preco_context,
     red_marked_html,
     render_dfd_sections,
     render_etp_sections,
@@ -281,6 +303,45 @@ class EtpTicTests(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_criar_etp_com_marcadores_destaca_todo_texto_em_vermelho(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+
+        self.client.post(
+            reverse('licitacoes:etp_item_create', args=[sessao.pk]),
+            {
+                'texto': '@Garantia\n#Será exigida garantia.',
+                'modo_destaque_texto': 'todo_vermelho',
+            },
+        )
+
+        textos = set(sessao.itens.values_list('texto', flat=True))
+        self.assertIn('*Garantia*', textos)
+        self.assertIn('*Será exigida garantia.*', textos)
+
+    def test_criar_alineas_etp_com_marcador_isolado_no_subitem(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        item = ItemEtpTic.objects.create(sessao=sessao, texto='Item', ordem=1)
+        subitem = ItemEtpTic.objects.create(sessao=sessao, parent=item, texto='Subitem', ordem=1)
+
+        self.client.post(
+            reverse('licitacoes:etp_item_child_create', args=[sessao.pk, subitem.pk]),
+            {'texto': '$$o prazo de validade;\n$$a data da emissão;'},
+        )
+
+        rows = build_etp_item_rows(sessao)
+        found = {row['item'].texto: row for row in rows}
+        self.assertEqual(found['o prazo de validade;']['enum_prefix'], 'a)')
+        self.assertEqual(found['a data da emissão;']['enum_prefix'], 'b)')
+        self.assertEqual(found['o prazo de validade;']['item'].parent_id, subitem.id)
+
     def test_editar_etp_com_marcadores_substitui_item_e_renumera_irmaos(self):
         User = get_user_model()
         User.objects.create_superuser(username='admin', password='123')
@@ -311,6 +372,50 @@ class EtpTicTests(TestCase):
             f"{reverse('licitacoes:etp_detail', args=[etp.pk])}#item-etp-{alvo.pk}",
             fetch_redirect_response=False,
         )
+
+    def test_editar_etp_destaca_item_e_filhos_em_vermelho(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        item = ItemEtpTic.objects.create(sessao=sessao, texto='Item', ordem=1)
+        filho = ItemEtpTic.objects.create(sessao=sessao, parent=item, texto='Filho', ordem=1)
+        neto = ItemEtpTic.objects.create(sessao=sessao, parent=filho, texto='Neto', ordem=1)
+
+        self.client.post(
+            reverse('licitacoes:etp_item_update', args=[sessao.pk, item.pk]),
+            {
+                'texto': 'Item alterado',
+                'modo_destaque_texto': 'todo_vermelho_com_filhos',
+            },
+        )
+
+        item.refresh_from_db()
+        filho.refresh_from_db()
+        neto.refresh_from_db()
+        self.assertEqual(item.texto, '*Item alterado*')
+        self.assertEqual(filho.texto, '*Filho*')
+        self.assertEqual(neto.texto, '*Neto*')
+
+    def test_editar_sessao_etp_destaca_filhos_em_vermelho(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
+        sessao = SessaoEtpTic.objects.create(etp=etp, titulo='Objeto', ordem=1)
+        item = ItemEtpTic.objects.create(sessao=sessao, texto='Item', ordem=1)
+        filho = ItemEtpTic.objects.create(sessao=sessao, parent=item, texto='Filho', ordem=1)
+
+        self.client.post(
+            reverse('licitacoes:etp_sessao_update', args=[etp.pk, sessao.pk]),
+            {'titulo': 'Objeto atualizado', 'filhos_em_vermelho': '1'},
+        )
+
+        item.refresh_from_db()
+        filho.refresh_from_db()
+        self.assertEqual(item.texto, '*Item*')
+        self.assertEqual(filho.texto, '*Filho*')
 
     def test_mover_e_duplicar_item_etp_dinamico(self):
         etp = EtpTic.objects.create(nome='ETP', numero_processo='001/2026', usa_editor_dinamico=True)
@@ -874,6 +979,48 @@ class TrTests(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_criar_tr_com_marcadores_destaca_vermelho_ignorando_subsecoes(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+
+        self.client.post(
+            reverse('licitacoes:item_create', args=[self.sessao.pk]),
+            {
+                'texto': (
+                    '@Garantia da contratação\n'
+                    '#Será exigida a garantia.\n'
+                    '**Caução em dinheiro.\n'
+                    '$$Em moeda corrente.'
+                ),
+                'modo_destaque_texto': 'vermelho_sem_subsecoes',
+            },
+        )
+
+        textos = set(self.sessao.itens.values_list('texto', flat=True))
+        self.assertIn('Garantia da contratação', textos)
+        self.assertIn('*Será exigida a garantia.*', textos)
+        self.assertIn('*Caução em dinheiro.*', textos)
+        self.assertIn('*Em moeda corrente.*', textos)
+
+    def test_criar_alineas_tr_com_marcador_isolado_no_subitem(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        item = ItemTR.objects.create(sessao=self.sessao, texto='Item', ordem=1)
+        subitem = ItemTR.objects.create(sessao=self.sessao, parent=item, texto='Subitem', ordem=1)
+
+        self.client.post(
+            reverse('licitacoes:item_child_create', args=[self.sessao.pk, subitem.pk]),
+            {'texto': '$$o prazo de validade;\n$$a data da emissão;'},
+        )
+
+        rows = build_item_rows(self.sessao)
+        found = {row['item'].texto: row for row in rows}
+        self.assertEqual(found['o prazo de validade;']['enum_prefix'], 'a)')
+        self.assertEqual(found['a data da emissão;']['enum_prefix'], 'b)')
+        self.assertEqual(found['o prazo de validade;']['item'].parent_id, subitem.id)
+
     def test_editar_tr_com_marcadores_substitui_item_e_renumera_irmaos(self):
         User = get_user_model()
         User.objects.create_superuser(username='admin', password='123')
@@ -902,6 +1049,46 @@ class TrTests(TestCase):
             f"{reverse('licitacoes:tr_detail', args=[self.termo.pk])}#item-{alvo.pk}",
             fetch_redirect_response=False,
         )
+
+    def test_editar_tr_destaca_item_e_filhos_em_vermelho(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        item = ItemTR.objects.create(sessao=self.sessao, texto='Item', ordem=1)
+        filho = ItemTR.objects.create(sessao=self.sessao, parent=item, texto='Filho', ordem=1)
+        neto = ItemTR.objects.create(sessao=self.sessao, parent=filho, texto='Neto', ordem=1)
+
+        self.client.post(
+            reverse('licitacoes:item_update', args=[self.sessao.pk, item.pk]),
+            {
+                'texto': 'Item alterado',
+                'modo_destaque_texto': 'todo_vermelho_com_filhos',
+            },
+        )
+
+        item.refresh_from_db()
+        filho.refresh_from_db()
+        neto.refresh_from_db()
+        self.assertEqual(item.texto, '*Item alterado*')
+        self.assertEqual(filho.texto, '*Filho*')
+        self.assertEqual(neto.texto, '*Neto*')
+
+    def test_editar_sessao_tr_destaca_filhos_em_vermelho(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        item = ItemTR.objects.create(sessao=self.sessao, texto='Item', ordem=1)
+        filho = ItemTR.objects.create(sessao=self.sessao, parent=item, texto='Filho', ordem=1)
+
+        self.client.post(
+            reverse('licitacoes:sessao_update', args=[self.termo.pk, self.sessao.pk]),
+            {'titulo': 'Objeto atualizado', 'filhos_em_vermelho': '1'},
+        )
+
+        item.refresh_from_db()
+        filho.refresh_from_db()
+        self.assertEqual(item.texto, '*Item*')
+        self.assertEqual(filho.texto, '*Filho*')
 
     def test_mover_bloqueia_descendente_e_renumera(self):
         a = ItemTR.objects.create(sessao=self.sessao, texto='A', ordem=1)
@@ -1229,3 +1416,324 @@ class TrTests(TestCase):
             f"{reverse('licitacoes:tr_detail', args=[self.termo.pk])}#sessao-{self.sessao.pk}",
             fetch_redirect_response=False,
         )
+
+
+class PesquisaPrecoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+        self.termo = TermoReferencia.objects.create(nome='TR Pesquisa', numero_processo='003/2026')
+        self.sessao = SessaoTR.objects.create(termo=self.termo, titulo='Objeto', ordem=1)
+        self.item = ItemTR.objects.create(sessao=self.sessao, texto='Item 1.1', ordem=1)
+        self.linha_1 = TabelaItemLinha.objects.create(
+            item=self.item,
+            ordem=1,
+            descricao='Notebook',
+            catmat_catser='123',
+            siafisico='456',
+            unidade_fornecimento='Unidade',
+            quantidade='2.00',
+        )
+        self.linha_2 = TabelaItemLinha.objects.create(
+            item=self.item,
+            ordem=2,
+            descricao='Monitor',
+            unidade_fornecimento='Unidade',
+            quantidade='3.00',
+        )
+
+    def fornecedor(self, nome='Fornecedor A', cnpj='00.000.000/0001-00'):
+        return Fornecedor.objects.create(
+            razao_social=nome,
+            cnpj=cnpj,
+            telefone='(11) 1111-1111',
+            contato='Contato',
+            email_contato='contato@example.com',
+        )
+
+    def test_formulario_fornecedor_aceita_multiplos_emails_por_ponto_e_virgula(self):
+        form = FornecedorForm(data={
+            'razao_social': 'Powertec Informática',
+            'cnpj': '00.000.000/0001-02',
+            'telefone': '(11) 2222-2222',
+            'contato': 'Contato',
+            'email_contato': 'powertecinformatica2@gmail.com; powertec@danro.com.br',
+        })
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(
+            form.cleaned_data['email_contato'],
+            'powertecinformatica2@gmail.com; powertec@danro.com.br',
+        )
+
+    def test_formulario_fornecedor_valida_cada_email_da_lista(self):
+        form = FornecedorForm(data={
+            'razao_social': 'Powertec Informática',
+            'cnpj': '00.000.000/0001-02',
+            'telefone': '(11) 2222-2222',
+            'contato': 'Contato',
+            'email_contato': 'powertecinformatica2@gmail.com; email-invalido',
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('email_contato', form.errors)
+
+    def test_detail_tr_exibe_botao_pesquisa_preco(self):
+        response = self.client.get(reverse('licitacoes:tr_detail', args=[self.termo.pk]))
+
+        self.assertContains(response, 'Pesquisa de Preço')
+        self.assertContains(response, reverse('licitacoes:pesquisa_preco_open', args=[self.termo.pk]))
+
+    def test_cria_pesquisa_aquisicao_e_servico(self):
+        response = self.client.post(
+            reverse('licitacoes:pesquisa_preco_create', args=[self.termo.pk]),
+            {
+                'pesquisador_nome': 'José Eduardo',
+                'pesquisador_email': 'jose@example.com',
+                'pesquisador_cargo': 'Analista',
+                'tipo': PesquisaPreco.Tipo.AQUISICAO,
+                'vigencia_meses': '',
+            },
+        )
+
+        pesquisa = self.termo.pesquisa_preco
+        self.assertEqual(pesquisa.tipo, PesquisaPreco.Tipo.AQUISICAO)
+        self.assertIsNone(pesquisa.vigencia_meses)
+        self.assertEqual(pesquisa.pesquisador_nome, 'José Eduardo')
+        self.assertRedirects(response, reverse('licitacoes:pesquisa_preco_detail', args=[self.termo.pk]), fetch_redirect_response=False)
+
+        termo_servico = TermoReferencia.objects.create(nome='TR Serviço', numero_processo='004/2026')
+        response = self.client.post(
+            reverse('licitacoes:pesquisa_preco_create', args=[termo_servico.pk]),
+            {
+                'pesquisador_nome': 'Maria',
+                'pesquisador_email': 'maria@example.com',
+                'pesquisador_cargo': 'Assessora',
+                'tipo': PesquisaPreco.Tipo.SERVICO,
+                'vigencia_meses': '24',
+            },
+        )
+
+        self.assertEqual(termo_servico.pesquisa_preco.vigencia_meses, 24)
+        self.assertRedirects(response, reverse('licitacoes:pesquisa_preco_detail', args=[termo_servico.pk]), fetch_redirect_response=False)
+
+    def test_exclui_pesquisa_para_comecar_outra(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+
+        response = self.client.post(reverse('licitacoes:pesquisa_preco_delete', args=[self.termo.pk]))
+
+        self.assertFalse(PesquisaPreco.objects.filter(pk=pesquisa.pk).exists())
+        self.assertRedirects(response, reverse('licitacoes:tr_detail', args=[self.termo.pk]), fetch_redirect_response=False)
+
+    def test_adiciona_fornecedor_atualiza_contato_e_calcula_dias_sem_resposta(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor = self.fornecedor()
+
+        response = self.client.post(
+            reverse('licitacoes:pesquisa_preco_fornecedor_add', args=[self.termo.pk]),
+            {'fornecedor': fornecedor.pk},
+        )
+
+        pesquisa_fornecedor = PesquisaPrecoFornecedor.objects.get(pesquisa=pesquisa, fornecedor=fornecedor)
+        self.assertRedirects(response, reverse('licitacoes:pesquisa_preco_detail', args=[self.termo.pk]), fetch_redirect_response=False)
+
+        response = self.client.post(reverse('licitacoes:pesquisa_preco_atualizar_contato', args=[self.termo.pk, pesquisa_fornecedor.pk]))
+
+        contato = PesquisaPrecoContato.objects.get(pesquisa_fornecedor=pesquisa_fornecedor)
+        self.assertEqual(contato.data_contato, timezone.localdate())
+        self.assertRedirects(response, reverse('licitacoes:pesquisa_preco_detail', args=[self.termo.pk]), fetch_redirect_response=False)
+        context = pesquisa_preco_context(pesquisa)
+        self.assertEqual(context['fornecedores'][0]['dias_sem_resposta'], 0)
+        self.assertEqual(context['fornecedores'][0]['row_class'], 'spi-pesquisa-row-verde')
+
+    def test_remove_fornecedor_apenas_da_pesquisa(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor = self.fornecedor()
+        pesquisa_fornecedor = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+
+        response = self.client.post(reverse('licitacoes:pesquisa_preco_fornecedor_remove', args=[self.termo.pk, pesquisa_fornecedor.pk]))
+
+        self.assertFalse(PesquisaPrecoFornecedor.objects.filter(pk=pesquisa_fornecedor.pk).exists())
+        self.assertTrue(Fornecedor.objects.filter(pk=fornecedor.pk).exists())
+        self.assertRedirects(response, reverse('licitacoes:pesquisa_preco_detail', args=[self.termo.pk]), fetch_redirect_response=False)
+
+    def test_crud_global_exclui_fornecedor_do_sistema(self):
+        fornecedor = self.fornecedor()
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+
+        response = self.client.post(reverse('licitacoes:fornecedor_delete', args=[fornecedor.pk]))
+
+        self.assertFalse(Fornecedor.objects.filter(pk=fornecedor.pk).exists())
+        self.assertFalse(PesquisaPrecoFornecedor.objects.filter(fornecedor_id=fornecedor.pk).exists())
+        self.assertRedirects(response, reverse('licitacoes:fornecedor_list'), fetch_redirect_response=False)
+
+    def test_orcamento_calcula_totais_medias_e_para_contador(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor_a = self.fornecedor()
+        fornecedor_b = self.fornecedor('Fornecedor B', '00.000.000/0001-01')
+        pf_a = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor_a)
+        pf_b = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor_b)
+        PesquisaPrecoContato.objects.create(pesquisa_fornecedor=pf_a, data_contato=timezone.localdate())
+        PesquisaPrecoContato.objects.create(pesquisa_fornecedor=pf_b, data_contato=timezone.localdate())
+
+        self.client.post(
+            reverse('licitacoes:pesquisa_preco_orcamento', args=[self.termo.pk, pf_a.pk]),
+            {
+                'data_resposta': timezone.localdate().isoformat(),
+                'validade_orcamento_dias': '30',
+                'documento_fornecedor': SimpleUploadedFile('orcamento-a.pdf', b'PDF A', content_type='application/pdf'),
+                f'preco_item_{self.linha_1.pk}': '10.00',
+                f'preco_item_{self.linha_2.pk}': '20.00',
+            },
+        )
+        self.client.post(
+            reverse('licitacoes:pesquisa_preco_orcamento', args=[self.termo.pk, pf_b.pk]),
+            {
+                'data_resposta': timezone.localdate().isoformat(),
+                'validade_orcamento_dias': '8',
+                'documento_fornecedor': SimpleUploadedFile('orcamento-b.pdf', b'PDF B', content_type='application/pdf'),
+                f'preco_item_{self.linha_1.pk}': '20.00',
+                f'preco_item_{self.linha_2.pk}': '40.00',
+            },
+        )
+
+        self.assertEqual(PesquisaPrecoItemValor.objects.count(), 4)
+        context = pesquisa_preco_context(pesquisa)
+        self.assertEqual(context['medias'][0]['preco_medio'], 15)
+        self.assertEqual(context['medias'][0]['valor_total_medio'], 30)
+        self.assertEqual(context['total_medio'], 120)
+        self.assertIsNone(context['fornecedores'][0]['dias_sem_resposta'])
+        self.assertTrue(context['fornecedores'][1]['validade_alerta'])
+
+    def test_painel_pesquisa_renderiza_fornecedor_e_quadro(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor = self.fornecedor()
+        pf = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+        PesquisaPrecoContato.objects.create(pesquisa_fornecedor=pf, data_contato=timezone.localdate())
+        PesquisaPrecoItemValor.objects.create(pesquisa_fornecedor=pf, item=self.linha_1, preco_unitario='10.00')
+        pf.data_resposta = timezone.localdate()
+        pf.validade_orcamento_dias = 30
+        pf.save()
+
+        response = self.client.get(reverse('licitacoes:pesquisa_preco_detail', args=[self.termo.pk]))
+
+        self.assertContains(response, 'Fornecedor A')
+        self.assertContains(response, 'Quadro comparativo')
+        self.assertContains(response, 'Notebook')
+
+    def test_painel_pesquisa_renderiza_multiplos_emails_com_copia_individual(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor = self.fornecedor()
+        fornecedor.email_contato = 'powertecinformatica2@gmail.com; powertec@danro.com.br'
+        fornecedor.save()
+        PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+
+        response = self.client.get(reverse('licitacoes:pesquisa_preco_detail', args=[self.termo.pk]))
+
+        self.assertContains(response, 'data-email="powertecinformatica2@gmail.com"')
+        self.assertContains(response, 'data-email="powertec@danro.com.br"')
+
+    def test_formulario_orcamento_renderiza_itens(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor = self.fornecedor()
+        pf = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+
+        response = self.client.get(reverse('licitacoes:pesquisa_preco_orcamento', args=[self.termo.pk, pf.pk]))
+
+        self.assertContains(response, 'Orçamento')
+        self.assertContains(response, 'Documento do fornecedor')
+        self.assertContains(response, f'name="preco_item_{self.linha_1.pk}"')
+        self.assertContains(response, 'Notebook')
+
+    def test_orcamento_salva_documento_do_fornecedor(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor = self.fornecedor()
+        pf = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+        arquivo = SimpleUploadedFile('orcamento.pdf', b'PDF fake', content_type='application/pdf')
+
+        self.client.post(
+            reverse('licitacoes:pesquisa_preco_orcamento', args=[self.termo.pk, pf.pk]),
+            {
+                'data_resposta': timezone.localdate().isoformat(),
+                'validade_orcamento_dias': '30',
+                'documento_fornecedor': arquivo,
+                f'preco_item_{self.linha_1.pk}': '10.00',
+                f'preco_item_{self.linha_2.pk}': '20.00',
+            },
+        )
+
+        pf.refresh_from_db()
+        self.assertTrue(pf.documento_fornecedor.name.endswith('.pdf'))
+
+    def test_orcamento_exige_documento_do_fornecedor(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor = self.fornecedor()
+        pf = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+
+        response = self.client.post(
+            reverse('licitacoes:pesquisa_preco_orcamento', args=[self.termo.pk, pf.pk]),
+            {
+                'data_resposta': timezone.localdate().isoformat(),
+                'validade_orcamento_dias': '30',
+                f'preco_item_{self.linha_1.pk}': '10.00',
+                f'preco_item_{self.linha_2.pk}': '20.00',
+            },
+        )
+
+        self.assertContains(response, 'Anexe o documento do fornecedor para salvar o orçamento.')
+        self.assertFalse(PesquisaPrecoItemValor.objects.filter(pesquisa_fornecedor=pf).exists())
+
+    def test_botao_orcamento_baixa_anexo_quando_orcamento_salvo(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor = self.fornecedor()
+        pf = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+        pf.data_resposta = timezone.localdate()
+        pf.validade_orcamento_dias = 30
+        pf.documento_fornecedor = 'licitacoes/pesquisa_preco/orcamentos/orcamento.pdf'
+        pf.save()
+        PesquisaPrecoItemValor.objects.create(pesquisa_fornecedor=pf, item=self.linha_1, preco_unitario='10.00')
+
+        response = self.client.get(reverse('licitacoes:pesquisa_preco_detail', args=[self.termo.pk]))
+
+        self.assertContains(response, 'href="/media/licitacoes/pesquisa_preco/orcamentos/orcamento.pdf"')
+        self.assertContains(response, 'download')
+        self.assertNotContains(response, reverse('licitacoes:pesquisa_preco_orcamento', args=[self.termo.pk, pf.pk]))
+
+    def test_servico_calcula_total_para_contratacao(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.SERVICO, vigencia_meses=12)
+        fornecedor = self.fornecedor()
+        pf = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+        PesquisaPrecoItemValor.objects.create(pesquisa_fornecedor=pf, item=self.linha_1, preco_unitario='10.00')
+        PesquisaPrecoItemValor.objects.create(pesquisa_fornecedor=pf, item=self.linha_2, preco_unitario='20.00')
+        pf.data_resposta = timezone.localdate()
+        pf.validade_orcamento_dias = 30
+        pf.save()
+
+        context = pesquisa_preco_context(pesquisa)
+
+        self.assertEqual(context['fornecedores'][0]['total'], 80)
+        self.assertEqual(context['fornecedores'][0]['total_contratacao'], 960)
+        self.assertEqual(context['total_medio_contratacao'], 960)
+
+    def test_exporta_xlsx(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor = self.fornecedor()
+        pf = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+        PesquisaPrecoItemValor.objects.create(pesquisa_fornecedor=pf, item=self.linha_1, preco_unitario='10.00')
+        pf.data_resposta = timezone.localdate()
+        pf.validade_orcamento_dias = 30
+        pf.save()
+
+        response = self.client.get(reverse('licitacoes:pesquisa_preco_export', args=[self.termo.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        self.assertIn('pesquisa_preco_', response['Content-Disposition'])
+        workbook = load_workbook(filename=BytesIO(response.content), data_only=False)
+        worksheet = workbook['PCs - Tab Alternativa']
+        self.assertEqual(workbook.sheetnames, ['PCs - Tab Alternativa'])
+        self.assertIn('B2:Q2', [str(item) for item in worksheet.merged_cells.ranges])
+        self.assertEqual(worksheet['B2'].value, 'QUADRO COMPARATIVO DE PESQUISA DE PREÇOS')
+        self.assertEqual(worksheet['J4'].value, fornecedor.razao_social)

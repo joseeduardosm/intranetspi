@@ -229,4 +229,89 @@ class TabelaItemLinha(models.Model):
     def __str__(self):
         return f'{self.ordem} - {self.descricao[:60]}'
 
+
+class Fornecedor(models.Model):
+    razao_social = models.CharField('Razão Social', max_length=220)
+    cnpj = models.CharField('CNPJ', max_length=20, unique=True)
+    telefone = models.CharField('Telefone', max_length=60)
+    contato = models.CharField('Contato', max_length=180)
+    email_contato = models.CharField('E-mail do contato', max_length=500)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['razao_social', 'cnpj']
+
+    def __str__(self):
+        return self.razao_social
+
+
+class PesquisaPreco(models.Model):
+    class Tipo(models.TextChoices):
+        AQUISICAO = 'AQUISICAO', 'Aquisição'
+        SERVICO = 'SERVICO', 'Serviço'
+
+    termo = models.OneToOneField(TermoReferencia, on_delete=models.CASCADE, related_name='pesquisa_preco')
+    tipo = models.CharField('Tipo', max_length=20, choices=Tipo.choices)
+    pesquisador_nome = models.CharField('Nome do pesquisador', max_length=180, default='')
+    pesquisador_email = models.EmailField('E-mail do pesquisador', default='')
+    pesquisador_cargo = models.CharField('Cargo do pesquisador', max_length=180, default='')
+    vigencia_meses = models.PositiveIntegerField('Vigência em meses', null=True, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-atualizado_em', '-id']
+
+    def __str__(self):
+        return f'Pesquisa de Preço - {self.termo}'
+
+
+class PesquisaPrecoFornecedor(models.Model):
+    pesquisa = models.ForeignKey(PesquisaPreco, on_delete=models.CASCADE, related_name='fornecedores_pesquisa')
+    fornecedor = models.ForeignKey(Fornecedor, on_delete=models.CASCADE, related_name='pesquisas_preco')
+    data_resposta = models.DateField('Data da resposta', null=True, blank=True)
+    validade_orcamento_dias = models.PositiveIntegerField('Validade do orçamento em dias', null=True, blank=True)
+    documento_fornecedor = models.FileField('Documento do fornecedor', upload_to='licitacoes/pesquisa_preco/orcamentos/', blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['fornecedor__razao_social', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['pesquisa', 'fornecedor'], name='uniq_fornecedor_por_pesquisa_preco'),
+        ]
+
+    def __str__(self):
+        return f'{self.fornecedor} - {self.pesquisa}'
+
+
+class PesquisaPrecoContato(models.Model):
+    pesquisa_fornecedor = models.ForeignKey(PesquisaPrecoFornecedor, on_delete=models.CASCADE, related_name='contatos')
+    data_contato = models.DateField('Data do contato')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-data_contato', '-id']
+
+    def __str__(self):
+        return f'{self.pesquisa_fornecedor.fornecedor} em {self.data_contato:%d/%m/%Y}'
+
+
+class PesquisaPrecoItemValor(models.Model):
+    pesquisa_fornecedor = models.ForeignKey(PesquisaPrecoFornecedor, on_delete=models.CASCADE, related_name='valores')
+    item = models.ForeignKey(TabelaItemLinha, on_delete=models.CASCADE, related_name='valores_pesquisa_preco')
+    preco_unitario = models.DecimalField('Preço unitário', max_digits=14, decimal_places=2)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['item__ordem', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['pesquisa_fornecedor', 'item'], name='uniq_preco_item_por_fornecedor'),
+        ]
+
+    def __str__(self):
+        return f'{self.pesquisa_fornecedor.fornecedor} - item {self.item.ordem}'
+
 # Create your models here.

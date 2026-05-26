@@ -16,6 +16,34 @@
         {% for field in form %}
           <div class="col-12 {% if field.name == 'link' or field.name == 'numero_processo' %}col-xl-6{% endif %}">
             <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {% if field.name == 'titulo' and session_children_red_field %}
+              <label class="form-check d-inline-flex align-items-center gap-2 mb-2 small text-muted">
+                <input
+                  class="form-check-input m-0"
+                  type="checkbox"
+                  name="{{ session_children_red_field }}"
+                  value="1"
+                  {% if session_children_red_checked %}checked{% endif %}
+                >
+                <span class="form-check-label">Filhos em vermelho</span>
+              </label>
+            {% endif %}
+            {% if field.name == 'texto' and item_red_mode_options %}
+              <fieldset class="d-flex flex-wrap align-items-center gap-3 mb-2 small text-muted">
+                {% for value, label in item_red_mode_options %}
+                  <label class="form-check form-check-inline m-0">
+                    <input
+                      class="form-check-input"
+                      type="radio"
+                      name="{{ item_red_mode_field }}"
+                      value="{{ value }}"
+                      {% if value == item_red_mode_value %}checked{% endif %}
+                    >
+                    <span class="form-check-label">{{ label }}</span>
+                  </label>
+                {% endfor %}
+              </fieldset>
+            {% endif %}
             {{ field }}
             {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
             {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
@@ -23,7 +51,19 @@
         {% endfor %}
       </div>
     </div>
-    <div class="card-footer bg-white d-flex justify-content-end gap-2 p-3">
+    <div class="card-footer bg-white d-flex flex-wrap align-items-center justify-content-end gap-2 p-3">
+      {% if parser_legend or item_red_mode_options %}
+        <div class="me-auto d-flex flex-wrap align-items-center gap-3 small text-muted">
+          {% if parser_legend %}
+        <div>
+          <strong>Parsers:</strong>
+          {% for item in parser_legend %}
+            <span class="ms-2"><code>{{ item.marker }}</code> {{ item.label }}</span>
+          {% endfor %}
+        </div>
+          {% endif %}
+        </div>
+      {% endif %}
       {% if voltar_url %}<a class="btn btn-light" href="{{ voltar_url }}">Cancelar</a>{% endif %}
       <button class="btn btn-primary" type="submit">Salvar</button>
     </div>

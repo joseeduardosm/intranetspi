@@ -1,13 +1,18 @@
 import re
 
 from django import forms
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 
 from .models import (
     Dfd,
     DfdItemTabela,
     EtpTic,
+    Fornecedor,
     ItemEtpTic,
     ItemTR,
+    PesquisaPreco,
+    PesquisaPrecoFornecedor,
     SessaoEtpTic,
     SessaoTR,
     TabelaItemLinha,
@@ -164,6 +169,105 @@ class TabelaItemLinhaForm(BootstrapModelForm):
         model = TabelaItemLinha
         fields = ['descricao', 'catmat_catser', 'siafisico', 'unidade_fornecimento', 'quantidade']
         widgets = {'descricao': forms.Textarea(attrs={'rows': 10})}
+
+
+class PesquisaPrecoCreateForm(BootstrapModelForm):
+    class Meta:
+        model = PesquisaPreco
+        fields = ['pesquisador_nome', 'pesquisador_email', 'pesquisador_cargo', 'tipo', 'vigencia_meses']
+
+    def clean(self):
+        cleaned = super().clean()
+        tipo = cleaned.get('tipo')
+        vigencia = cleaned.get('vigencia_meses')
+        if tipo == PesquisaPreco.Tipo.SERVICO and not vigencia:
+            self.add_error('vigencia_meses', 'Informe a vigência em meses para serviços.')
+        if tipo == PesquisaPreco.Tipo.AQUISICAO:
+            cleaned['vigencia_meses'] = None
+        return cleaned
+
+
+class FornecedorForm(BootstrapModelForm):
+    class Meta:
+        model = Fornecedor
+        fields = ['razao_social', 'cnpj', 'telefone', 'contato', 'email_contato']
+        help_texts = {
+            'email_contato': 'Para informar mais de um e-mail, separe por ponto e vírgula.',
+        }
+
+    def clean_email_contato(self):
+        value = (self.cleaned_data.get('email_contato') or '').strip()
+        emails = [email.strip() for email in value.split(';') if email.strip()]
+        if not emails:
+            raise ValidationError('Informe pelo menos um e-mail do contato.')
+        invalidos = []
+        for email in emails:
+            try:
+                validate_email(email)
+            except ValidationError:
+                invalidos.append(email)
+        if invalidos:
+            raise ValidationError(f'E-mail inválido: {", ".join(invalidos)}.')
+        return '; '.join(emails)
+
+
+class PesquisaPrecoFornecedorForm(forms.Form):
+    fornecedor = forms.ModelChoiceField(
+        label='Fornecedor',
+        queryset=Fornecedor.objects.none(),
+        widget=forms.Select(attrs={'class': 'form-select form-select-lg'}),
+    )
+
+    def __init__(self, *args, pesquisa=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        queryset = Fornecedor.objects.all()
+        if pesquisa:
+            queryset = queryset.exclude(pesquisas_preco__pesquisa=pesquisa)
+        self.fields['fornecedor'].queryset = queryset
+
+
+class PesquisaPrecoOrcamentoForm(forms.Form):
+    data_resposta = forms.DateField(
+        label='Data da resposta',
+        input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date', 'class': BOOTSTRAP_INPUT}),
+    )
+    validade_orcamento_dias = forms.IntegerField(
+        label='Validade do orçamento em dias',
+        min_value=1,
+        widget=forms.NumberInput(attrs={'class': BOOTSTRAP_INPUT}),
+    )
+    documento_fornecedor = forms.FileField(
+        label='Documento do fornecedor',
+        required=False,
+        widget=forms.ClearableFileInput(attrs={'class': BOOTSTRAP_INPUT}),
+    )
+
+    def __init__(self, *args, itens=None, valores=None, has_document=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.itens = list(itens or [])
+        self.has_document = has_document
+        valores = valores or {}
+        for item in self.itens:
+            name = self.item_field_name(item)
+            self.fields[name] = forms.DecimalField(
+                label=f'Item {item.ordem} - Preço unitário',
+                min_value=0,
+                max_digits=14,
+                decimal_places=2,
+                initial=valores.get(item.id),
+                widget=forms.NumberInput(attrs={'class': BOOTSTRAP_INPUT, 'step': '0.01'}),
+            )
+
+    @staticmethod
+    def item_field_name(item):
+        return f'preco_item_{item.id}'
+
+    def clean_documento_fornecedor(self):
+        documento = self.cleaned_data.get('documento_fornecedor')
+        if not documento and not self.has_document:
+            raise forms.ValidationError('Anexe o documento do fornecedor para salvar o orçamento.')
+        return documento
 
 
 class ItemMoveForm(forms.Form):

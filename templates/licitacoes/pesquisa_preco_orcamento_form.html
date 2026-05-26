@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load licitacoes_extras %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>Orçamento</h1>
+      <p>{{ pesquisa_fornecedor.fornecedor.razao_social }} - {{ pesquisa.termo.nome }}</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'licitacoes:pesquisa_preco_detail' pesquisa.termo.pk %}">Voltar</a>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="card border-0 shadow-sm">
+    {% csrf_token %}
+    <div class="card-body p-4">
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="row g-3 mb-4">
+        <div class="col-12 col-xl-6">
+          <label class="form-label" for="{{ form.data_resposta.id_for_label }}">{{ form.data_resposta.label }}</label>
+          {{ form.data_resposta }}
+          {% for error in form.data_resposta.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="col-12 col-xl-6">
+          <label class="form-label" for="{{ form.validade_orcamento_dias.id_for_label }}">{{ form.validade_orcamento_dias.label }}</label>
+          {{ form.validade_orcamento_dias }}
+          {% for error in form.validade_orcamento_dias.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="{{ form.documento_fornecedor.id_for_label }}">{{ form.documento_fornecedor.label }}</label>
+          {{ form.documento_fornecedor }}
+          {% if pesquisa_fornecedor.documento_fornecedor %}
+            <div class="form-text">
+              Anexo atual:
+              <a href="{{ pesquisa_fornecedor.documento_fornecedor.url }}" target="_blank" rel="noopener">
+                {{ pesquisa_fornecedor.documento_fornecedor.name }}
+              </a>
+            </div>
+          {% endif %}
+          {% for error in form.documento_fornecedor.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Descrição</th>
+              <th>Quantidade</th>
+              <th>Preço unitário</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in itens %}
+              {% with field=form|get_item_field:item %}
+                <tr>
+                  <td>{{ item.ordem }}</td>
+                  <td>{{ item.descricao }}</td>
+                  <td>{{ item.quantidade }}</td>
+                  <td>
+                    {{ field }}
+                    {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  </td>
+                </tr>
+              {% endwith %}
+            {% empty %}
+              <tr><td colspan="4" class="text-muted">Cadastre itens na tabela do item 1.1 do TR antes de lançar orçamento.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-end gap-2 p-3">
+      <a class="btn btn-light" href="{% url 'licitacoes:pesquisa_preco_detail' pesquisa.termo.pk %}">Cancelar</a>
+      <button class="btn btn-primary" type="submit" {% if not itens %}disabled{% endif %}>Salvar orçamento</button>
+    </div>
+  </form>
+{% endblock %}

@@ -9,6 +9,7 @@
     </div>
     <div class="d-flex flex-wrap gap-2 justify-content-end">
       <a class="btn btn-primary" href="{% url 'licitacoes:sessao_create' termo.pk %}">Nova sessao</a>
+      <a class="btn spi-btn-pesquisa-preco" href="{% url 'licitacoes:pesquisa_preco_open' termo.pk %}">Pesquisa de Preço</a>
       <a class="btn btn-outline-secondary" href="{% url 'licitacoes:tr_export' termo.pk %}">DOCX</a>
       <a class="btn btn-outline-secondary" href="{% url 'licitacoes:tr_update' termo.pk %}">Editar TR</a>
       <a class="btn btn-light" href="{% url 'licitacoes:tr_list' %}">Voltar</a>

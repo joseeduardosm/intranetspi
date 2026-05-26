@@ -1,10 +1,12 @@
 from collections import defaultdict
+from datetime import timedelta
 from decimal import Decimal
 from html import escape
 import re
 
 from django.db import transaction
 from django.db.models import Max
+from django.utils import timezone
 
 from .models import (
     Dfd,
@@ -12,6 +14,9 @@ from .models import (
     EtpTic,
     ItemEtpTic,
     ItemTR,
+    PesquisaPreco,
+    PesquisaPrecoFornecedor,
+    PesquisaPrecoItemValor,
     SessaoEtpTic,
     SessaoTR,
     TabelaItemLinha,
@@ -358,10 +363,13 @@ def parse_bulk_item_markers(texto, max_hash_level=4):
 
         if line.startswith('**'):
             item_text = line[2:].strip()
-            if not item_text or last_numeric is None:
+            if not item_text:
                 continue
             node = {'tipo': 'INCISO', 'texto': item_text, 'filhos': []}
-            last_numeric['filhos'].append(node)
+            if last_numeric is None:
+                roots.append(node)
+            else:
+                last_numeric['filhos'].append(node)
             current = node
             last_inciso = node
             continue
@@ -369,10 +377,13 @@ def parse_bulk_item_markers(texto, max_hash_level=4):
         if line.startswith('$$'):
             item_text = line[2:].strip()
             parent = last_inciso or last_numeric
-            if not item_text or parent is None:
+            if not item_text:
                 continue
             node = {'tipo': 'ALINEA', 'texto': item_text, 'filhos': []}
-            parent['filhos'].append(node)
+            if parent is None:
+                roots.append(node)
+            else:
+                parent['filhos'].append(node)
             current = node
             continue
 
@@ -571,6 +582,138 @@ def build_termo_tree(termo):
             row['tabela_linhas'] = tabela_por_item.get(row['item'].id, [])
         tree.append({'sessao': sessao, 'rows': rows})
     return tree
+
+
+def termo_tabela_item_1_1(termo):
+    for sessao in termo.sessoes.all():
+        for row in build_item_rows(sessao):
+            if row['indice'] == '1.1':
+                return row['item']
+    return None
+
+
+def pesquisa_preco_itens(pesquisa):
+    item = termo_tabela_item_1_1(pesquisa.termo)
+    if not item:
+        return TabelaItemLinha.objects.none()
+    return item.tabela_linhas.order_by('ordem', 'id')
+
+
+def pesquisa_preco_row_class(dias_sem_resposta):
+    if dias_sem_resposta is None:
+        return ''
+    if dias_sem_resposta <= 3:
+        return 'spi-pesquisa-row-verde'
+    if dias_sem_resposta == 4:
+        return 'spi-pesquisa-row-amarelo'
+    if dias_sem_resposta == 5:
+        return 'spi-pesquisa-row-laranja'
+    if dias_sem_resposta == 6:
+        return 'spi-pesquisa-row-vermelho'
+    if dias_sem_resposta == 7:
+        return 'spi-pesquisa-row-roxo'
+    return 'spi-pesquisa-row-preto'
+
+
+def pesquisa_fornecedor_tem_resposta(pesquisa_fornecedor):
+    return bool(pesquisa_fornecedor.data_resposta and pesquisa_fornecedor.valores.exists())
+
+
+def pesquisa_preco_context(pesquisa):
+    hoje = timezone.localdate()
+    itens = list(pesquisa_preco_itens(pesquisa))
+    fornecedores = list(
+        pesquisa.fornecedores_pesquisa
+        .select_related('fornecedor')
+        .prefetch_related('contatos', 'valores')
+        .order_by('fornecedor__razao_social', 'id')
+    )
+    valores_por_fornecedor = {
+        pf.id: {valor.item_id: valor for valor in pf.valores.all()}
+        for pf in fornecedores
+    }
+    fornecedores_ctx = []
+
+    for pf in fornecedores:
+        valores = valores_por_fornecedor.get(pf.id, {})
+        item_rows = []
+        total = Decimal('0.00')
+        for item in itens:
+            valor = valores.get(item.id)
+            preco_unitario = valor.preco_unitario if valor else None
+            valor_total = (preco_unitario * item.quantidade).quantize(Decimal('0.01')) if preco_unitario is not None else None
+            if valor_total is not None:
+                total += valor_total
+            item_rows.append({
+                'item': item,
+                'preco_unitario': preco_unitario,
+                'valor_total': valor_total,
+            })
+
+        tem_resposta = bool(pf.data_resposta and valores)
+        ultimo_contato = pf.contatos.all()[0].data_contato if pf.contatos.all() else None
+        dias_sem_resposta = None
+        if ultimo_contato and not tem_resposta:
+            dias_sem_resposta = (hoje - ultimo_contato).days
+
+        dias_validade = None
+        validade_alerta = False
+        vencimento = None
+        if pf.data_resposta and pf.validade_orcamento_dias:
+            vencimento = pf.data_resposta + timedelta(days=pf.validade_orcamento_dias)
+            dias_validade = (vencimento - hoje).days
+            validade_alerta = dias_validade <= 10
+
+        total_contratacao = total
+        if pesquisa.tipo == PesquisaPreco.Tipo.SERVICO and pesquisa.vigencia_meses:
+            total_contratacao = (total * pesquisa.vigencia_meses).quantize(Decimal('0.01'))
+
+        fornecedores_ctx.append({
+            'pesquisa_fornecedor': pf,
+            'fornecedor': pf.fornecedor,
+            'itens': item_rows,
+            'ultimo_contato': ultimo_contato,
+            'dias_sem_resposta': dias_sem_resposta,
+            'row_class': pesquisa_preco_row_class(dias_sem_resposta),
+            'tem_resposta': tem_resposta,
+            'total': total,
+            'total_contratacao': total_contratacao,
+            'vencimento': vencimento,
+            'dias_validade': dias_validade,
+            'validade_alerta': validade_alerta,
+        })
+
+    medias = []
+    total_medio = Decimal('0.00')
+    for item in itens:
+        precos = [
+            valores_por_fornecedor.get(pf.id, {}).get(item.id).preco_unitario
+            for pf in fornecedores
+            if valores_por_fornecedor.get(pf.id, {}).get(item.id)
+        ]
+        preco_medio = None
+        total_item_medio = None
+        if precos:
+            preco_medio = (sum(precos) / Decimal(len(precos))).quantize(Decimal('0.01'))
+            total_item_medio = (preco_medio * item.quantidade).quantize(Decimal('0.01'))
+            total_medio += total_item_medio
+        medias.append({
+            'item': item,
+            'preco_medio': preco_medio,
+            'valor_total_medio': total_item_medio,
+        })
+
+    total_medio_contratacao = total_medio
+    if pesquisa.tipo == PesquisaPreco.Tipo.SERVICO and pesquisa.vigencia_meses:
+        total_medio_contratacao = (total_medio * pesquisa.vigencia_meses).quantize(Decimal('0.01'))
+
+    return {
+        'itens': itens,
+        'fornecedores': fornecedores_ctx,
+        'medias': medias,
+        'total_medio': total_medio,
+        'total_medio_contratacao': total_medio_contratacao,
+    }
 
 
 def build_etp_item_rows(sessao):

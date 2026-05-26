@@ -1,11 +1,14 @@
+from copy import copy
 from io import BytesIO
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Max
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.utils.text import slugify
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
@@ -16,16 +19,35 @@ from .forms import (
     DfdSecaoForm,
     EtpTicCreateForm,
     EtpTicSecaoForm,
+    FornecedorForm,
     ItemEtpMoveForm,
     ItemEtpTicForm,
     ItemMoveForm,
     ItemTRForm,
+    PesquisaPrecoCreateForm,
+    PesquisaPrecoFornecedorForm,
+    PesquisaPrecoOrcamentoForm,
     SessaoEtpTicForm,
     SessaoTRForm,
     TabelaItemLinhaForm,
     TermoReferenciaForm,
 )
-from .models import Dfd, DfdItemTabela, EtpTic, ItemEtpTic, ItemTR, SessaoEtpTic, SessaoTR, TabelaItemLinha, TermoReferencia
+from .models import (
+    Dfd,
+    DfdItemTabela,
+    EtpTic,
+    Fornecedor,
+    ItemEtpTic,
+    ItemTR,
+    PesquisaPreco,
+    PesquisaPrecoContato,
+    PesquisaPrecoFornecedor,
+    PesquisaPrecoItemValor,
+    SessaoEtpTic,
+    SessaoTR,
+    TabelaItemLinha,
+    TermoReferencia,
+)
 from .services import (
     DFD_SECOES,
     DFD_SECOES_MAP,
@@ -55,6 +77,8 @@ from .services import (
     normalize_items,
     normalize_sessoes,
     parse_bulk_item_markers,
+    pesquisa_preco_context,
+    pesquisa_preco_itens,
     quantidade_text,
     red_mark_segments,
     replace_item_with_marker_nodes,
@@ -78,6 +102,87 @@ def _touch_etp(etp, request):
 
 def _touch_termo(termo, request):
     _touch_instance(termo, request)
+
+
+def parser_legend(max_hash_level):
+    return [
+        {'marker': '@', 'label': 'subseção'},
+        {'marker': '#', 'label': f'item/subitem até {max_hash_level} níveis'},
+        {'marker': '**', 'label': 'inciso'},
+        {'marker': '$$', 'label': 'alínea'},
+    ]
+
+
+ITEM_RED_MODE_FIELD = 'modo_destaque_texto'
+ITEM_RED_MODE_COMMON = 'comum'
+ITEM_RED_MODE_ALL = 'todo_vermelho'
+ITEM_RED_MODE_ALL_WITH_CHILDREN = 'todo_vermelho_com_filhos'
+ITEM_RED_MODE_EXCEPT_SUBSECTIONS = 'vermelho_sem_subsecoes'
+ITEM_RED_MODE_OPTIONS = [
+    (ITEM_RED_MODE_COMMON, 'texto comum'),
+    (ITEM_RED_MODE_ALL, 'todo o texto vermelho'),
+    (ITEM_RED_MODE_ALL_WITH_CHILDREN, 'todo o texto em vermelho incluindo filhos'),
+    (ITEM_RED_MODE_EXCEPT_SUBSECTIONS, 'somente em vermelho, ignorar subseções'),
+]
+SESSAO_CHILDREN_RED_FIELD = 'filhos_em_vermelho'
+
+
+def item_red_mode(request):
+    value = request.POST.get(ITEM_RED_MODE_FIELD, ITEM_RED_MODE_COMMON)
+    valid_values = {option[0] for option in ITEM_RED_MODE_OPTIONS}
+    return value if value in valid_values else ITEM_RED_MODE_COMMON
+
+
+def red_wrap_text(texto):
+    texto = (texto or '').strip()
+    if not texto:
+        return texto
+    if texto.startswith('*') and texto.endswith('*'):
+        return texto
+    return f'*{texto}*'
+
+
+def apply_item_red_mode_to_text(texto, mode):
+    if mode == ITEM_RED_MODE_COMMON:
+        return texto
+    return red_wrap_text(texto)
+
+
+def apply_item_red_mode_to_nodes(nodes, mode):
+    if mode == ITEM_RED_MODE_COMMON:
+        return nodes
+    for node in nodes:
+        if mode in (ITEM_RED_MODE_ALL, ITEM_RED_MODE_ALL_WITH_CHILDREN) or node['tipo'] != 'SUBSECAO':
+            node['texto'] = red_wrap_text(node['texto'])
+        apply_item_red_mode_to_nodes(node['filhos'], mode)
+    return nodes
+
+
+def apply_red_to_item_descendants(item):
+    for child in item.filhos.all():
+        child.texto = red_wrap_text(child.texto)
+        child.save(update_fields=['texto'])
+        apply_red_to_item_descendants(child)
+
+
+def apply_red_to_session_items(sessao):
+    for item in sessao.itens.all():
+        item.texto = red_wrap_text(item.texto)
+        item.save(update_fields=['texto'])
+
+
+def parser_context(context, request, max_hash_level):
+    context['parser_legend'] = parser_legend(max_hash_level)
+    context['item_red_mode_field'] = ITEM_RED_MODE_FIELD
+    context['item_red_mode_options'] = ITEM_RED_MODE_OPTIONS
+    context['item_red_mode_value'] = item_red_mode(request) if request.method == 'POST' else ITEM_RED_MODE_COMMON
+    return context
+
+
+def session_children_red_context(context, request):
+    context['session_children_red_field'] = SESSAO_CHILDREN_RED_FIELD
+    context['session_children_red_checked'] = request.POST.get(SESSAO_CHILDREN_RED_FIELD) == '1'
+    return context
 
 
 def item_focus_url(item):
@@ -388,6 +493,12 @@ class SessaoEtpUpdateView(SuperuserRequiredMixin, UpdateView):
     def get_object(self, queryset=None):
         return self.object
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        if self.request.POST.get(SESSAO_CHILDREN_RED_FIELD) == '1':
+            apply_red_to_session_items(self.object)
+        return response
+
     def get_success_url(self):
         _touch_etp(self.etp, self.request)
         return etp_sessao_focus_url(self.object)
@@ -396,6 +507,7 @@ class SessaoEtpUpdateView(SuperuserRequiredMixin, UpdateView):
         context = super().get_context_data(**kwargs)
         context['titulo'] = 'Editar sessao do ETP TIC'
         context['voltar_url'] = reverse('licitacoes:etp_detail', args=[self.etp.pk])
+        session_children_red_context(context, self.request)
         return context
 
 
@@ -450,8 +562,10 @@ class ItemEtpCreateView(SuperuserRequiredMixin, CreateView):
 
     def form_valid(self, form):
         texto = self.request.POST.get('texto', '')
+        mode = item_red_mode(self.request)
         grupos_marcados = parse_bulk_item_markers(texto, max_hash_level=5)
         if grupos_marcados:
+            apply_item_red_mode_to_nodes(grupos_marcados, mode)
             sessao = self.parent.sessao if self.parent else self.sessao
             first_item, created_count = create_bulk_marker_items(
                 ItemEtpTic,
@@ -466,6 +580,7 @@ class ItemEtpCreateView(SuperuserRequiredMixin, CreateView):
             return redirect(etp_item_focus_url(first_item))
 
         self.object = form.save(commit=False)
+        self.object.texto = apply_item_red_mode_to_text(self.object.texto, mode)
         self.object.sessao = self.parent.sessao if self.parent else self.sessao
         self.object.parent = self.parent
         self.object.ordem = next_ordem_etp_item(self.object.sessao, self.parent)
@@ -477,6 +592,7 @@ class ItemEtpCreateView(SuperuserRequiredMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context['titulo'] = 'Novo item do ETP TIC'
         context['ctrl_enter_submit'] = True
+        parser_context(context, self.request, 5)
         if self.parent:
             context['voltar_url'] = etp_item_focus_url(self.parent)
         else:
@@ -498,14 +614,20 @@ class ItemEtpUpdateView(SuperuserRequiredMixin, UpdateView):
 
     def form_valid(self, form):
         texto = self.request.POST.get('texto', '')
+        mode = item_red_mode(self.request)
         grupos_marcados = parse_bulk_item_markers(texto, max_hash_level=5) if starts_with_item_marker(texto) else []
         if grupos_marcados:
+            apply_item_red_mode_to_nodes(grupos_marcados, mode)
             self.object, updated_count = replace_item_with_marker_nodes(self.object, grupos_marcados, ItemEtpTic.Tipo)
             _touch_etp(self.object.sessao.etp, self.request)
             messages.success(self.request, f'{updated_count} item(ns) atualizado(s).')
             return redirect(etp_item_focus_url(self.object))
 
-        self.object = form.save()
+        self.object = form.save(commit=False)
+        self.object.texto = apply_item_red_mode_to_text(self.object.texto, mode)
+        self.object.save()
+        if mode == ITEM_RED_MODE_ALL_WITH_CHILDREN:
+            apply_red_to_item_descendants(self.object)
         _touch_etp(self.object.sessao.etp, self.request)
         return redirect(etp_item_focus_url(self.object))
 
@@ -513,6 +635,7 @@ class ItemEtpUpdateView(SuperuserRequiredMixin, UpdateView):
         context = super().get_context_data(**kwargs)
         context['titulo'] = 'Editar item do ETP TIC'
         context['ctrl_enter_submit'] = True
+        parser_context(context, self.request, 5)
         context['voltar_url'] = etp_item_focus_url(self.object)
         return context
 
@@ -908,6 +1031,299 @@ class TermoDetailView(SuperuserRequiredMixin, DetailView):
         return context
 
 
+class PesquisaPrecoOpenView(SuperuserRequiredMixin, View):
+    def get(self, request, pk):
+        termo = get_object_or_404(TermoReferencia, pk=pk)
+        pesquisa = getattr(termo, 'pesquisa_preco', None)
+        if pesquisa:
+            return redirect('licitacoes:pesquisa_preco_detail', termo_pk=termo.pk)
+        return redirect('licitacoes:pesquisa_preco_create', termo_pk=termo.pk)
+
+
+class PesquisaPrecoCreateView(SuperuserRequiredMixin, CreateView):
+    model = PesquisaPreco
+    form_class = PesquisaPrecoCreateForm
+    template_name = 'licitacoes/pesquisa_preco_form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.termo = get_object_or_404(TermoReferencia, pk=kwargs['termo_pk'])
+        if hasattr(self.termo, 'pesquisa_preco'):
+            return redirect('licitacoes:pesquisa_preco_detail', termo_pk=self.termo.pk)
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        self.object.termo = self.termo
+        if self.object.tipo == PesquisaPreco.Tipo.AQUISICAO:
+            self.object.vigencia_meses = None
+        self.object.save()
+        _touch_termo(self.termo, self.request)
+        messages.success(self.request, 'Pesquisa de Preço criada.')
+        return redirect('licitacoes:pesquisa_preco_detail', termo_pk=self.termo.pk)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Nova Pesquisa de Preço'
+        context['voltar_url'] = reverse('licitacoes:tr_detail', args=[self.termo.pk])
+        return context
+
+
+class PesquisaPrecoDetailView(SuperuserRequiredMixin, DetailView):
+    model = PesquisaPreco
+    template_name = 'licitacoes/pesquisa_preco_detail.html'
+    context_object_name = 'pesquisa'
+
+    def get_object(self, queryset=None):
+        return get_object_or_404(PesquisaPreco.objects.select_related('termo'), termo_id=self.kwargs['termo_pk'])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(pesquisa_preco_context(self.object))
+        context['fornecedor_form'] = PesquisaPrecoFornecedorForm(pesquisa=self.object)
+        context['is_servico'] = self.object.tipo == PesquisaPreco.Tipo.SERVICO
+        return context
+
+
+class PesquisaPrecoDeleteView(SuperuserRequiredMixin, DeleteView):
+    model = PesquisaPreco
+    template_name = 'licitacoes/confirm_delete.html'
+
+    def get_object(self, queryset=None):
+        return get_object_or_404(PesquisaPreco.objects.select_related('termo'), termo_id=self.kwargs['termo_pk'])
+
+    def get_success_url(self):
+        termo = self.object.termo
+        _touch_termo(termo, self.request)
+        messages.success(self.request, 'Pesquisa de Preço excluída.')
+        return reverse('licitacoes:tr_detail', args=[termo.pk])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Excluir Pesquisa de Preço'
+        context['descricao'] = 'Esta ação remove fornecedores vinculados, contatos e valores lançados nesta pesquisa.'
+        context['pergunta'] = f'Confirma a exclusão da Pesquisa de Preço do TR "{self.object.termo.nome}"?'
+        return context
+
+
+class PesquisaPrecoFornecedorAddView(SuperuserRequiredMixin, View):
+    def post(self, request, termo_pk):
+        pesquisa = get_object_or_404(PesquisaPreco, termo_id=termo_pk)
+        form = PesquisaPrecoFornecedorForm(request.POST, pesquisa=pesquisa)
+        if form.is_valid():
+            PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=form.cleaned_data['fornecedor'])
+            _touch_termo(pesquisa.termo, request)
+            messages.success(request, 'Fornecedor adicionado à pesquisa.')
+        else:
+            messages.error(request, 'Selecione um fornecedor válido.')
+        return redirect('licitacoes:pesquisa_preco_detail', termo_pk=termo_pk)
+
+
+class PesquisaPrecoFornecedorRemoveView(SuperuserRequiredMixin, DeleteView):
+    model = PesquisaPrecoFornecedor
+    template_name = 'licitacoes/confirm_delete.html'
+
+    def get_object(self, queryset=None):
+        return get_object_or_404(
+            PesquisaPrecoFornecedor.objects.select_related('pesquisa__termo', 'fornecedor'),
+            pk=self.kwargs['pk'],
+            pesquisa__termo_id=self.kwargs['termo_pk'],
+        )
+
+    def get_success_url(self):
+        termo = self.object.pesquisa.termo
+        _touch_termo(termo, self.request)
+        messages.success(self.request, 'Fornecedor removido desta pesquisa.')
+        return reverse('licitacoes:pesquisa_preco_detail', args=[termo.pk])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Remover fornecedor da pesquisa'
+        context['descricao'] = 'Esta ação remove o vínculo, os contatos e os valores deste fornecedor apenas nesta pesquisa.'
+        context['pergunta'] = f'Remover "{self.object.fornecedor.razao_social}" desta pesquisa?'
+        context['botao_confirmar'] = 'Remover'
+        return context
+
+
+class PesquisaPrecoFornecedorCreateView(SuperuserRequiredMixin, CreateView):
+    model = Fornecedor
+    form_class = FornecedorForm
+    template_name = 'licitacoes/form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.pesquisa = get_object_or_404(PesquisaPreco, termo_id=kwargs['termo_pk'])
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        self.object = form.save()
+        PesquisaPrecoFornecedor.objects.get_or_create(pesquisa=self.pesquisa, fornecedor=self.object)
+        _touch_termo(self.pesquisa.termo, self.request)
+        messages.success(self.request, 'Fornecedor cadastrado e adicionado à pesquisa.')
+        return redirect('licitacoes:pesquisa_preco_detail', termo_pk=self.pesquisa.termo_id)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Novo fornecedor'
+        context['voltar_url'] = reverse('licitacoes:pesquisa_preco_detail', args=[self.pesquisa.termo_id])
+        return context
+
+
+class PesquisaPrecoFornecedorUpdateView(SuperuserRequiredMixin, UpdateView):
+    model = Fornecedor
+    form_class = FornecedorForm
+    template_name = 'licitacoes/form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.pesquisa = get_object_or_404(PesquisaPreco, termo_id=kwargs['termo_pk'])
+        self.object = get_object_or_404(Fornecedor, pk=kwargs['pk'], pesquisas_preco__pesquisa=self.pesquisa)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_object(self, queryset=None):
+        return self.object
+
+    def get_success_url(self):
+        _touch_termo(self.pesquisa.termo, self.request)
+        messages.success(self.request, 'Fornecedor atualizado.')
+        return reverse('licitacoes:pesquisa_preco_detail', args=[self.pesquisa.termo_id])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Editar fornecedor'
+        context['voltar_url'] = reverse('licitacoes:pesquisa_preco_detail', args=[self.pesquisa.termo_id])
+        return context
+
+
+class PesquisaPrecoAtualizarContatoView(SuperuserRequiredMixin, View):
+    def post(self, request, termo_pk, pk):
+        pesquisa_fornecedor = get_object_or_404(PesquisaPrecoFornecedor, pk=pk, pesquisa__termo_id=termo_pk)
+        PesquisaPrecoContato.objects.create(
+            pesquisa_fornecedor=pesquisa_fornecedor,
+            data_contato=timezone.localdate(),
+        )
+        _touch_termo(pesquisa_fornecedor.pesquisa.termo, request)
+        messages.success(request, 'Último contato atualizado.')
+        return redirect('licitacoes:pesquisa_preco_detail', termo_pk=termo_pk)
+
+
+class PesquisaPrecoOrcamentoView(SuperuserRequiredMixin, View):
+    template_name = 'licitacoes/pesquisa_preco_orcamento_form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.pesquisa_fornecedor = get_object_or_404(
+            PesquisaPrecoFornecedor.objects.select_related('pesquisa__termo', 'fornecedor'),
+            pk=kwargs['pk'],
+            pesquisa__termo_id=kwargs['termo_pk'],
+        )
+        self.pesquisa = self.pesquisa_fornecedor.pesquisa
+        self.itens = list(pesquisa_preco_itens(self.pesquisa))
+        return super().dispatch(request, *args, **kwargs)
+
+    def _initial_valores(self):
+        return {
+            valor.item_id: valor.preco_unitario
+            for valor in self.pesquisa_fornecedor.valores.all()
+        }
+
+    def get(self, request, *args, **kwargs):
+        form = PesquisaPrecoOrcamentoForm(
+            initial={
+                'data_resposta': self.pesquisa_fornecedor.data_resposta,
+                'validade_orcamento_dias': self.pesquisa_fornecedor.validade_orcamento_dias,
+            },
+            itens=self.itens,
+            valores=self._initial_valores(),
+            has_document=bool(self.pesquisa_fornecedor.documento_fornecedor),
+        )
+        return _render(request, self.template_name, {
+            'form': form,
+            'pesquisa': self.pesquisa,
+            'pesquisa_fornecedor': self.pesquisa_fornecedor,
+            'itens': self.itens,
+        })
+
+    def post(self, request, *args, **kwargs):
+        form = PesquisaPrecoOrcamentoForm(
+            request.POST,
+            request.FILES,
+            itens=self.itens,
+            valores=self._initial_valores(),
+            has_document=bool(self.pesquisa_fornecedor.documento_fornecedor),
+        )
+        if form.is_valid():
+            self.pesquisa_fornecedor.data_resposta = form.cleaned_data['data_resposta']
+            self.pesquisa_fornecedor.validade_orcamento_dias = form.cleaned_data['validade_orcamento_dias']
+            update_fields = ['data_resposta', 'validade_orcamento_dias', 'atualizado_em']
+            if form.cleaned_data.get('documento_fornecedor'):
+                self.pesquisa_fornecedor.documento_fornecedor = form.cleaned_data['documento_fornecedor']
+                update_fields.append('documento_fornecedor')
+            self.pesquisa_fornecedor.save(update_fields=update_fields)
+            for item in self.itens:
+                PesquisaPrecoItemValor.objects.update_or_create(
+                    pesquisa_fornecedor=self.pesquisa_fornecedor,
+                    item=item,
+                    defaults={'preco_unitario': form.cleaned_data[PesquisaPrecoOrcamentoForm.item_field_name(item)]},
+                )
+            _touch_termo(self.pesquisa.termo, request)
+            messages.success(request, 'Orçamento salvo.')
+            return redirect('licitacoes:pesquisa_preco_detail', termo_pk=self.pesquisa.termo_id)
+        return _render(request, self.template_name, {
+            'form': form,
+            'pesquisa': self.pesquisa,
+            'pesquisa_fornecedor': self.pesquisa_fornecedor,
+            'itens': self.itens,
+        })
+
+
+class PesquisaPrecoExportXlsxView(SuperuserRequiredMixin, View):
+    def get(self, request, termo_pk):
+        pesquisa = get_object_or_404(PesquisaPreco.objects.select_related('termo'), termo_id=termo_pk)
+        return _pesquisa_preco_xlsx_response(pesquisa)
+
+
+class FornecedorListView(SuperuserRequiredMixin, ListView):
+    model = Fornecedor
+    template_name = 'licitacoes/fornecedor_list.html'
+    context_object_name = 'fornecedores'
+
+
+class FornecedorCreateView(SuperuserRequiredMixin, CreateView):
+    model = Fornecedor
+    form_class = FornecedorForm
+    template_name = 'licitacoes/form.html'
+    success_url = reverse_lazy('licitacoes:fornecedor_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Novo fornecedor'
+        context['voltar_url'] = reverse('licitacoes:fornecedor_list')
+        return context
+
+
+class FornecedorUpdateView(SuperuserRequiredMixin, UpdateView):
+    model = Fornecedor
+    form_class = FornecedorForm
+    template_name = 'licitacoes/form.html'
+    success_url = reverse_lazy('licitacoes:fornecedor_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Editar fornecedor'
+        context['voltar_url'] = reverse('licitacoes:fornecedor_list')
+        return context
+
+
+class FornecedorDeleteView(SuperuserRequiredMixin, DeleteView):
+    model = Fornecedor
+    template_name = 'licitacoes/confirm_delete.html'
+    success_url = reverse_lazy('licitacoes:fornecedor_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Excluir fornecedor'
+        context['descricao'] = 'Esta ação exclui o fornecedor do sistema e remove seus vínculos em pesquisas de preço.'
+        context['pergunta'] = f'Confirma a exclusão do fornecedor "{self.object.razao_social}"?'
+        return context
+
+
 class SessaoCreateView(SuperuserRequiredMixin, CreateView):
     model = SessaoTR
     form_class = SessaoTRForm
@@ -945,6 +1361,12 @@ class SessaoUpdateView(SuperuserRequiredMixin, UpdateView):
     def get_object(self, queryset=None):
         return self.object
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        if self.request.POST.get(SESSAO_CHILDREN_RED_FIELD) == '1':
+            apply_red_to_session_items(self.object)
+        return response
+
     def get_success_url(self):
         _touch_termo(self.termo, self.request)
         return reverse('licitacoes:tr_detail', args=[self.termo.pk])
@@ -953,6 +1375,7 @@ class SessaoUpdateView(SuperuserRequiredMixin, UpdateView):
         context = super().get_context_data(**kwargs)
         context['titulo'] = 'Editar sessao'
         context['voltar_url'] = reverse('licitacoes:tr_detail', args=[self.termo.pk])
+        session_children_red_context(context, self.request)
         return context
 
 
@@ -1010,8 +1433,10 @@ class ItemCreateView(SuperuserRequiredMixin, CreateView):
 
     def form_valid(self, form):
         texto = self.request.POST.get('texto', '')
+        mode = item_red_mode(self.request)
         grupos_marcados = parse_bulk_item_markers(texto, max_hash_level=4)
         if grupos_marcados:
+            apply_item_red_mode_to_nodes(grupos_marcados, mode)
             parent = item_parent_for_tipo(self.parent, self.tipo)
             sessao = parent.sessao if parent else self.sessao
             first_item, created_count = create_bulk_marker_items(
@@ -1027,6 +1452,7 @@ class ItemCreateView(SuperuserRequiredMixin, CreateView):
             return redirect(item_focus_url(first_item))
 
         self.object = form.save(commit=False)
+        self.object.texto = apply_item_red_mode_to_text(self.object.texto, mode)
         parent = item_parent_for_tipo(self.parent, self.tipo)
         self.object.sessao = parent.sessao if parent else self.sessao
         self.object.parent = parent
@@ -1040,6 +1466,7 @@ class ItemCreateView(SuperuserRequiredMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context['titulo'] = 'Novo item do TR'
         context['ctrl_enter_submit'] = True
+        parser_context(context, self.request, 4)
         if self.parent:
             context['voltar_url'] = item_focus_url(self.parent)
         else:
@@ -1062,14 +1489,20 @@ class ItemUpdateView(SuperuserRequiredMixin, UpdateView):
 
     def form_valid(self, form):
         texto = self.request.POST.get('texto', '')
+        mode = item_red_mode(self.request)
         grupos_marcados = parse_bulk_item_markers(texto, max_hash_level=4) if starts_with_item_marker(texto) else []
         if grupos_marcados:
+            apply_item_red_mode_to_nodes(grupos_marcados, mode)
             self.object, updated_count = replace_item_with_marker_nodes(self.object, grupos_marcados, ItemTR.Tipo)
             _touch_termo(self.object.sessao.termo, self.request)
             messages.success(self.request, f'{updated_count} item(ns) atualizado(s).')
             return redirect(item_focus_url(self.object))
 
-        self.object = form.save()
+        self.object = form.save(commit=False)
+        self.object.texto = apply_item_red_mode_to_text(self.object.texto, mode)
+        self.object.save()
+        if mode == ITEM_RED_MODE_ALL_WITH_CHILDREN:
+            apply_red_to_item_descendants(self.object)
         _touch_termo(self.object.sessao.termo, self.request)
         return redirect(item_focus_url(self.object))
 
@@ -1077,6 +1510,7 @@ class ItemUpdateView(SuperuserRequiredMixin, UpdateView):
         context = super().get_context_data(**kwargs)
         context['titulo'] = 'Editar item'
         context['ctrl_enter_submit'] = True
+        parser_context(context, self.request, 4)
         context['voltar_url'] = item_focus_url(self.object)
         return context
 
@@ -1488,6 +1922,185 @@ def _etp_dynamic_docx_response(etp):
     buffer.seek(0)
     response = HttpResponse(buffer.getvalue(), content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     response['Content-Disposition'] = f'attachment; filename="etp_tic_{slugify(etp.nome) or etp.pk}.docx"'
+    return response
+
+
+def _pesquisa_preco_xlsx_response(pesquisa):
+    from openpyxl import load_workbook
+    from openpyxl.utils import get_column_letter
+
+    context = pesquisa_preco_context(pesquisa)
+    itens = context['itens']
+    fornecedores = context['fornecedores']
+    medias = context['medias']
+    is_servico = pesquisa.tipo == PesquisaPreco.Tipo.SERVICO
+    template_path = settings.BASE_DIR / 'docs' / 'Quadro Comparativo Pesquisa de Preços-modelo.xlsx'
+    wb = load_workbook(template_path)
+    ws = wb['PCs - Tab Alternativa']
+    for sheet in list(wb.worksheets):
+        if sheet.title != ws.title:
+            wb.remove(sheet)
+
+    def copy_cell_style(source, target):
+        target._style = copy(source._style)
+        if source.has_style:
+            target.font = copy(source.font)
+            target.fill = copy(source.fill)
+            target.border = copy(source.border)
+            target.alignment = copy(source.alignment)
+            target.number_format = source.number_format
+            target.protection = copy(source.protection)
+
+    def copy_row_style(source_row, target_row):
+        ws.row_dimensions[target_row].height = ws.row_dimensions[source_row].height
+        for col_idx in range(1, ws.max_column + 1):
+            copy_cell_style(ws.cell(source_row, col_idx), ws.cell(target_row, col_idx))
+
+    def merge_if_needed(start_row, start_col, end_row, end_col):
+        ref = f'{get_column_letter(start_col)}{start_row}:{get_column_letter(end_col)}{end_row}'
+        if ref not in [str(item) for item in ws.merged_cells.ranges]:
+            ws.merge_cells(ref)
+
+    supplier_count = max(3, len(fornecedores))
+    extra_suppliers = max(0, supplier_count - 3)
+    if extra_suppliers:
+        ws.insert_cols(16, amount=extra_suppliers * 2)
+        for supplier_idx in range(3, supplier_count):
+            col = 16 + ((supplier_idx - 3) * 2)
+            for row_idx in range(1, 21):
+                copy_cell_style(ws.cell(row_idx, 14), ws.cell(row_idx, col))
+                copy_cell_style(ws.cell(row_idx, 15), ws.cell(row_idx, col + 1))
+            ws.column_dimensions[get_column_letter(col)].width = ws.column_dimensions['N'].width
+            ws.column_dimensions[get_column_letter(col + 1)].width = ws.column_dimensions['O'].width
+            for row_idx in [3, 4, 5, 6, 7, 8, 9, 15, 16, 17, 18]:
+                merge_if_needed(row_idx, col, row_idx, col + 1)
+
+    item_count = max(4, len(itens))
+    extra_items = max(0, item_count - 4)
+    if extra_items:
+        ws.insert_rows(15, amount=extra_items)
+        for row_idx in range(15, 15 + extra_items):
+            copy_row_style(14, row_idx)
+            merge_if_needed(row_idx, 5, row_idx, 7)
+
+    total_row = 11 + item_count
+    total_contratacao_row = total_row + 1
+    validade_row = total_row + 2
+    prazo_row = total_row + 3
+    data_row = total_row + 5
+    avg_col = 16 + (extra_suppliers * 2)
+    avg_total_col = avg_col + 1
+    supplier_cols = [10 + (idx * 2) for idx in range(supplier_count)]
+    actual_supplier_cols = supplier_cols[:len(fornecedores)]
+
+    for row_idx in range(3, data_row + 1):
+        for col_idx in range(2, avg_total_col + 1):
+            if not isinstance(ws.cell(row_idx, col_idx).__class__.__name__, str):
+                continue
+            try:
+                ws.cell(row_idx, col_idx).value = None
+            except AttributeError:
+                pass
+
+    ws['B2'] = 'QUADRO COMPARATIVO DE PESQUISA DE PREÇOS'
+    ws['B4'] = 'Pesquisa realizada por:'
+    ws['B7'] = 'Nome'
+    ws['D7'] = pesquisa.pesquisador_nome
+    ws['B8'] = 'E-mail'
+    ws['D8'] = pesquisa.pesquisador_email
+    ws['B9'] = 'Cargo'
+    ws['D9'] = pesquisa.pesquisador_cargo
+    ws['G4'] = 'Empresa'
+    ws['G5'] = 'CNPJ'
+    ws['G6'] = 'Telefone'
+    ws['G7'] = 'Contato'
+    ws['G8'] = 'E-mail do contato'
+    ws['G9'] = ''
+
+    ws['B10'] = 'Item'
+    ws['C10'] = 'Unidade'
+    ws['D10'] = 'Qtd'
+    ws['E10'] = 'Descrição'
+    ws['H4'] = 'CATMAT/\nCATSER'
+    ws['I4'] = 'SIAFISICO'
+
+    for idx, col in enumerate(supplier_cols):
+        fornecedor_entry = fornecedores[idx] if idx < len(fornecedores) else None
+        ws.cell(3, col, f'EMPRESA {idx + 1}' if fornecedor_entry else '')
+        if fornecedor_entry:
+            fornecedor = fornecedor_entry['fornecedor']
+            ws.cell(4, col, fornecedor.razao_social)
+            ws.cell(5, col, fornecedor.cnpj)
+            ws.cell(6, col, fornecedor.telefone)
+            ws.cell(7, col, fornecedor.contato)
+            ws.cell(8, col, fornecedor.email_contato)
+            ws.cell(9, col, None)
+        else:
+            for row_idx in range(4, 10):
+                ws.cell(row_idx, col, None)
+        ws.cell(10, col, 'Unitário')
+        ws.cell(10, col + 1, 'Total')
+
+    ws.cell(3, avg_col, 'PREÇO MÉDIO')
+    ws.cell(10, avg_col, 'Unitário')
+    ws.cell(10, avg_total_col, 'Total')
+
+    for row_offset in range(item_count):
+        row_idx = 11 + row_offset
+        item = itens[row_offset] if row_offset < len(itens) else None
+        media = medias[row_offset] if row_offset < len(medias) else None
+        if item:
+            ws.cell(row_idx, 2, item.ordem)
+            ws.cell(row_idx, 3, item.unidade_fornecimento)
+            ws.cell(row_idx, 4, float(item.quantidade))
+            ws.cell(row_idx, 5, item.descricao)
+            ws.cell(row_idx, 8, item.catmat_catser)
+            ws.cell(row_idx, 9, item.siafisico)
+        else:
+            for col_idx in range(2, avg_total_col + 1):
+                ws.cell(row_idx, col_idx, None)
+            continue
+        for entry, col in zip(fornecedores, actual_supplier_cols):
+            match = next((item_row for item_row in entry['itens'] if item_row['item'].id == item.id), None)
+            ws.cell(row_idx, col, float(match['preco_unitario']) if match and match['preco_unitario'] is not None else None)
+            ws.cell(row_idx, col + 1, f'={get_column_letter(col)}{row_idx}*D{row_idx}' if match and match['preco_unitario'] is not None else None)
+        unit_refs = [f'{get_column_letter(col)}{row_idx}' for col in actual_supplier_cols]
+        ws.cell(row_idx, avg_col, f'=AVERAGE({",".join(unit_refs)})' if unit_refs else None)
+        ws.cell(row_idx, avg_total_col, f'={get_column_letter(avg_col)}{row_idx}*D{row_idx}' if media and media['preco_medio'] is not None else None)
+
+    item_start = 11
+    item_end = 10 + item_count
+    ws.cell(total_row, 2, 'TOTAL MENSAL' if is_servico else 'TOTAL')
+    for entry, col in zip(fornecedores, actual_supplier_cols):
+        ws.cell(total_row, col, f'=SUM({get_column_letter(col + 1)}{item_start}:{get_column_letter(col + 1)}{item_end})')
+    ws.cell(total_row, avg_col, f'=SUM({get_column_letter(avg_total_col)}{item_start}:{get_column_letter(avg_total_col)}{item_end})')
+
+    if is_servico:
+        ws.cell(total_contratacao_row, 2, f'TOTAL PARA CONTRATAÇÃO ({pesquisa.vigencia_meses} MESES)')
+        for entry, col in zip(fornecedores, actual_supplier_cols):
+            ws.cell(total_contratacao_row, col, f'={get_column_letter(col)}{total_row}*{pesquisa.vigencia_meses}')
+        ws.cell(total_contratacao_row, avg_col, f'={get_column_letter(avg_col)}{total_row}*{pesquisa.vigencia_meses}')
+    else:
+        for col_idx in range(2, avg_total_col + 1):
+            ws.cell(total_contratacao_row, col_idx, None)
+
+    ws.cell(validade_row, 2, 'Validade do Orçamento (em dias)')
+    for entry, col in zip(fornecedores, actual_supplier_cols):
+        ws.cell(validade_row, col, entry['pesquisa_fornecedor'].validade_orcamento_dias)
+    validade_refs = [f'{get_column_letter(col)}{validade_row}' for col in actual_supplier_cols]
+    ws.cell(validade_row, avg_col, f'=AVERAGE({",".join(validade_refs)})' if validade_refs else None)
+
+    ws.cell(prazo_row, 2, 'Prazo de Entrega/Execução (em dias)')
+    for col in actual_supplier_cols:
+        ws.cell(prazo_row, col, None)
+    ws.cell(prazo_row, avg_col, None)
+    ws.cell(data_row, 2, f'São Paulo, {timezone.localdate():%d/%m/%Y}')
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="pesquisa_preco_{slugify(pesquisa.termo.nome) or pesquisa.pk}.xlsx"'
     return response
 
 

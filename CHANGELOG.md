@@ -2,6 +2,31 @@
 
 Todas as mudancas importantes do Aplicacoes SPI serao documentadas neste arquivo.
 
+## [0.6.0] - 2026-05-26
+
+### Adicionado
+
+- Adicionada Pesquisa de Preço ao Termo de Referência, com criação por aquisição ou serviço, pesquisador responsável, vigência para serviços e painel por TR.
+- Adicionado cadastro global de fornecedores, com vínculo às pesquisas de preço e reutilização entre TRs.
+- Adicionado lançamento de orçamento por fornecedor, com preços unitários por item herdado da tabela do item 1.1, validade do orçamento e cálculo automático de totais e médias.
+- Adicionado anexo obrigatório do documento do fornecedor ao salvar orçamento, com download direto pelo botão Orçamento após o orçamento estar alimentado.
+- Adicionada exportação XLSX da Pesquisa de Preço baseada na planilha modelo `PCs - Tab Alternativa`, preservando formatação, cores e mesclas.
+- Adicionadas opções de destaque em vermelho nos formulários de item do TR e ETP TIC, incluindo marcação de texto, filhos e filhos de sessão.
+- Adicionada legenda de parsers nos formulários de novo item do TR e ETP TIC.
+- Adicionadas migrações para fornecedores, pesquisas de preço, pesquisador, remoção do e-mail duplicado de fornecedor, anexo de orçamento e múltiplos e-mails de contato.
+
+### Alterado
+
+- Alterado o cadastro de fornecedor para manter somente `E-mail do contato`, permitindo múltiplos e-mails separados por ponto e vírgula.
+- Alterado o painel de Pesquisa de Preço para exibir nome, e-mail de contato e telefone do fornecedor, com cópia individual de cada e-mail por clique.
+- Alterado o parser de itens para aceitar alíneas `$$` e incisos `**` mesmo quando usados diretamente em subitem.
+- Alteradas telas de sessão para permitir marcar todos os itens filhos em vermelho.
+- Alterado o botão Orçamento no painel para abrir o formulário enquanto o orçamento não estiver completo e baixar o anexo quando já houver resposta com documento.
+
+### Configuração
+
+- Adicionada dependência `openpyxl` para geração da planilha XLSX da Pesquisa de Preço.
+
 ## [0.5.0] - 2026-05-25
 
 ### Adicionado
