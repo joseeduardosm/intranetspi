@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% load static %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'licitacoes/css/licitacoes.css' %}">{% endblock %}
 {% load licitacoes_extras %}
 
 {% block content %}
@@ -117,18 +119,23 @@
                     {% endif %}
                   </td>
                   <td class="text-end">
-                    <div class="d-flex flex-wrap gap-2 justify-content-end">
-                      <form method="post" action="{% url 'licitacoes:pesquisa_preco_atualizar_contato' pesquisa.termo.pk entry.pesquisa_fornecedor.pk %}">
-                        {% csrf_token %}
-                        <button class="btn btn-sm btn-outline-secondary" type="submit">Atualizar Último Contato</button>
-                      </form>
-                      {% if entry.tem_resposta and entry.pesquisa_fornecedor.documento_fornecedor %}
-                        <a class="btn btn-sm btn-outline-primary" href="{{ entry.pesquisa_fornecedor.documento_fornecedor.url }}" download>Orçamento</a>
-                      {% else %}
-                        <a class="btn btn-sm btn-outline-primary" href="{% url 'licitacoes:pesquisa_preco_orcamento' pesquisa.termo.pk entry.pesquisa_fornecedor.pk %}">Orçamento</a>
-                      {% endif %}
-                      <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:pesquisa_preco_fornecedor_update' pesquisa.termo.pk entry.fornecedor.pk %}">Editar</a>
-                      <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:pesquisa_preco_fornecedor_remove' pesquisa.termo.pk entry.pesquisa_fornecedor.pk %}">Remover</a>
+                    <div class="spi-action-menu spi-pesquisa-action-menu">
+                      <button class="btn btn-sm btn-outline-secondary spi-action-menu-toggle" type="button" aria-label="Ações do fornecedor" aria-expanded="false" title="Ações">...</button>
+                      <div class="spi-action-menu-panel" role="menu" hidden>
+                        <form method="post" action="{% url 'licitacoes:pesquisa_preco_atualizar_contato' pesquisa.termo.pk entry.pesquisa_fornecedor.pk %}">
+                          {% csrf_token %}
+                          <button class="btn btn-sm btn-outline-secondary w-100" type="submit" role="menuitem">Atualizar Último Contato</button>
+                        </form>
+                        {% if entry.tem_resposta and entry.pesquisa_fornecedor.documento_fornecedor %}
+                          <a class="btn btn-sm btn-outline-primary" role="menuitem" href="{{ entry.pesquisa_fornecedor.documento_fornecedor.url }}" download>Orçamento</a>
+                        {% else %}
+                          <a class="btn btn-sm btn-outline-primary" role="menuitem" href="{% url 'licitacoes:pesquisa_preco_orcamento' pesquisa.termo.pk entry.pesquisa_fornecedor.pk %}">Orçamento</a>
+                        {% endif %}
+                        <button class="btn btn-sm btn-outline-secondary" type="button" role="menuitem" data-bs-toggle="modal" data-bs-target="#nota-fornecedor-{{ entry.pesquisa_fornecedor.pk }}">Nota</button>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" role="menuitem" data-bs-toggle="modal" data-bs-target="#notas-fornecedor-{{ entry.pesquisa_fornecedor.pk }}">Ver anotações{% if entry.notas_count %} ({{ entry.notas_count }}){% endif %}</button>
+                        <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'licitacoes:pesquisa_preco_fornecedor_update' pesquisa.termo.pk entry.fornecedor.pk %}">Editar</a>
+                        <a class="btn btn-sm btn-outline-danger" role="menuitem" href="{% url 'licitacoes:pesquisa_preco_fornecedor_remove' pesquisa.termo.pk entry.pesquisa_fornecedor.pk %}">Remover</a>
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -199,6 +206,68 @@
       </div>
     </section>
   </div>
+
+  {% for entry in fornecedores %}
+    <div class="modal fade" id="nota-fornecedor-{{ entry.pesquisa_fornecedor.pk }}" tabindex="-1" aria-labelledby="nota-fornecedor-label-{{ entry.pesquisa_fornecedor.pk }}" aria-hidden="true">
+      <div class="modal-dialog">
+        <form class="modal-content" method="post" action="{% url 'licitacoes:pesquisa_preco_fornecedor_nota' pesquisa.termo.pk entry.pesquisa_fornecedor.pk %}">
+          {% csrf_token %}
+          <div class="modal-header">
+            <h2 class="modal-title fs-5" id="nota-fornecedor-label-{{ entry.pesquisa_fornecedor.pk }}">Nota - {{ entry.fornecedor.razao_social }}</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <label class="form-label" for="nota-texto-{{ entry.pesquisa_fornecedor.pk }}">Anotação</label>
+            <textarea class="form-control" id="nota-texto-{{ entry.pesquisa_fornecedor.pk }}" name="texto" rows="5" required></textarea>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Salvar nota</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal fade" id="notas-fornecedor-{{ entry.pesquisa_fornecedor.pk }}" tabindex="-1" aria-labelledby="notas-fornecedor-label-{{ entry.pesquisa_fornecedor.pk }}" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content spi-notes-modal" data-notes-modal>
+          <div class="modal-header">
+            <h2 class="modal-title fs-5" id="notas-fornecedor-label-{{ entry.pesquisa_fornecedor.pk }}">Anotações - {{ entry.fornecedor.razao_social }}</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            {% if entry.notas %}
+              <div class="spi-notes-timeline">
+                {% for nota in entry.notas %}
+                  <article class="spi-note-item" data-note-index="{{ forloop.counter0 }}">
+                    <div class="spi-note-marker"></div>
+                    <div class="spi-note-body">
+                      <div class="d-flex flex-wrap justify-content-between gap-2 mb-1">
+                        <strong>{% if nota.criado_por %}{{ nota.criado_por.get_full_name|default:nota.criado_por.username }}{% else %}-{% endif %}</strong>
+                        <span class="text-muted small">{{ nota.criado_em|date:"d/m/Y H:i" }}</span>
+                      </div>
+                      <div class="text-break">{{ nota.texto|linebreaksbr }}</div>
+                    </div>
+                  </article>
+                {% endfor %}
+              </div>
+              <div class="d-flex align-items-center justify-content-between gap-2 mt-3">
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-notes-prev>Anterior</button>
+                <span class="small text-muted" data-notes-status></span>
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-notes-next>Próxima</button>
+              </div>
+            {% else %}
+              <p class="text-muted mb-0">Nenhuma anotação registrada.</p>
+            {% endif %}
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+
   <script>
     document.addEventListener('click', function (event) {
       var link = event.target.closest('.spi-copy-email');
@@ -225,6 +294,94 @@
       document.execCommand('copy');
       document.body.removeChild(input);
       showCopied();
+    });
+
+    function closePesquisaActionMenus(exceptMenu) {
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(function (menu) {
+        if (menu === exceptMenu) {
+          return;
+        }
+        menu.classList.remove('is-open');
+        var panel = menu.querySelector('.spi-action-menu-panel');
+        var toggle = menu.querySelector('.spi-action-menu-toggle');
+        if (panel) {
+          panel.hidden = true;
+        }
+        if (toggle) {
+          toggle.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+
+    document.addEventListener('click', function (event) {
+      var toggle = event.target.closest('.spi-action-menu-toggle');
+      if (!toggle) {
+        if (!event.target.closest('.spi-action-menu')) {
+          closePesquisaActionMenus();
+        }
+        return;
+      }
+      event.preventDefault();
+      var menu = toggle.closest('.spi-action-menu');
+      var panel = menu.querySelector('.spi-action-menu-panel');
+      var willOpen = !menu.classList.contains('is-open');
+      closePesquisaActionMenus(menu);
+      menu.classList.toggle('is-open', willOpen);
+      toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      if (panel) {
+        panel.hidden = !willOpen;
+      }
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        closePesquisaActionMenus();
+      }
+    });
+
+    document.querySelectorAll('.modal').forEach(function (modal) {
+      modal.addEventListener('show.bs.modal', function () {
+        closePesquisaActionMenus();
+      });
+    });
+
+    document.querySelectorAll('[data-notes-modal]').forEach(function (modal) {
+      var items = Array.from(modal.querySelectorAll('[data-note-index]'));
+      var prev = modal.querySelector('[data-notes-prev]');
+      var next = modal.querySelector('[data-notes-next]');
+      var status = modal.querySelector('[data-notes-status]');
+      var pageSize = 5;
+      var page = 0;
+      var totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+
+      function renderNotesPage() {
+        items.forEach(function (item, index) {
+          item.classList.toggle('d-none', index < page * pageSize || index >= (page + 1) * pageSize);
+        });
+        if (status) {
+          status.textContent = 'Página ' + (page + 1) + ' de ' + totalPages;
+        }
+        if (prev) {
+          prev.disabled = page === 0;
+        }
+        if (next) {
+          next.disabled = page >= totalPages - 1;
+        }
+      }
+
+      if (prev) {
+        prev.addEventListener('click', function () {
+          page = Math.max(0, page - 1);
+          renderNotesPage();
+        });
+      }
+      if (next) {
+        next.addEventListener('click', function () {
+          page = Math.min(totalPages - 1, page + 1);
+          renderNotesPage();
+        });
+      }
+      renderNotesPage();
     });
   </script>
 {% endblock %}

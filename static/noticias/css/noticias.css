@@ -40,7 +40,8 @@ body:has(.noticias-page) .spi-container {
 .noticias-hero-link,
 .noticias-card {
   position: relative;
-  display: block;
+  display: flex;
+  flex-direction: column;
   color: #fff;
   text-decoration: none;
   background: var(--noticias-navbar-blue);
@@ -53,14 +54,16 @@ body:has(.noticias-page) .spi-container {
 .noticias-hero-img {
   display: block;
   width: 100%;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   object-fit: fill;
 }
 
 .noticias-card img {
   display: block;
   width: 100%;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   object-fit: cover;
 }
 
@@ -69,13 +72,10 @@ body:has(.noticias-page) .spi-container {
 }
 
 .noticias-hero-caption {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
   display: flex;
   align-items: center;
   gap: .75rem;
+  flex: 0 0 auto;
   min-height: clamp(54px, 7.4vw, 90px);
   padding: .7rem 1.4rem;
   background: var(--noticias-navbar-blue);
@@ -132,10 +132,7 @@ body:has(.noticias-page) .spi-container {
 }
 
 .noticias-card-title {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  flex: 0 0 auto;
   min-height: 54px;
   padding: .75rem 1rem;
   background: var(--noticias-navbar-blue);

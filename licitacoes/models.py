@@ -39,6 +39,18 @@ class EtpTic(models.Model):
 
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='etps_tic_criados',
+    )
+    compartilhado_com = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='etps_tic_compartilhados',
+    )
     atualizado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -121,6 +133,18 @@ class Dfd(models.Model):
 
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='dfds_criados',
+    )
+    compartilhado_com = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='dfds_compartilhados',
+    )
 
     class Meta:
         ordering = ['-atualizado_em', '-id']
@@ -155,6 +179,18 @@ class TermoReferencia(models.Model):
     link = models.URLField('Link do processo', max_length=500, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='termos_referencia_criados',
+    )
+    compartilhado_com = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='termos_referencia_compartilhados',
+    )
     atualizado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -296,6 +332,25 @@ class PesquisaPrecoContato(models.Model):
 
     def __str__(self):
         return f'{self.pesquisa_fornecedor.fornecedor} em {self.data_contato:%d/%m/%Y}'
+
+
+class PesquisaPrecoFornecedorNota(models.Model):
+    pesquisa_fornecedor = models.ForeignKey(PesquisaPrecoFornecedor, on_delete=models.CASCADE, related_name='notas')
+    texto = models.TextField('Nota')
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='notas_pesquisa_preco',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-criado_em', '-id']
+
+    def __str__(self):
+        return f'Nota de {self.pesquisa_fornecedor.fornecedor} em {self.criado_em:%d/%m/%Y %H:%M}'
 
 
 class PesquisaPrecoItemValor(models.Model):

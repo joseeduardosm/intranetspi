@@ -2,6 +2,35 @@
 
 Todas as mudancas importantes do Aplicacoes SPI serao documentadas neste arquivo.
 
+## [0.7.0] - 2026-05-29
+
+### Adicionado
+
+- Adicionado modulo de usuarios e ramais, com listagem administrativa, cadastro, edicao, exclusao, perfis com foto, busca, ordenacao e paginacao.
+- Adicionada listagem publica de ramais em cards, com modal de contato, campos estruturados e acoes de e-mail para Teams, Outlook e copia para a area de transferencia.
+- Adicionado controle de recadastro de perfil para usuarios comuns, exigindo dados obrigatorios no primeiro acesso e revalidacao periodica.
+- Adicionado suporte a diretorios LDAP configuraveis para autenticacao.
+- Adicionado compartilhamento de TR, ETP TIC e DFD entre usuarios.
+- Adicionadas anotacoes por fornecedor no painel de Pesquisa de Preco.
+
+### Alterado
+
+- Alterada a listagem de usuarios para paginar de 10 em 10 registros.
+- Alterada a listagem de ramais para exibir apenas cadastros completos.
+- Alterada a validacao de perfil para exigir e-mail, foto, ramal, cargo, setor, andar e bloco.
+- Alterado o fluxo de logout para excluir usuario de primeiro acesso quando o cadastro nao for finalizado.
+- Alterada a autenticacao LDAP para nao apagar e-mail ja cadastrado quando o atributo `mail` vier vazio.
+- Alteradas permissoes de licitacoes para que Administradores do Sistema acessem todos os documentos sem restricoes de propriedade ou compartilhamento.
+- Alterado o detalhe de noticias para transformar URLs digitadas no texto em links clicaveis.
+- Alterado o suporte a anexos de noticias para permitir download de arquivos nao PDF e manter visualizacao inline para PDF.
+- Alterado o rodape global para exibir a mensagem institucional centralizada.
+
+### Corrigido
+
+- Corrigido recadastro repetido apos novo login causado por e-mail apagado pelo LDAP.
+- Corrigidas quebras de layout no modal de contato dos ramais.
+- Corrigida a visibilidade de TRs para administradores do sistema.
+
 ## [0.6.0] - 2026-05-26
 
 ### Adicionado

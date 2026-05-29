@@ -10,6 +10,7 @@ from .models import (
     PesquisaPreco,
     PesquisaPrecoContato,
     PesquisaPrecoFornecedor,
+    PesquisaPrecoFornecedorNota,
     PesquisaPrecoItemValor,
     SessaoEtpTic,
     SessaoTR,
@@ -95,6 +96,12 @@ class PesquisaPrecoFornecedorAdmin(admin.ModelAdmin):
 class PesquisaPrecoContatoAdmin(admin.ModelAdmin):
     list_display = ('pesquisa_fornecedor', 'data_contato', 'criado_em')
     list_filter = ('data_contato',)
+
+
+@admin.register(PesquisaPrecoFornecedorNota)
+class PesquisaPrecoFornecedorNotaAdmin(admin.ModelAdmin):
+    list_display = ('pesquisa_fornecedor', 'criado_por', 'criado_em')
+    search_fields = ('texto', 'pesquisa_fornecedor__fornecedor__razao_social')
 
 
 @admin.register(PesquisaPrecoItemValor)

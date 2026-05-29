@@ -33,6 +33,9 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     '10.23.1.245',
+    '10.23.1.243',
+    'intranet',
+    'intranet.spi.sp.gov.br',
 ]
 
 
@@ -48,6 +51,7 @@ INSTALLED_APPS = [
     'licitacoes',
     'navbar',
     'noticias',
+    'usuarios',
 ]
 
 MIDDLEWARE = [
@@ -72,6 +76,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'usuarios.context_processors.usuario_profile_state',
             ],
         },
     },
@@ -132,8 +137,12 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 LOGIN_URL = 'login'
-LOGIN_REDIRECT_URL = 'home'
+LOGIN_REDIRECT_URL = 'root'
 LOGOUT_REDIRECT_URL = 'login'
+AUTHENTICATION_BACKENDS = [
+    'usuarios.backends.LDAPBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

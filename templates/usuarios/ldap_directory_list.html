@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load static %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'usuarios/css/usuarios.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{{ titulo }}</h1>
+      <p>Cadastre e teste os diretórios de autenticação do sistema.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-primary" href="{% url 'usuarios:ldap_create' %}">Novo diretório</a>
+      <a class="btn btn-light" href="{% url 'usuarios:list' %}">Voltar</a>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0 spi-table-wide">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Servidor</th>
+            <th>Porta</th>
+            <th>SSL</th>
+            <th>Ativo</th>
+            <th class="text-end">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for directory in directories %}
+            <tr>
+              <td>{{ directory.nome }}</td>
+              <td>{{ directory.host }}</td>
+              <td>{{ directory.port }}</td>
+              <td>{{ directory.use_ssl|yesno:"Sim,Não" }}</td>
+              <td>{{ directory.ativo|yesno:"Sim,Não" }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'usuarios:ldap_update' directory.pk %}">Editar</a>
+                <a class="btn btn-sm btn-outline-danger" href="{% url 'usuarios:ldap_delete' directory.pk %}">Excluir</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="text-muted">Nenhum diretório LDAP cadastrado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
+

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load static %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'usuarios/css/usuarios.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{{ titulo }}</h1>
+      <p>Atualize os dados do usuário.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ voltar_url }}">Voltar</a>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="card border-0 shadow-sm">
+    {% csrf_token %}
+    <div class="card-body p-4">
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="row g-3">
+        <div class="col-12 col-xl-6">
+          <label class="form-label" for="{{ form.login.id_for_label }}">{{ form.login.label }}</label>
+          {{ form.login }}
+          {% for error in form.login.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+        {% if is_create %}
+          <div class="col-12 col-xl-6">
+            <label class="form-label" for="{{ form.password1.id_for_label }}">{{ form.password1.label }}</label>
+            {{ form.password1 }}
+            {% for error in form.password1.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-12 col-xl-6">
+            <label class="form-label" for="{{ form.password2.id_for_label }}">{{ form.password2.label }}</label>
+            {{ form.password2 }}
+            {% for error in form.password2.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+        {% endif %}
+        {% for field in form %}
+          {% if field.name != "login" and field.name != "password1" and field.name != "password2" %}
+            <div class="col-12 {% if field.name == 'administrador_sistema' %}col-xl-12{% else %}col-xl-6{% endif %}">
+              {% if field.name == "administrador_sistema" %}
+                <div class="form-check mt-4">
+                  {{ field }}
+                  <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                </div>
+              {% else %}
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+              {% endif %}
+              {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+              {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-end gap-2 p-3">
+      <a class="btn btn-light" href="{{ voltar_url }}">Cancelar</a>
+      <button class="btn btn-primary" type="submit">Salvar</button>
+    </div>
+  </form>
+{% endblock %}

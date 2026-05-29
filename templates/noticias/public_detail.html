@@ -20,23 +20,22 @@
 
     <div class="noticia-detail-body card border-0 shadow-sm">
       <div class="card-body p-4 p-lg-5">
-        {{ noticia.texto_noticia|linebreaks }}
+        {{ noticia.texto_noticia|urlize|linebreaks }}
         {% if noticia.anexo_pdf %}
-          <section class="noticia-pdf-anexo" aria-label="PDF anexo">
-            <iframe class="noticia-pdf-viewer" src="{% url 'noticias:pdf' noticia.pk %}" title="{{ noticia.titulo }} - PDF anexo"></iframe>
-            <a class="noticia-pdf-link" href="{% url 'noticias:pdf' noticia.pk %}" target="_blank" rel="noopener">
-              {{ noticia.anexo_pdf.name|cut:"noticias/anexos/" }}
-            </a>
+          <section class="noticia-pdf-anexo" aria-label="Anexo">
+            {% if noticia.anexo_e_pdf %}
+              <iframe class="noticia-pdf-viewer" src="{% url 'noticias:pdf' noticia.pk %}" title="{{ noticia.titulo }} - PDF anexo"></iframe>
+              <a class="noticia-pdf-link" href="{% url 'noticias:pdf' noticia.pk %}" target="_blank" rel="noopener">
+                {{ noticia.anexo_nome }}
+              </a>
+            {% else %}
+              <a class="noticia-pdf-link" href="{{ noticia.anexo_pdf.url }}" download>
+                Baixar anexo: {{ noticia.anexo_nome }}
+              </a>
+            {% endif %}
           </section>
         {% endif %}
       </div>
     </div>
-
-    <section class="noticia-future-slots">
-      <div>Galeria de imagens</div>
-      <div>Anexos</div>
-      <div>Videos</div>
-      <div>Noticias relacionadas</div>
-    </section>
   </article>
 {% endblock %}

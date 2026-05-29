@@ -3,8 +3,10 @@ from io import BytesIO
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import get_user_model
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
@@ -42,6 +44,7 @@ from .models import (
     PesquisaPreco,
     PesquisaPrecoContato,
     PesquisaPrecoFornecedor,
+    PesquisaPrecoFornecedorNota,
     PesquisaPrecoItemValor,
     SessaoEtpTic,
     SessaoTR,
@@ -85,6 +88,10 @@ from .services import (
     render_dfd_sections,
     render_etp_sections,
 )
+from usuarios.services import SYSTEM_USERNAMES
+
+
+User = get_user_model()
 
 
 def _audit_user(request):
@@ -220,8 +227,13 @@ def tabela_item_url(item):
     return f"{reverse('licitacoes:tr_detail', args=[item.sessao.termo.pk])}#tabela-itens-{item.pk}"
 
 
-def get_item_tabela_1_1(sessao_pk, item_pk):
-    item = get_object_or_404(ItemTR, pk=item_pk, sessao__termo__sessoes__id=sessao_pk)
+def get_item_tabela_1_1(sessao_pk, item_pk, user):
+    item = get_object_or_404(
+        ItemTR,
+        pk=item_pk,
+        sessao__termo__sessoes__id=sessao_pk,
+        sessao__termo__in=owned_queryset(TermoReferencia, user),
+    )
     if item_indice(item) != '1.1':
         raise Http404('Tabela disponivel apenas para o item 1.1.')
     return item
@@ -282,20 +294,81 @@ def etp_item_delete_return_url(item):
 
 class SuperuserRequiredMixin(UserPassesTestMixin):
     def test_func(self):
-        return self.request.user.is_authenticated and self.request.user.is_superuser
+        return self.request.user.is_authenticated
+
+
+def is_system_admin(user):
+    return bool(user and user.is_authenticated and (user.is_superuser or user.is_staff))
+
+
+class AdminRequiredMixin(UserPassesTestMixin):
+    def test_func(self):
+        return is_system_admin(self.request.user)
+
+
+def owned_queryset(model, user):
+    queryset = model.objects.all()
+    if is_system_admin(user):
+        return queryset
+    return queryset.filter(Q(criado_por=user) | Q(compartilhado_com=user)).distinct()
+
+
+def owned_delete_queryset(model, user):
+    queryset = model.objects.all()
+    if is_system_admin(user):
+        return queryset
+    return queryset.filter(criado_por=user)
+
+
+def owned_object_or_404(model, user, **kwargs):
+    return get_object_or_404(owned_queryset(model, user), **kwargs)
+
+
+def user_can_share_document(user, document):
+    return user.is_authenticated and (is_system_admin(user) or document.criado_por_id == user.id)
+
+
+def shareable_users_for(user):
+    return (
+        User.objects.filter(is_active=True, perfil__isnull=False)
+        .exclude(pk=user.pk)
+        .exclude(username__in=SYSTEM_USERNAMES)
+        .order_by('perfil__nome_completo', 'username')
+    )
+
+
+def assign_owner(instance, request):
+    user = _audit_user(request)
+    if not instance.criado_por_id:
+        instance.criado_por = user
+    if hasattr(instance, 'atualizado_por'):
+        instance.atualizado_por = user
+    return instance
 
 
 class LicitacoesHomeView(SuperuserRequiredMixin, TemplateView):
     template_name = 'licitacoes/home.html'
 
 
-class EtpTicListView(SuperuserRequiredMixin, ListView):
+class LicitacoesAdminContextMixin:
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['is_system_admin'] = is_system_admin(self.request.user)
+        return context
+
+
+class EtpTicListView(LicitacoesAdminContextMixin, SuperuserRequiredMixin, ListView):
     model = EtpTic
     template_name = 'licitacoes/etp_list.html'
     context_object_name = 'etps'
 
     def get_queryset(self):
-        return super().get_queryset().select_related('atualizado_por')
+        return owned_queryset(EtpTic, self.request.user).select_related('criado_por', 'atualizado_por')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['shareable_users'] = shareable_users_for(self.request.user)
+        return context
 
 
 class EtpTicCreateView(SuperuserRequiredMixin, CreateView):
@@ -311,7 +384,7 @@ class EtpTicCreateView(SuperuserRequiredMixin, CreateView):
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
-        self.object.atualizado_por = _audit_user(self.request)
+        assign_owner(self.object, self.request)
         self.object.declaracao_viabilidade = EtpTic.DECLARACAO_PADRAO
         self.object.usa_editor_dinamico = True
         self.object.save()
@@ -321,6 +394,9 @@ class EtpTicCreateView(SuperuserRequiredMixin, CreateView):
 class EtpTicEditView(SuperuserRequiredMixin, UpdateView):
     model = EtpTic
     context_object_name = 'etp'
+
+    def get_queryset(self):
+        return owned_queryset(EtpTic, self.request.user)
 
     def _edita_secao(self):
         return 'secao' in self.request.GET
@@ -395,6 +471,9 @@ class EtpTicDetailView(SuperuserRequiredMixin, DetailView):
     template_name = 'licitacoes/etp_detail.html'
     context_object_name = 'etp'
 
+    def get_queryset(self):
+        return owned_queryset(EtpTic, self.request.user)
+
     def dispatch(self, request, *args, **kwargs):
         self.object = self.get_object()
         if not self.object.usa_editor_dinamico:
@@ -412,6 +491,9 @@ class EtpTicPreviewView(SuperuserRequiredMixin, DetailView):
     template_name = 'licitacoes/etp_preview.html'
     context_object_name = 'etp'
 
+    def get_queryset(self):
+        return owned_queryset(EtpTic, self.request.user)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         if self.object.usa_editor_dinamico:
@@ -423,7 +505,7 @@ class EtpTicPreviewView(SuperuserRequiredMixin, DetailView):
 
 class EtpTicConcluirView(SuperuserRequiredMixin, View):
     def post(self, request, pk):
-        etp = get_object_or_404(EtpTic, pk=pk)
+        etp = owned_object_or_404(EtpTic, request.user, pk=pk)
         etp.status = EtpTic.Status.CONCLUIDO
         etp.atualizado_por = _audit_user(request)
         etp.save(update_fields=['status', 'atualizado_por', 'atualizado_em'])
@@ -436,10 +518,13 @@ class EtpTicDeleteView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
     success_url = reverse_lazy('licitacoes:etp_list')
 
+    def get_queryset(self):
+        return owned_delete_queryset(EtpTic, self.request.user)
+
 
 class EtpTicExportDocxView(SuperuserRequiredMixin, View):
     def get(self, request, pk):
-        etp = get_object_or_404(EtpTic, pk=pk)
+        etp = owned_object_or_404(EtpTic, request.user, pk=pk)
         if etp.usa_editor_dinamico:
             return _etp_dynamic_docx_response(etp)
         return _docx_response(f'ETP TIC - {etp.nome}', render_etp_sections(etp), f'etp_tic_{slugify(etp.nome) or etp.pk}.docx')
@@ -447,13 +532,29 @@ class EtpTicExportDocxView(SuperuserRequiredMixin, View):
 
 class EtpTicDuplicateView(SuperuserRequiredMixin, View):
     def post(self, request, pk):
-        etp = get_object_or_404(EtpTic, pk=pk)
+        etp = owned_object_or_404(EtpTic, request.user, pk=pk)
         duplicate = duplicate_etp(etp)
+        duplicate.criado_por = _audit_user(request)
+        duplicate.save(update_fields=['criado_por', 'atualizado_em'])
         _touch_etp(duplicate, request)
         messages.success(request, 'ETP TIC duplicado.')
         if duplicate.usa_editor_dinamico:
             return redirect('licitacoes:etp_detail', pk=duplicate.pk)
         return redirect('licitacoes:etp_preview', pk=duplicate.pk)
+
+
+class EtpTicShareView(SuperuserRequiredMixin, View):
+    def post(self, request, pk):
+        etp = owned_object_or_404(EtpTic, request.user, pk=pk)
+        if not user_can_share_document(request.user, etp):
+            raise Http404
+        user = get_object_or_404(User, pk=request.POST.get('user_id'), is_active=True)
+        if user.pk == request.user.pk or user.username in SYSTEM_USERNAMES:
+            messages.error(request, 'Selecione um usuario valido para compartilhar.')
+        else:
+            etp.compartilhado_com.add(user)
+            messages.success(request, f'ETP TIC compartilhado com {user.get_full_name() or user.username}.')
+        return redirect('licitacoes:etp_list')
 
 
 class SessaoEtpCreateView(SuperuserRequiredMixin, CreateView):
@@ -462,7 +563,7 @@ class SessaoEtpCreateView(SuperuserRequiredMixin, CreateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.etp = get_object_or_404(EtpTic, pk=kwargs['etp_pk'], usa_editor_dinamico=True)
+        self.etp = owned_object_or_404(EtpTic, request.user, pk=kwargs['etp_pk'], usa_editor_dinamico=True)
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
@@ -486,7 +587,7 @@ class SessaoEtpUpdateView(SuperuserRequiredMixin, UpdateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.object = get_object_or_404(SessaoEtpTic, pk=kwargs['pk'], etp_id=kwargs['etp_pk'], etp__usa_editor_dinamico=True)
+        self.object = get_object_or_404(SessaoEtpTic, pk=kwargs['pk'], etp_id=kwargs['etp_pk'], etp__usa_editor_dinamico=True, etp__in=owned_queryset(EtpTic, request.user))
         self.etp = self.object.etp
         return super().dispatch(request, *args, **kwargs)
 
@@ -516,7 +617,7 @@ class SessaoEtpDeleteView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
 
     def get_queryset(self):
-        return SessaoEtpTic.objects.filter(etp_id=self.kwargs['etp_pk'], etp__usa_editor_dinamico=True)
+        return SessaoEtpTic.objects.filter(etp_id=self.kwargs['etp_pk'], etp__usa_editor_dinamico=True, etp__in=owned_queryset(EtpTic, self.request.user))
 
     def get_success_url(self):
         etp = self.object.etp
@@ -530,7 +631,7 @@ class SessaoEtpClearItemsView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
 
     def get_queryset(self):
-        return SessaoEtpTic.objects.filter(etp_id=self.kwargs['etp_pk'], etp__usa_editor_dinamico=True)
+        return SessaoEtpTic.objects.filter(etp_id=self.kwargs['etp_pk'], etp__usa_editor_dinamico=True, etp__in=owned_queryset(EtpTic, self.request.user))
 
     def form_valid(self, form):
         removed = self.object.itens.count()
@@ -554,7 +655,7 @@ class ItemEtpCreateView(SuperuserRequiredMixin, CreateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.sessao = get_object_or_404(SessaoEtpTic, pk=kwargs['sessao_pk'], etp__usa_editor_dinamico=True)
+        self.sessao = get_object_or_404(SessaoEtpTic, pk=kwargs['sessao_pk'], etp__usa_editor_dinamico=True, etp__in=owned_queryset(EtpTic, request.user))
         self.parent = None
         if kwargs.get('parent_pk'):
             self.parent = get_object_or_404(ItemEtpTic, pk=kwargs['parent_pk'], sessao__etp=self.sessao.etp)
@@ -606,7 +707,7 @@ class ItemEtpUpdateView(SuperuserRequiredMixin, UpdateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.object = get_object_or_404(ItemEtpTic, pk=kwargs['pk'], sessao__etp__sessoes__id=kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True)
+        self.object = get_object_or_404(ItemEtpTic, pk=kwargs['pk'], sessao__etp__sessoes__id=kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True, sessao__etp__in=owned_queryset(EtpTic, request.user))
         return super().dispatch(request, *args, **kwargs)
 
     def get_object(self, queryset=None):
@@ -645,7 +746,7 @@ class ItemEtpDeleteView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
 
     def get_queryset(self):
-        return ItemEtpTic.objects.filter(sessao__etp__sessoes__id=self.kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True)
+        return ItemEtpTic.objects.filter(sessao__etp__sessoes__id=self.kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True, sessao__etp__in=owned_queryset(EtpTic, self.request.user))
 
     def form_valid(self, form):
         sessao = self.object.sessao
@@ -663,7 +764,7 @@ class ItemEtpClearChildrenView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
 
     def get_queryset(self):
-        return ItemEtpTic.objects.filter(sessao__etp__sessoes__id=self.kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True)
+        return ItemEtpTic.objects.filter(sessao__etp__sessoes__id=self.kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True, sessao__etp__in=owned_queryset(EtpTic, self.request.user))
 
     def form_valid(self, form):
         removed = clear_etp_item_children(self.object)
@@ -684,7 +785,7 @@ class ItemEtpMoveView(SuperuserRequiredMixin, View):
     template_name = 'licitacoes/etp_item_move.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.item = get_object_or_404(ItemEtpTic, pk=kwargs['pk'], sessao__etp__sessoes__id=kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True)
+        self.item = get_object_or_404(ItemEtpTic, pk=kwargs['pk'], sessao__etp__sessoes__id=kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True, sessao__etp__in=owned_queryset(EtpTic, request.user))
         self.etp = self.item.sessao.etp
         return super().dispatch(request, *args, **kwargs)
 
@@ -719,7 +820,7 @@ class ItemEtpDuplicateView(SuperuserRequiredMixin, View):
     template_name = 'licitacoes/etp_item_move.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.item = get_object_or_404(ItemEtpTic, pk=kwargs['pk'], sessao__etp__sessoes__id=kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True)
+        self.item = get_object_or_404(ItemEtpTic, pk=kwargs['pk'], sessao__etp__sessoes__id=kwargs['sessao_pk'], sessao__etp__usa_editor_dinamico=True, sessao__etp__in=owned_queryset(EtpTic, request.user))
         self.etp = self.item.sessao.etp
         return super().dispatch(request, *args, **kwargs)
 
@@ -750,10 +851,18 @@ class ItemEtpDuplicateView(SuperuserRequiredMixin, View):
         return _render(request, self.template_name, {'form': form, 'item': self.item, 'etp': self.etp, 'modo': 'duplicar'})
 
 
-class DfdListView(SuperuserRequiredMixin, ListView):
+class DfdListView(LicitacoesAdminContextMixin, SuperuserRequiredMixin, ListView):
     model = Dfd
     template_name = 'licitacoes/dfd_list.html'
     context_object_name = 'dfds'
+
+    def get_queryset(self):
+        return owned_queryset(Dfd, self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['shareable_users'] = shareable_users_for(self.request.user)
+        return context
 
 
 class DfdCreateView(SuperuserRequiredMixin, CreateView):
@@ -768,13 +877,18 @@ class DfdCreateView(SuperuserRequiredMixin, CreateView):
         return context
 
     def form_valid(self, form):
-        self.object = form.save()
+        self.object = form.save(commit=False)
+        assign_owner(self.object, self.request)
+        self.object.save()
         return redirect(f"{reverse('licitacoes:dfd_edit', args=[self.object.pk])}?secao=1")
 
 
 class DfdEditView(SuperuserRequiredMixin, UpdateView):
     model = Dfd
     context_object_name = 'dfd'
+
+    def get_queryset(self):
+        return owned_queryset(Dfd, self.request.user)
 
     def _edita_secao(self):
         return 'secao' in self.request.GET
@@ -846,6 +960,9 @@ class DfdPreviewView(SuperuserRequiredMixin, DetailView):
     template_name = 'licitacoes/dfd_preview.html'
     context_object_name = 'dfd'
 
+    def get_queryset(self):
+        return owned_queryset(Dfd, self.request.user)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['secoes_render'] = render_dfd_sections(self.object)
@@ -854,7 +971,7 @@ class DfdPreviewView(SuperuserRequiredMixin, DetailView):
 
 class DfdConcluirView(SuperuserRequiredMixin, View):
     def post(self, request, pk):
-        dfd = get_object_or_404(Dfd, pk=pk)
+        dfd = owned_object_or_404(Dfd, request.user, pk=pk)
         dfd.status = Dfd.Status.CONCLUIDO
         dfd.save(update_fields=['status', 'atualizado_em'])
         messages.success(request, 'DFD concluido.')
@@ -866,13 +983,32 @@ class DfdDeleteView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
     success_url = reverse_lazy('licitacoes:dfd_list')
 
+    def get_queryset(self):
+        return owned_delete_queryset(Dfd, self.request.user)
+
 
 class DfdDuplicateView(SuperuserRequiredMixin, View):
     def post(self, request, pk):
-        dfd = get_object_or_404(Dfd, pk=pk)
+        dfd = owned_object_or_404(Dfd, request.user, pk=pk)
         duplicate = duplicate_dfd(dfd)
+        duplicate.criado_por = _audit_user(request)
+        duplicate.save(update_fields=['criado_por', 'atualizado_em'])
         messages.success(request, 'DFD duplicado.')
         return redirect(f"{reverse('licitacoes:dfd_edit', args=[duplicate.pk])}?secao={duplicate.secao_atual}")
+
+
+class DfdShareView(SuperuserRequiredMixin, View):
+    def post(self, request, pk):
+        dfd = owned_object_or_404(Dfd, request.user, pk=pk)
+        if not user_can_share_document(request.user, dfd):
+            raise Http404
+        user = get_object_or_404(User, pk=request.POST.get('user_id'), is_active=True)
+        if user.pk == request.user.pk or user.username in SYSTEM_USERNAMES:
+            messages.error(request, 'Selecione um usuario valido para compartilhar.')
+        else:
+            dfd.compartilhado_com.add(user)
+            messages.success(request, f'DFD compartilhado com {user.get_full_name() or user.username}.')
+        return redirect('licitacoes:dfd_list')
 
 
 class DfdItemTabelaCreateView(SuperuserRequiredMixin, CreateView):
@@ -881,7 +1017,7 @@ class DfdItemTabelaCreateView(SuperuserRequiredMixin, CreateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.dfd = get_object_or_404(Dfd, pk=kwargs['dfd_pk'])
+        self.dfd = owned_object_or_404(Dfd, request.user, pk=kwargs['dfd_pk'])
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
@@ -904,7 +1040,7 @@ class DfdItemTabelaUpdateView(SuperuserRequiredMixin, UpdateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.dfd = get_object_or_404(Dfd, pk=kwargs['dfd_pk'])
+        self.dfd = owned_object_or_404(Dfd, request.user, pk=kwargs['dfd_pk'])
         self.object = get_object_or_404(DfdItemTabela, pk=kwargs['pk'], dfd=self.dfd)
         return super().dispatch(request, *args, **kwargs)
 
@@ -926,7 +1062,7 @@ class DfdItemTabelaDeleteView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.dfd = get_object_or_404(Dfd, pk=kwargs['dfd_pk'])
+        self.dfd = owned_object_or_404(Dfd, request.user, pk=kwargs['dfd_pk'])
         self.object = get_object_or_404(DfdItemTabela, pk=kwargs['pk'], dfd=self.dfd)
         return super().dispatch(request, *args, **kwargs)
 
@@ -950,17 +1086,22 @@ class DfdItemTabelaDeleteView(SuperuserRequiredMixin, DeleteView):
 
 class DfdExportDocxView(SuperuserRequiredMixin, View):
     def get(self, request, pk):
-        dfd = get_object_or_404(Dfd, pk=pk)
+        dfd = owned_object_or_404(Dfd, request.user, pk=pk)
         return _dfd_docx_response(dfd)
 
 
-class TermoListView(SuperuserRequiredMixin, ListView):
+class TermoListView(LicitacoesAdminContextMixin, SuperuserRequiredMixin, ListView):
     model = TermoReferencia
     template_name = 'licitacoes/tr_list.html'
     context_object_name = 'termos'
 
     def get_queryset(self):
-        return super().get_queryset().select_related('atualizado_por')
+        return owned_queryset(TermoReferencia, self.request.user).select_related('criado_por', 'atualizado_por')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['shareable_users'] = shareable_users_for(self.request.user)
+        return context
 
 
 class TermoCreateView(SuperuserRequiredMixin, CreateView):
@@ -973,7 +1114,7 @@ class TermoCreateView(SuperuserRequiredMixin, CreateView):
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
-        self.object.atualizado_por = _audit_user(self.request)
+        assign_owner(self.object, self.request)
         self.object.save()
         return redirect(self.get_success_url())
 
@@ -988,6 +1129,9 @@ class TermoUpdateView(SuperuserRequiredMixin, UpdateView):
     model = TermoReferencia
     form_class = TermoReferenciaForm
     template_name = 'licitacoes/form.html'
+
+    def get_queryset(self):
+        return owned_queryset(TermoReferencia, self.request.user)
 
     def get_success_url(self):
         return reverse('licitacoes:tr_detail', args=[self.object.pk])
@@ -1010,20 +1154,42 @@ class TermoDeleteView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
     success_url = reverse_lazy('licitacoes:tr_list')
 
+    def get_queryset(self):
+        return owned_delete_queryset(TermoReferencia, self.request.user)
+
 
 class TermoDuplicateView(SuperuserRequiredMixin, View):
     def post(self, request, pk):
-        termo = get_object_or_404(TermoReferencia, pk=pk)
+        termo = owned_object_or_404(TermoReferencia, request.user, pk=pk)
         duplicate = duplicate_termo(termo)
+        duplicate.criado_por = _audit_user(request)
+        duplicate.save(update_fields=['criado_por', 'atualizado_em'])
         _touch_termo(duplicate, request)
         messages.success(request, 'TR duplicado.')
         return redirect('licitacoes:tr_detail', pk=duplicate.pk)
+
+
+class TermoShareView(SuperuserRequiredMixin, View):
+    def post(self, request, pk):
+        termo = owned_object_or_404(TermoReferencia, request.user, pk=pk)
+        if not user_can_share_document(request.user, termo):
+            raise Http404
+        user = get_object_or_404(User, pk=request.POST.get('user_id'), is_active=True)
+        if user.pk == request.user.pk or user.username in SYSTEM_USERNAMES:
+            messages.error(request, 'Selecione um usuario valido para compartilhar.')
+        else:
+            termo.compartilhado_com.add(user)
+            messages.success(request, f'TR compartilhado com {user.get_full_name() or user.username}.')
+        return redirect('licitacoes:tr_list')
 
 
 class TermoDetailView(SuperuserRequiredMixin, DetailView):
     model = TermoReferencia
     template_name = 'licitacoes/tr_detail.html'
     context_object_name = 'termo'
+
+    def get_queryset(self):
+        return owned_queryset(TermoReferencia, self.request.user)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1033,7 +1199,7 @@ class TermoDetailView(SuperuserRequiredMixin, DetailView):
 
 class PesquisaPrecoOpenView(SuperuserRequiredMixin, View):
     def get(self, request, pk):
-        termo = get_object_or_404(TermoReferencia, pk=pk)
+        termo = owned_object_or_404(TermoReferencia, request.user, pk=pk)
         pesquisa = getattr(termo, 'pesquisa_preco', None)
         if pesquisa:
             return redirect('licitacoes:pesquisa_preco_detail', termo_pk=termo.pk)
@@ -1046,7 +1212,7 @@ class PesquisaPrecoCreateView(SuperuserRequiredMixin, CreateView):
     template_name = 'licitacoes/pesquisa_preco_form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.termo = get_object_or_404(TermoReferencia, pk=kwargs['termo_pk'])
+        self.termo = owned_object_or_404(TermoReferencia, request.user, pk=kwargs['termo_pk'])
         if hasattr(self.termo, 'pesquisa_preco'):
             return redirect('licitacoes:pesquisa_preco_detail', termo_pk=self.termo.pk)
         return super().dispatch(request, *args, **kwargs)
@@ -1074,7 +1240,7 @@ class PesquisaPrecoDetailView(SuperuserRequiredMixin, DetailView):
     context_object_name = 'pesquisa'
 
     def get_object(self, queryset=None):
-        return get_object_or_404(PesquisaPreco.objects.select_related('termo'), termo_id=self.kwargs['termo_pk'])
+        return get_object_or_404(PesquisaPreco.objects.select_related('termo'), termo_id=self.kwargs['termo_pk'], termo__in=owned_queryset(TermoReferencia, self.request.user))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1089,7 +1255,7 @@ class PesquisaPrecoDeleteView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
 
     def get_object(self, queryset=None):
-        return get_object_or_404(PesquisaPreco.objects.select_related('termo'), termo_id=self.kwargs['termo_pk'])
+        return get_object_or_404(PesquisaPreco.objects.select_related('termo'), termo_id=self.kwargs['termo_pk'], termo__in=owned_queryset(TermoReferencia, self.request.user))
 
     def get_success_url(self):
         termo = self.object.termo
@@ -1107,7 +1273,7 @@ class PesquisaPrecoDeleteView(SuperuserRequiredMixin, DeleteView):
 
 class PesquisaPrecoFornecedorAddView(SuperuserRequiredMixin, View):
     def post(self, request, termo_pk):
-        pesquisa = get_object_or_404(PesquisaPreco, termo_id=termo_pk)
+        pesquisa = get_object_or_404(PesquisaPreco, termo_id=termo_pk, termo__in=owned_queryset(TermoReferencia, request.user))
         form = PesquisaPrecoFornecedorForm(request.POST, pesquisa=pesquisa)
         if form.is_valid():
             PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=form.cleaned_data['fornecedor'])
@@ -1127,6 +1293,7 @@ class PesquisaPrecoFornecedorRemoveView(SuperuserRequiredMixin, DeleteView):
             PesquisaPrecoFornecedor.objects.select_related('pesquisa__termo', 'fornecedor'),
             pk=self.kwargs['pk'],
             pesquisa__termo_id=self.kwargs['termo_pk'],
+            pesquisa__termo__in=owned_queryset(TermoReferencia, self.request.user),
         )
 
     def get_success_url(self):
@@ -1150,7 +1317,7 @@ class PesquisaPrecoFornecedorCreateView(SuperuserRequiredMixin, CreateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.pesquisa = get_object_or_404(PesquisaPreco, termo_id=kwargs['termo_pk'])
+        self.pesquisa = get_object_or_404(PesquisaPreco, termo_id=kwargs['termo_pk'], termo__in=owned_queryset(TermoReferencia, request.user))
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
@@ -1173,7 +1340,7 @@ class PesquisaPrecoFornecedorUpdateView(SuperuserRequiredMixin, UpdateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.pesquisa = get_object_or_404(PesquisaPreco, termo_id=kwargs['termo_pk'])
+        self.pesquisa = get_object_or_404(PesquisaPreco, termo_id=kwargs['termo_pk'], termo__in=owned_queryset(TermoReferencia, request.user))
         self.object = get_object_or_404(Fornecedor, pk=kwargs['pk'], pesquisas_preco__pesquisa=self.pesquisa)
         return super().dispatch(request, *args, **kwargs)
 
@@ -1194,13 +1361,35 @@ class PesquisaPrecoFornecedorUpdateView(SuperuserRequiredMixin, UpdateView):
 
 class PesquisaPrecoAtualizarContatoView(SuperuserRequiredMixin, View):
     def post(self, request, termo_pk, pk):
-        pesquisa_fornecedor = get_object_or_404(PesquisaPrecoFornecedor, pk=pk, pesquisa__termo_id=termo_pk)
+        pesquisa_fornecedor = get_object_or_404(PesquisaPrecoFornecedor, pk=pk, pesquisa__termo_id=termo_pk, pesquisa__termo__in=owned_queryset(TermoReferencia, request.user))
         PesquisaPrecoContato.objects.create(
             pesquisa_fornecedor=pesquisa_fornecedor,
             data_contato=timezone.localdate(),
         )
         _touch_termo(pesquisa_fornecedor.pesquisa.termo, request)
         messages.success(request, 'Último contato atualizado.')
+        return redirect('licitacoes:pesquisa_preco_detail', termo_pk=termo_pk)
+
+
+class PesquisaPrecoFornecedorNotaCreateView(SuperuserRequiredMixin, View):
+    def post(self, request, termo_pk, pk):
+        pesquisa_fornecedor = get_object_or_404(
+            PesquisaPrecoFornecedor,
+            pk=pk,
+            pesquisa__termo_id=termo_pk,
+            pesquisa__termo__in=owned_queryset(TermoReferencia, request.user),
+        )
+        texto = (request.POST.get('texto') or '').strip()
+        if not texto:
+            messages.error(request, 'Informe o texto da nota.')
+            return redirect('licitacoes:pesquisa_preco_detail', termo_pk=termo_pk)
+        PesquisaPrecoFornecedorNota.objects.create(
+            pesquisa_fornecedor=pesquisa_fornecedor,
+            texto=texto,
+            criado_por=_audit_user(request),
+        )
+        _touch_termo(pesquisa_fornecedor.pesquisa.termo, request)
+        messages.success(request, 'Nota registrada.')
         return redirect('licitacoes:pesquisa_preco_detail', termo_pk=termo_pk)
 
 
@@ -1212,6 +1401,7 @@ class PesquisaPrecoOrcamentoView(SuperuserRequiredMixin, View):
             PesquisaPrecoFornecedor.objects.select_related('pesquisa__termo', 'fornecedor'),
             pk=kwargs['pk'],
             pesquisa__termo_id=kwargs['termo_pk'],
+            pesquisa__termo__in=owned_queryset(TermoReferencia, request.user),
         )
         self.pesquisa = self.pesquisa_fornecedor.pesquisa
         self.itens = list(pesquisa_preco_itens(self.pesquisa))
@@ -1275,17 +1465,17 @@ class PesquisaPrecoOrcamentoView(SuperuserRequiredMixin, View):
 
 class PesquisaPrecoExportXlsxView(SuperuserRequiredMixin, View):
     def get(self, request, termo_pk):
-        pesquisa = get_object_or_404(PesquisaPreco.objects.select_related('termo'), termo_id=termo_pk)
+        pesquisa = get_object_or_404(PesquisaPreco.objects.select_related('termo'), termo_id=termo_pk, termo__in=owned_queryset(TermoReferencia, request.user))
         return _pesquisa_preco_xlsx_response(pesquisa)
 
 
-class FornecedorListView(SuperuserRequiredMixin, ListView):
+class FornecedorListView(AdminRequiredMixin, ListView):
     model = Fornecedor
     template_name = 'licitacoes/fornecedor_list.html'
     context_object_name = 'fornecedores'
 
 
-class FornecedorCreateView(SuperuserRequiredMixin, CreateView):
+class FornecedorCreateView(AdminRequiredMixin, CreateView):
     model = Fornecedor
     form_class = FornecedorForm
     template_name = 'licitacoes/form.html'
@@ -1298,7 +1488,7 @@ class FornecedorCreateView(SuperuserRequiredMixin, CreateView):
         return context
 
 
-class FornecedorUpdateView(SuperuserRequiredMixin, UpdateView):
+class FornecedorUpdateView(AdminRequiredMixin, UpdateView):
     model = Fornecedor
     form_class = FornecedorForm
     template_name = 'licitacoes/form.html'
@@ -1311,7 +1501,7 @@ class FornecedorUpdateView(SuperuserRequiredMixin, UpdateView):
         return context
 
 
-class FornecedorDeleteView(SuperuserRequiredMixin, DeleteView):
+class FornecedorDeleteView(AdminRequiredMixin, DeleteView):
     model = Fornecedor
     template_name = 'licitacoes/confirm_delete.html'
     success_url = reverse_lazy('licitacoes:fornecedor_list')
@@ -1330,7 +1520,7 @@ class SessaoCreateView(SuperuserRequiredMixin, CreateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.termo = get_object_or_404(TermoReferencia, pk=kwargs['termo_pk'])
+        self.termo = owned_object_or_404(TermoReferencia, request.user, pk=kwargs['termo_pk'])
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
@@ -1354,7 +1544,7 @@ class SessaoUpdateView(SuperuserRequiredMixin, UpdateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.object = get_object_or_404(SessaoTR, pk=kwargs['pk'], termo_id=kwargs['termo_pk'])
+        self.object = get_object_or_404(SessaoTR, pk=kwargs['pk'], termo_id=kwargs['termo_pk'], termo__in=owned_queryset(TermoReferencia, request.user))
         self.termo = self.object.termo
         return super().dispatch(request, *args, **kwargs)
 
@@ -1384,7 +1574,7 @@ class SessaoDeleteView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
 
     def get_queryset(self):
-        return SessaoTR.objects.filter(termo_id=self.kwargs['termo_pk'])
+        return SessaoTR.objects.filter(termo_id=self.kwargs['termo_pk'], termo__in=owned_queryset(TermoReferencia, self.request.user))
 
     def get_success_url(self):
         termo = self.object.termo
@@ -1398,7 +1588,7 @@ class SessaoClearItemsView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
 
     def get_queryset(self):
-        return SessaoTR.objects.filter(termo_id=self.kwargs['termo_pk'])
+        return SessaoTR.objects.filter(termo_id=self.kwargs['termo_pk'], termo__in=owned_queryset(TermoReferencia, self.request.user))
 
     def form_valid(self, form):
         removed = self.object.itens.count()
@@ -1422,7 +1612,7 @@ class ItemCreateView(SuperuserRequiredMixin, CreateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.sessao = get_object_or_404(SessaoTR, pk=kwargs['sessao_pk'])
+        self.sessao = get_object_or_404(SessaoTR, pk=kwargs['sessao_pk'], termo__in=owned_queryset(TermoReferencia, request.user))
         self.parent = None
         if kwargs.get('parent_pk'):
             self.parent = get_object_or_404(ItemTR, pk=kwargs['parent_pk'], sessao__termo=self.sessao.termo)
@@ -1480,7 +1670,7 @@ class ItemUpdateView(SuperuserRequiredMixin, UpdateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.object = get_object_or_404(ItemTR, pk=kwargs['pk'], sessao__termo__sessoes__id=kwargs['sessao_pk'])
+        self.object = get_object_or_404(ItemTR, pk=kwargs['pk'], sessao__termo__sessoes__id=kwargs['sessao_pk'], sessao__termo__in=owned_queryset(TermoReferencia, request.user))
         self.sessao = self.object.sessao
         return super().dispatch(request, *args, **kwargs)
 
@@ -1520,7 +1710,7 @@ class ItemDeleteView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
 
     def get_queryset(self):
-        return ItemTR.objects.filter(sessao__termo__sessoes__id=self.kwargs['sessao_pk'])
+        return ItemTR.objects.filter(sessao__termo__sessoes__id=self.kwargs['sessao_pk'], sessao__termo__in=owned_queryset(TermoReferencia, self.request.user))
 
     def form_valid(self, form):
         sessao = self.object.sessao
@@ -1538,7 +1728,7 @@ class ItemClearChildrenView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
 
     def get_queryset(self):
-        return ItemTR.objects.filter(sessao__termo__sessoes__id=self.kwargs['sessao_pk'])
+        return ItemTR.objects.filter(sessao__termo__sessoes__id=self.kwargs['sessao_pk'], sessao__termo__in=owned_queryset(TermoReferencia, self.request.user))
 
     def form_valid(self, form):
         removed = clear_item_children(self.object)
@@ -1559,7 +1749,7 @@ class ItemMoveView(SuperuserRequiredMixin, View):
     template_name = 'licitacoes/item_move.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.item = get_object_or_404(ItemTR, pk=kwargs['pk'], sessao__termo__sessoes__id=kwargs['sessao_pk'])
+        self.item = get_object_or_404(ItemTR, pk=kwargs['pk'], sessao__termo__sessoes__id=kwargs['sessao_pk'], sessao__termo__in=owned_queryset(TermoReferencia, request.user))
         self.termo = self.item.sessao.termo
         return super().dispatch(request, *args, **kwargs)
 
@@ -1594,7 +1784,7 @@ class ItemDuplicateView(SuperuserRequiredMixin, View):
     template_name = 'licitacoes/item_move.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.item = get_object_or_404(ItemTR, pk=kwargs['pk'], sessao__termo__sessoes__id=kwargs['sessao_pk'])
+        self.item = get_object_or_404(ItemTR, pk=kwargs['pk'], sessao__termo__sessoes__id=kwargs['sessao_pk'], sessao__termo__in=owned_queryset(TermoReferencia, request.user))
         self.termo = self.item.sessao.termo
         return super().dispatch(request, *args, **kwargs)
 
@@ -1631,7 +1821,7 @@ class TabelaItemCreateView(SuperuserRequiredMixin, CreateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.item = get_item_tabela_1_1(kwargs['sessao_pk'], kwargs['item_pk'])
+        self.item = get_item_tabela_1_1(kwargs['sessao_pk'], kwargs['item_pk'], request.user)
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
@@ -1655,7 +1845,7 @@ class TabelaItemUpdateView(SuperuserRequiredMixin, UpdateView):
     template_name = 'licitacoes/form.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.item = get_item_tabela_1_1(kwargs['sessao_pk'], kwargs['item_pk'])
+        self.item = get_item_tabela_1_1(kwargs['sessao_pk'], kwargs['item_pk'], request.user)
         self.object = get_object_or_404(TabelaItemLinha, pk=kwargs['pk'], item=self.item)
         return super().dispatch(request, *args, **kwargs)
 
@@ -1678,7 +1868,7 @@ class TabelaItemDeleteView(SuperuserRequiredMixin, DeleteView):
     template_name = 'licitacoes/confirm_delete.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.item = get_item_tabela_1_1(kwargs['sessao_pk'], kwargs['item_pk'])
+        self.item = get_item_tabela_1_1(kwargs['sessao_pk'], kwargs['item_pk'], request.user)
         self.object = get_object_or_404(TabelaItemLinha, pk=kwargs['pk'], item=self.item)
         return super().dispatch(request, *args, **kwargs)
 
@@ -1703,7 +1893,7 @@ class TabelaItemDeleteView(SuperuserRequiredMixin, DeleteView):
 
 class TermoExportDocxView(SuperuserRequiredMixin, View):
     def get(self, request, pk):
-        termo = get_object_or_404(TermoReferencia, pk=pk)
+        termo = owned_object_or_404(TermoReferencia, request.user, pk=pk)
         from docx import Document
         from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
         from docx.enum.text import WD_ALIGN_PARAGRAPH

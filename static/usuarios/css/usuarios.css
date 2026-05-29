@@ -1,0 +1,20 @@
+.spi-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem 1rem;
+  margin: .35rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spi-radio-group div {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.spi-radio-group input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}

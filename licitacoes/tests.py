@@ -17,6 +17,7 @@ from .models import (
     PesquisaPreco,
     PesquisaPrecoContato,
     PesquisaPrecoFornecedor,
+    PesquisaPrecoFornecedorNota,
     PesquisaPrecoItemValor,
     SessaoEtpTic,
     SessaoTR,
@@ -45,12 +46,135 @@ from .services import (
 
 
 class LoginTests(TestCase):
-    def test_login_rejeita_usuario_nao_superuser(self):
+    def test_login_autentica_usuario_comum(self):
         User = get_user_model()
         User.objects.create_user(username='comum', password='123')
         response = self.client.post(reverse('login'), {'username': 'comum', 'password': '123'})
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn('_auth_user_id', self.client.session)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('_auth_user_id', self.client.session)
+
+
+class LicitacoesOwnershipTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.joao = User.objects.create_user(username='joao', password='123')
+        self.maria = User.objects.create_user(username='maria', password='123')
+
+    def test_usuario_comum_acessa_licitacoes_e_ve_apenas_tr_criado_por_ele(self):
+        meu_tr = TermoReferencia.objects.create(nome='Meu TR', numero_processo='001', criado_por=self.joao)
+        TermoReferencia.objects.create(nome='TR de Maria', numero_processo='002', criado_por=self.maria)
+        self.client.login(username='joao', password='123')
+
+        home = self.client.get(reverse('licitacoes:home'))
+        listagem = self.client.get(reverse('licitacoes:tr_list'))
+        detalhe_meu = self.client.get(reverse('licitacoes:tr_detail', args=[meu_tr.pk]))
+
+        self.assertEqual(home.status_code, 200)
+        self.assertContains(listagem, 'Meu TR')
+        self.assertNotContains(listagem, 'TR de Maria')
+        self.assertEqual(detalhe_meu.status_code, 200)
+
+    def test_administrador_do_sistema_ve_e_acessa_todos_os_tr(self):
+        admin = get_user_model().objects.create_user(username='staffadmin', password='123', is_staff=True)
+        tr_joao = TermoReferencia.objects.create(nome='TR de Joao', numero_processo='001', criado_por=self.joao)
+        tr_maria = TermoReferencia.objects.create(nome='TR de Maria', numero_processo='002', criado_por=self.maria)
+        self.client.login(username='staffadmin', password='123')
+
+        listagem = self.client.get(reverse('licitacoes:tr_list'))
+        detalhe = self.client.get(reverse('licitacoes:tr_detail', args=[tr_maria.pk]))
+        excluir = self.client.get(reverse('licitacoes:tr_delete', args=[tr_joao.pk]))
+
+        self.assertContains(listagem, 'TR de Joao')
+        self.assertContains(listagem, 'TR de Maria')
+        self.assertContains(listagem, reverse('licitacoes:tr_delete', args=[tr_joao.pk]))
+        self.assertEqual(detalhe.status_code, 200)
+        self.assertEqual(excluir.status_code, 200)
+
+    def test_usuario_comum_nao_acessa_tr_de_outro_usuario_por_url(self):
+        tr_maria = TermoReferencia.objects.create(nome='TR de Maria', numero_processo='002', criado_por=self.maria)
+        self.client.login(username='joao', password='123')
+
+        response = self.client.get(reverse('licitacoes:tr_detail', args=[tr_maria.pk]))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_criador_compartilha_tr_e_usuario_compartilhado_edita_mas_nao_exclui(self):
+        tr = TermoReferencia.objects.create(nome='TR compartilhado', numero_processo='001', criado_por=self.joao)
+        self.client.login(username='joao', password='123')
+
+        share_response = self.client.post(reverse('licitacoes:tr_share', args=[tr.pk]), {'user_id': self.maria.pk})
+
+        self.assertRedirects(share_response, reverse('licitacoes:tr_list'), fetch_redirect_response=False)
+        self.assertTrue(tr.compartilhado_com.filter(pk=self.maria.pk).exists())
+
+        self.client.logout()
+        self.client.login(username='maria', password='123')
+        list_response = self.client.get(reverse('licitacoes:tr_list'))
+        detail_response = self.client.get(reverse('licitacoes:tr_detail', args=[tr.pk]))
+        edit_response = self.client.post(
+            reverse('licitacoes:tr_update', args=[tr.pk]),
+            {'nome': 'TR editado por Maria', 'numero_processo': '001', 'link': ''},
+        )
+        delete_response = self.client.get(reverse('licitacoes:tr_delete', args=[tr.pk]))
+
+        self.assertContains(list_response, 'TR compartilhado')
+        self.assertContains(list_response, 'Editar')
+        self.assertNotContains(list_response, reverse('licitacoes:tr_delete', args=[tr.pk]))
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertRedirects(edit_response, reverse('licitacoes:tr_detail', args=[tr.pk]), fetch_redirect_response=False)
+        self.assertEqual(delete_response.status_code, 404)
+
+    def test_usuario_compartilhado_nao_pode_compartilhar_tr(self):
+        tr = TermoReferencia.objects.create(nome='TR compartilhado', numero_processo='001', criado_por=self.joao)
+        tr.compartilhado_com.add(self.maria)
+        self.client.login(username='maria', password='123')
+
+        response = self.client.post(reverse('licitacoes:tr_share', args=[tr.pk]), {'user_id': self.joao.pk})
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_criacao_de_tr_grava_usuario_criador(self):
+        self.client.login(username='joao', password='123')
+
+        response = self.client.post(
+            reverse('licitacoes:tr_create'),
+            {'nome': 'TR novo', 'numero_processo': '003', 'link': ''},
+        )
+
+        tr = TermoReferencia.objects.get(nome='TR novo')
+        self.assertEqual(tr.criado_por, self.joao)
+        self.assertEqual(tr.atualizado_por, self.joao)
+        self.assertRedirects(response, reverse('licitacoes:tr_detail', args=[tr.pk]), fetch_redirect_response=False)
+
+    def test_usuario_comum_ve_apenas_etp_e_dfd_criados_por_ele(self):
+        EtpTic.objects.create(nome='Meu ETP', numero_processo='001', criado_por=self.joao, usa_editor_dinamico=True)
+        EtpTic.objects.create(nome='ETP de Maria', numero_processo='002', criado_por=self.maria, usa_editor_dinamico=True)
+        Dfd.objects.create(nome='Meu DFD', numero_processo='003', criado_por=self.joao)
+        Dfd.objects.create(nome='DFD de Maria', numero_processo='004', criado_por=self.maria)
+        self.client.login(username='joao', password='123')
+
+        etp_response = self.client.get(reverse('licitacoes:etp_list'))
+        dfd_response = self.client.get(reverse('licitacoes:dfd_list'))
+
+        self.assertContains(etp_response, 'Meu ETP')
+        self.assertNotContains(etp_response, 'ETP de Maria')
+        self.assertContains(dfd_response, 'Meu DFD')
+        self.assertNotContains(dfd_response, 'DFD de Maria')
+
+    def test_usuario_ve_etp_e_dfd_compartilhados(self):
+        etp = EtpTic.objects.create(nome='ETP compartilhado', numero_processo='001', criado_por=self.maria, usa_editor_dinamico=True)
+        dfd = Dfd.objects.create(nome='DFD compartilhado', numero_processo='002', criado_por=self.maria)
+        etp.compartilhado_com.add(self.joao)
+        dfd.compartilhado_com.add(self.joao)
+        self.client.login(username='joao', password='123')
+
+        etp_response = self.client.get(reverse('licitacoes:etp_list'))
+        dfd_response = self.client.get(reverse('licitacoes:dfd_list'))
+
+        self.assertContains(etp_response, 'ETP compartilhado')
+        self.assertContains(dfd_response, 'DFD compartilhado')
+        self.assertNotContains(etp_response, reverse('licitacoes:etp_delete', args=[etp.pk]))
+        self.assertNotContains(dfd_response, reverse('licitacoes:dfd_delete', args=[dfd.pk]))
 
 
 class EtpTicTests(TestCase):
@@ -1622,6 +1746,39 @@ class PesquisaPrecoTests(TestCase):
         self.assertContains(response, 'Fornecedor A')
         self.assertContains(response, 'Quadro comparativo')
         self.assertContains(response, 'Notebook')
+
+    def test_registra_nota_do_fornecedor_da_pesquisa(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor = self.fornecedor()
+        pf = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+
+        response = self.client.post(
+            reverse('licitacoes:pesquisa_preco_fornecedor_nota', args=[self.termo.pk, pf.pk]),
+            {'texto': 'Fornecedor pediu retorno por e-mail.'},
+        )
+
+        nota = PesquisaPrecoFornecedorNota.objects.get(pesquisa_fornecedor=pf)
+        self.assertEqual(nota.texto, 'Fornecedor pediu retorno por e-mail.')
+        self.assertEqual(nota.criado_por.username, 'admin')
+        self.assertRedirects(response, reverse('licitacoes:pesquisa_preco_detail', args=[self.termo.pk]), fetch_redirect_response=False)
+
+    def test_painel_renderiza_botoes_e_timeline_de_notas(self):
+        pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)
+        fornecedor = self.fornecedor()
+        pf = PesquisaPrecoFornecedor.objects.create(pesquisa=pesquisa, fornecedor=fornecedor)
+        for idx in range(6):
+            PesquisaPrecoFornecedorNota.objects.create(
+                pesquisa_fornecedor=pf,
+                texto=f'Nota {idx}',
+                criado_por=get_user_model().objects.get(username='admin'),
+            )
+
+        response = self.client.get(reverse('licitacoes:pesquisa_preco_detail', args=[self.termo.pk]))
+
+        self.assertContains(response, 'Nota')
+        self.assertContains(response, 'Ver anotações (6)')
+        self.assertContains(response, 'Nota 0')
+        self.assertContains(response, 'data-notes-next')
 
     def test_painel_pesquisa_renderiza_multiplos_emails_com_copia_individual(self):
         pesquisa = PesquisaPreco.objects.create(termo=self.termo, tipo=PesquisaPreco.Tipo.AQUISICAO)

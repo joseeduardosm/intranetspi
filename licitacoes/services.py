@@ -625,7 +625,7 @@ def pesquisa_preco_context(pesquisa):
     fornecedores = list(
         pesquisa.fornecedores_pesquisa
         .select_related('fornecedor')
-        .prefetch_related('contatos', 'valores')
+        .prefetch_related('contatos', 'valores', 'notas__criado_por')
         .order_by('fornecedor__razao_social', 'id')
     )
     valores_por_fornecedor = {
@@ -681,6 +681,8 @@ def pesquisa_preco_context(pesquisa):
             'vencimento': vencimento,
             'dias_validade': dias_validade,
             'validade_alerta': validade_alerta,
+            'notas': list(pf.notas.all()),
+            'notas_count': pf.notas.count(),
         })
 
     medias = []

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% load static %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'usuarios/css/usuarios.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{{ titulo }}</h1>
+      <p>{{ descricao }}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 justify-content-end">
+      {% if show_create %}
+        <a class="btn btn-primary" href="{% url 'usuarios:create' %}">Novo usuário</a>
+      {% endif %}
+      {% if request.user.is_superuser %}
+        <a class="btn btn-outline-secondary" href="{% url 'usuarios:ldap_list' %}">Diretórios LDAP</a>
+      {% endif %}
+      <a class="btn btn-light" href="{% url 'root' %}">Voltar</a>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+      <form method="get" class="d-flex flex-wrap gap-2 mb-4">
+        <input class="form-control form-control-lg flex-grow-1" type="search" name="q" value="{{ q }}" placeholder="Pesquisar em todas as colunas">
+        <button class="btn btn-primary" type="submit">Pesquisar</button>
+        {% if q %}<a class="btn btn-light" href="{{ request.path }}">Limpar</a>{% endif %}
+      </form>
+
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 spi-table-wide">
+          <thead>
+            <tr>
+              <th><a href="?{{ sort_links.nome }}">Nome{% if current_sort == "nome" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+              <th><a href="?{{ sort_links.email }}">E-mail{% if current_sort == "email" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+              <th><a href="?{{ sort_links.ramal }}">Ramal{% if current_sort == "ramal" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+              <th><a href="?{{ sort_links.cargo }}">Cargo{% if current_sort == "cargo" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+              <th><a href="?{{ sort_links.setor }}">Setor{% if current_sort == "setor" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+              <th><a href="?{{ sort_links.andar }}">Andar{% if current_sort == "andar" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+              <th><a href="?{{ sort_links.bloco }}">Bloco{% if current_sort == "bloco" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+              <th class="text-end">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for perfil in perfis %}
+              <tr>
+                <td>{{ perfil.nome_completo }}</td>
+                <td>{{ perfil.user.email }}</td>
+                <td>{{ perfil.ramal }}</td>
+                <td>{{ perfil.cargo }}</td>
+                <td>{{ perfil.setor }}</td>
+                <td>{{ perfil.andar }}</td>
+                <td>{{ perfil.bloco }}</td>
+                <td class="text-end">
+                  {% if request.user.is_superuser or request.user.id == perfil.user_id %}
+                    <a class="btn btn-sm btn-outline-secondary" href="{% url 'usuarios:update' perfil.pk %}">Editar</a>
+                  {% endif %}
+                  {% if show_delete and request.user.is_superuser %}
+                    <a class="btn btn-sm btn-outline-danger" href="{% url 'usuarios:delete' perfil.pk %}">Excluir</a>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="8" class="text-muted">Nenhum usuário encontrado.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if is_paginated %}
+        <nav class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-4" aria-label="Paginação de usuários">
+          <div class="text-muted small">
+            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} - {{ page_obj.paginator.count }} usuários
+          </div>
+          <ul class="pagination mb-0">
+            <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+              {% if page_obj.has_previous %}
+                <a class="page-link" href="?{% if pagination_query %}{{ pagination_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}" aria-label="Página anterior">&lt;</a>
+              {% else %}
+                <span class="page-link" aria-hidden="true">&lt;</span>
+              {% endif %}
+            </li>
+
+            {% for page_number in paginator.page_range %}
+              <li class="page-item {% if page_number == page_obj.number %}active{% endif %}">
+                {% if page_number == page_obj.number %}
+                  <span class="page-link">{{ page_number }}</span>
+                {% else %}
+                  <a class="page-link" href="?{% if pagination_query %}{{ pagination_query }}&amp;{% endif %}page={{ page_number }}">{{ page_number }}</a>
+                {% endif %}
+              </li>
+            {% endfor %}
+
+            <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+              {% if page_obj.has_next %}
+                <a class="page-link" href="?{% if pagination_query %}{{ pagination_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}" aria-label="Próxima página">&gt;</a>
+              {% else %}
+                <span class="page-link" aria-hidden="true">&gt;</span>
+              {% endif %}
+            </li>
+          </ul>
+        </nav>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

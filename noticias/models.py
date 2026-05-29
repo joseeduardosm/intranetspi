@@ -9,7 +9,7 @@ class Noticia(models.Model):
         PUBLICADA = 'PUBLICADA', 'Publicada'
 
     imagem_destaque = models.ImageField('Imagem destaque', upload_to='noticias/destaques/')
-    anexo_pdf = models.FileField('PDF anexo', upload_to='noticias/anexos/', blank=True)
+    anexo_pdf = models.FileField('Anexo', upload_to='noticias/anexos/', blank=True)
     titulo = models.CharField('Titulo', max_length=220)
     texto_noticia = models.TextField('Texto da noticia')
     data_publicacao = models.DateTimeField('Data de publicacao', null=True, blank=True)
@@ -25,6 +25,14 @@ class Noticia(models.Model):
 
     def __str__(self):
         return self.titulo
+
+    @property
+    def anexo_nome(self):
+        return self.anexo_pdf.name.rsplit('/', 1)[-1] if self.anexo_pdf else ''
+
+    @property
+    def anexo_e_pdf(self):
+        return self.anexo_nome.lower().endswith('.pdf')
 
     def clean(self):
         super().clean()

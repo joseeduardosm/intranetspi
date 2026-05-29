@@ -30,6 +30,14 @@ def pdf_teste(nome='orientacoes.pdf'):
     )
 
 
+def arquivo_teste(nome='planilha.xlsx'):
+    return SimpleUploadedFile(
+        nome,
+        b'arquivo teste',
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
+
 class NoticiasTests(TestCase):
     def setUp(self):
         self.media_root = tempfile.mkdtemp()
@@ -98,21 +106,20 @@ class NoticiasTests(TestCase):
 
         self.assertTrue(form.is_valid(), form.errors)
 
-    def test_form_rejeita_anexo_que_nao_e_pdf(self):
+    def test_form_aceita_anexo_que_nao_e_pdf(self):
         form = NoticiaForm(
             data={
-                'titulo': 'Com anexo invalido',
+                'titulo': 'Com anexo',
                 'texto_noticia': 'Texto.',
                 'status': Noticia.Status.RASCUNHO,
             },
             files={
                 'imagem_destaque': imagem_teste(),
-                'anexo_pdf': SimpleUploadedFile('arquivo.txt', b'texto', content_type='text/plain'),
+                'anexo_pdf': arquivo_teste(),
             },
         )
 
-        self.assertFalse(form.is_valid())
-        self.assertIn('anexo_pdf', form.errors)
+        self.assertTrue(form.is_valid(), form.errors)
 
     def test_listagem_publica_exibe_somente_publicadas_vencidas(self):
         publicada = self.criar_noticia(titulo='Publicada agora')
@@ -202,6 +209,30 @@ class NoticiasTests(TestCase):
         self.assertContains(response, reverse('noticias:pdf', args=[noticia.pk]))
         self.assertContains(response, 'orientacoes.pdf')
 
+    def test_detalhe_publico_marca_urls_do_texto_como_links(self):
+        noticia = self.criar_noticia(
+            texto_noticia='Consulte http://intranet/ramais/ para buscar contatos.',
+        )
+
+        response = self.client.get(reverse('noticias:public_detail', args=[noticia.pk]))
+
+        self.assertContains(response, '<a href="http://intranet/ramais/"')
+        self.assertContains(response, '>http://intranet/ramais/</a>')
+
+    def test_detalhe_publico_disponibiliza_anexo_nao_pdf_para_download(self):
+        noticia = self.criar_noticia(
+            titulo='Com anexo',
+            texto_noticia='Texto com arquivo.',
+            anexo_pdf='noticias/anexos/planilha.xlsx',
+        )
+
+        response = self.client.get(reverse('noticias:public_detail', args=[noticia.pk]))
+
+        self.assertContains(response, 'Baixar anexo: planilha.xlsx')
+        self.assertContains(response, 'href="/media/noticias/anexos/planilha.xlsx"')
+        self.assertContains(response, 'download')
+        self.assertNotContains(response, '<iframe class="noticia-pdf-viewer"')
+
     def test_pdf_anexo_e_servido_com_permissao_para_iframe(self):
         noticia = self.criar_noticia(titulo='Com PDF')
         noticia.anexo_pdf.save('orientacoes.pdf', pdf_teste(), save=True)
@@ -225,7 +256,7 @@ class NoticiasTests(TestCase):
         home_response = self.client.get(reverse('home'))
 
         self.assertRedirects(root_response, reverse('noticias:public_list'), fetch_redirect_response=False)
-        self.assertRedirects(home_response, reverse('noticias:public_list'), fetch_redirect_response=False)
+        self.assertRedirects(home_response, reverse('root'), fetch_redirect_response=False)
 
     def test_gerenciamento_exige_superusuario(self):
         response = self.client.get(reverse('noticias:manage_list'))

@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% load static %}
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'usuarios/css/usuarios.css' %}">
+  <link rel="stylesheet" href="{% static 'usuarios/css/ramais.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{{ titulo }}</h1>
+      <p>{{ descricao }}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 justify-content-end">
+      <a class="btn btn-light" href="{% url 'root' %}">Voltar</a>
+    </div>
+  </div>
+
+  <section class="ramais-directory">
+    <form method="get" class="ramais-search">
+      <input class="form-control form-control-lg" type="search" name="q" value="{{ q }}" placeholder="Pesquisar por nome, cargo, setor, ramal ou e-mail">
+      <button class="btn btn-primary" type="submit">Pesquisar</button>
+      {% if q %}<a class="btn btn-light" href="{{ request.path }}">Limpar</a>{% endif %}
+    </form>
+
+    {% if perfis %}
+      <div class="ramais-card-grid">
+        {% for perfil in perfis %}
+          <article class="ramal-credit-card">
+            {% if request.user.is_superuser or request.user.id == perfil.user_id %}
+              <div class="dropdown ramal-card-menu">
+                <button class="btn btn-light btn-sm ramal-card-menu-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Opções do ramal">
+                  ...
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li><a class="dropdown-item" href="{% url 'usuarios:update' perfil.pk %}">Editar</a></li>
+                  {% if request.user.is_superuser %}
+                    <li><a class="dropdown-item text-danger" href="{% url 'usuarios:delete' perfil.pk %}">Excluir</a></li>
+                  {% endif %}
+                </ul>
+              </div>
+            {% endif %}
+            <div class="ramal-card-photo">
+              {% if perfil.foto %}
+                <button
+                  class="ramal-photo-trigger"
+                  type="button"
+                  data-bs-toggle="modal"
+                  data-bs-target="#ramalContactModal"
+                  data-name="{{ perfil.nome_completo|default:perfil.user.username }}"
+                  data-cargo="{{ perfil.cargo|default:'-' }}"
+                  data-setor="{{ perfil.setor|default:'-' }}"
+                  data-email="{{ perfil.user.email|default:'-' }}"
+                  data-ramal="{{ perfil.ramal|default:'-' }}"
+                  data-local="{{ perfil.andar_bloco_display|default:'-' }}"
+                  data-photo="{{ perfil.foto.url }}"
+                  aria-label="Ver detalhes de {{ perfil.nome_completo|default:perfil.user.username }}"
+                >
+                  <img src="{{ perfil.foto.url }}" alt="{{ perfil.nome_completo }}">
+                </button>
+              {% endif %}
+            </div>
+            <div class="ramal-card-data">
+              <h2 class="ramal-field ramal-field-name" title="{{ perfil.nome_completo|default:perfil.user.username }}">{{ perfil.nome_completo|default:perfil.user.username }}</h2>
+              <p class="ramal-field ramal-field-cargo" title="{{ perfil.cargo|default:'-' }}">{{ perfil.cargo|default:"-" }}</p>
+              <p class="ramal-field ramal-field-setor" title="{{ perfil.setor|default:'-' }}">{{ perfil.setor|default:"-" }}</p>
+
+              <div class="ramal-card-spacer"></div>
+
+              <p class="ramal-field ramal-field-email" title="{{ perfil.user.email|default:'-' }}">
+                <button
+                  class="ramal-email-trigger"
+                  type="button"
+                  data-email="{{ perfil.user.email }}"
+                  aria-label="Abrir ações para {{ perfil.user.email }}"
+                >{{ perfil.user.email }}</button>
+              </p>
+              <p class="ramal-field ramal-field-ramal" title="{{ perfil.ramal|default:'-' }}">{{ perfil.ramal|default:"-" }}</p>
+              <p class="ramal-field ramal-field-local" title="{{ perfil.andar_bloco_display|default:'-' }}">{{ perfil.andar_bloco_display|default:"-" }}</p>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+
+      {% if is_paginated %}
+        <nav class="ramais-pagination" aria-label="Paginacao de ramais">
+          <div class="text-muted small">
+            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} - {{ page_obj.paginator.count }} ramais
+          </div>
+          <ul class="pagination mb-0">
+            <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+              {% if page_obj.has_previous %}
+                <a class="page-link" href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}page={{ page_obj.previous_page_number }}" aria-label="Página anterior">&lt;</a>
+              {% else %}
+                <span class="page-link" aria-hidden="true">&lt;</span>
+              {% endif %}
+            </li>
+
+            {% for page_number in paginator.page_range %}
+              <li class="page-item {% if page_number == page_obj.number %}active{% endif %}">
+                {% if page_number == page_obj.number %}
+                  <span class="page-link">{{ page_number }}</span>
+                {% else %}
+                  <a class="page-link" href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}page={{ page_number }}">{{ page_number }}</a>
+                {% endif %}
+              </li>
+            {% endfor %}
+
+            <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+              {% if page_obj.has_next %}
+                <a class="page-link" href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}page={{ page_obj.next_page_number }}" aria-label="Próxima página">&gt;</a>
+              {% else %}
+                <span class="page-link" aria-hidden="true">&gt;</span>
+              {% endif %}
+            </li>
+          </ul>
+        </nav>
+      {% endif %}
+    {% else %}
+      <div class="alert alert-light border mb-0">Nenhum ramal encontrado.</div>
+    {% endif %}
+  </section>
+
+  <div class="modal fade" id="ramalContactModal" tabindex="-1" aria-labelledby="ramalContactModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered ramal-contact-dialog">
+      <div class="modal-content ramal-contact-modal">
+        <button class="btn-close ramal-contact-close" type="button" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        <div class="ramal-contact-card">
+          <div class="ramal-contact-photo">
+            <img id="ramalContactPhoto" src="" alt="">
+          </div>
+          <div class="ramal-contact-data">
+            <section class="ramal-contact-field ramal-contact-field-name">
+              <span>Nome</span>
+              <h2 id="ramalContactModalTitle"></h2>
+            </section>
+
+            <section class="ramal-contact-field ramal-contact-field-cargo">
+              <span>Cargo</span>
+              <p id="ramalContactCargo"></p>
+            </section>
+
+            <section class="ramal-contact-field ramal-contact-field-setor">
+              <span>Setor</span>
+              <p id="ramalContactSetor"></p>
+            </section>
+
+            <section class="ramal-contact-field ramal-contact-field-email">
+              <span>E-mail</span>
+              <button
+                id="ramalContactEmail"
+                class="ramal-contact-email ramal-email-trigger"
+                type="button"
+                data-email=""
+                aria-label="Abrir ações para o e-mail"
+              ></button>
+            </section>
+
+            <section class="ramal-contact-field ramal-contact-field-ramal">
+              <span>Ramal</span>
+              <p id="ramalContactRamal"></p>
+            </section>
+
+            <section class="ramal-contact-field ramal-contact-field-local">
+              <span>Localização</span>
+              <p id="ramalContactLocal"></p>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ramal-email-popover" id="ramalEmailPopover" role="tooltip" hidden>
+    <div class="ramal-email-popover-address" id="ramalEmailPopoverAddress"></div>
+    <div class="ramal-email-popover-actions">
+      <a class="ramal-email-action" id="ramalEmailTeams" href="#" target="_blank" rel="noopener">
+        <span class="ramal-email-logo ramal-email-logo-teams" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="7" y="4" width="13" height="14" rx="2"></rect>
+            <rect x="3" y="7" width="10" height="10" rx="1.5"></rect>
+            <path d="M6 10h4M8 10v5"></path>
+          </svg>
+        </span>
+        <span>Teams</span>
+      </a>
+      <a class="ramal-email-action" id="ramalEmailOutlook" href="#" target="_blank" rel="noopener">
+        <span class="ramal-email-logo ramal-email-logo-outlook" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="4" y="6" width="15" height="12" rx="2"></rect>
+            <rect x="2" y="8" width="10" height="8" rx="1.5"></rect>
+            <path d="M5 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0M12 9l4 3l4-3"></path>
+          </svg>
+        </span>
+        <span>Outlook</span>
+      </a>
+      <button class="ramal-email-action" id="ramalEmailCopy" type="button">
+        <span class="ramal-email-logo ramal-email-logo-copy" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="8" y="8" width="10" height="12" rx="2"></rect>
+            <path d="M6 16h-.5A1.5 1.5 0 0 1 4 14.5v-9A1.5 1.5 0 0 1 5.5 4h8A1.5 1.5 0 0 1 15 5.5V6"></path>
+          </svg>
+        </span>
+        <span id="ramalEmailCopyText">Copiar</span>
+      </button>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  <script>
+    const ramalContactModal = document.getElementById('ramalContactModal');
+    if (ramalContactModal) {
+      ramalContactModal.addEventListener('show.bs.modal', (event) => {
+        const trigger = event.relatedTarget;
+        if (!trigger) return;
+
+        const name = trigger.dataset.name || '-';
+        const photo = trigger.dataset.photo || '';
+
+        document.getElementById('ramalContactModalTitle').textContent = name;
+        document.getElementById('ramalContactCargo').textContent = trigger.dataset.cargo || '-';
+        document.getElementById('ramalContactSetor').textContent = trigger.dataset.setor || '-';
+        const modalEmail = document.getElementById('ramalContactEmail');
+        const email = trigger.dataset.email || '-';
+        modalEmail.textContent = email;
+        modalEmail.dataset.email = email;
+        modalEmail.title = email;
+        modalEmail.setAttribute('aria-label', `Abrir ações para ${email}`);
+        document.getElementById('ramalContactRamal').textContent = trigger.dataset.ramal || '-';
+        document.getElementById('ramalContactLocal').textContent = trigger.dataset.local || '-';
+
+        const photoElement = document.getElementById('ramalContactPhoto');
+        photoElement.src = photo;
+        photoElement.alt = name;
+      });
+    }
+
+    const ramalEmailPopover = document.getElementById('ramalEmailPopover');
+    const ramalEmailPopoverAddress = document.getElementById('ramalEmailPopoverAddress');
+    const ramalEmailTeams = document.getElementById('ramalEmailTeams');
+    const ramalEmailOutlook = document.getElementById('ramalEmailOutlook');
+    const ramalEmailCopy = document.getElementById('ramalEmailCopy');
+    const ramalEmailCopyText = document.getElementById('ramalEmailCopyText');
+    let ramalActiveEmail = '';
+
+    function hideRamalEmailPopover() {
+      if (!ramalEmailPopover) return;
+      ramalEmailPopover.hidden = true;
+      ramalActiveEmail = '';
+    }
+
+    function positionRamalEmailPopover(trigger) {
+      const rect = trigger.getBoundingClientRect();
+      const popoverRect = ramalEmailPopover.getBoundingClientRect();
+      const gap = 8;
+      let top = rect.bottom + gap;
+      let left = rect.left;
+
+      if (left + popoverRect.width > window.innerWidth - 12) {
+        left = window.innerWidth - popoverRect.width - 12;
+      }
+      if (top + popoverRect.height > window.innerHeight - 12) {
+        top = rect.top - popoverRect.height - gap;
+      }
+
+      ramalEmailPopover.style.left = `${Math.max(12, left)}px`;
+      ramalEmailPopover.style.top = `${Math.max(12, top)}px`;
+    }
+
+    function showRamalEmailPopover(trigger) {
+      if (!ramalEmailPopover) return;
+      const email = (trigger.dataset.email || trigger.textContent || '').trim();
+      if (!email || email === '-') return;
+
+      ramalActiveEmail = email;
+      ramalEmailPopoverAddress.textContent = email;
+      ramalEmailTeams.href = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`;
+      ramalEmailOutlook.href = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(email)}`;
+      ramalEmailCopyText.textContent = 'Copiar';
+      ramalEmailPopover.hidden = false;
+      positionRamalEmailPopover(trigger);
+    }
+
+    async function copyRamalEmail() {
+      if (!ramalActiveEmail) return;
+      try {
+        await navigator.clipboard.writeText(ramalActiveEmail);
+      } catch (error) {
+        const input = document.createElement('input');
+        input.value = ramalActiveEmail;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+      }
+      ramalEmailCopyText.textContent = 'Copiado';
+      window.setTimeout(() => {
+        if (ramalActiveEmail) ramalEmailCopyText.textContent = 'Copiar';
+      }, 1400);
+    }
+
+    document.addEventListener('click', (event) => {
+      const trigger = event.target.closest('.ramal-email-trigger');
+      if (trigger) {
+        event.preventDefault();
+        event.stopPropagation();
+        showRamalEmailPopover(trigger);
+        return;
+      }
+
+      if (ramalEmailPopover && !ramalEmailPopover.hidden && !event.target.closest('#ramalEmailPopover')) {
+        hideRamalEmailPopover();
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') hideRamalEmailPopover();
+    });
+
+    window.addEventListener('resize', hideRamalEmailPopover);
+    ramalEmailCopy?.addEventListener('click', copyRamalEmail);
+  </script>
+{% endblock %}

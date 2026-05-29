@@ -62,7 +62,7 @@ class NoticiaPdfView(DetailView):
 
     def get(self, request, *args, **kwargs):
         noticia = self.get_object()
-        if not noticia.anexo_pdf:
+        if not noticia.anexo_pdf or not noticia.anexo_e_pdf:
             raise Http404('PDF nao encontrado.')
         response = FileResponse(noticia.anexo_pdf.open('rb'), content_type='application/pdf')
         response['Content-Disposition'] = 'inline'

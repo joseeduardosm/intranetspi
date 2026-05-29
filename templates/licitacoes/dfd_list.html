@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% load static %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'licitacoes/css/licitacoes.css' %}">{% endblock %}
 
 {% block content %}
   <div class="spi-page-title d-flex justify-content-between align-items-start">
@@ -37,8 +39,13 @@
                   {% csrf_token %}
                   <button class="btn btn-sm btn-outline-secondary" type="submit">Duplicar</button>
                 </form>
+                {% if is_system_admin or dfd.criado_por_id == request.user.id %}
+                  <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#share-dfd-{{ dfd.pk }}">Compartilhar</button>
+                {% endif %}
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'licitacoes:dfd_export' dfd.pk %}">DOCX</a>
-                <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:dfd_delete' dfd.pk %}">Excluir</a>
+                {% if is_system_admin or dfd.criado_por_id == request.user.id %}
+                  <a class="btn btn-sm btn-outline-danger" href="{% url 'licitacoes:dfd_delete' dfd.pk %}">Excluir</a>
+                {% endif %}
               </td>
             </tr>
           {% empty %}
@@ -48,4 +55,32 @@
       </table>
     </div>
   </div>
+  {% for dfd in dfds %}
+    {% if is_system_admin or dfd.criado_por_id == request.user.id %}
+      <div class="modal fade" id="share-dfd-{{ dfd.pk }}" tabindex="-1" aria-labelledby="share-dfd-label-{{ dfd.pk }}" aria-hidden="true">
+        <div class="modal-dialog">
+          <form class="modal-content" method="post" action="{% url 'licitacoes:dfd_share' dfd.pk %}">
+            {% csrf_token %}
+            <div class="modal-header">
+              <h2 class="modal-title fs-5" id="share-dfd-label-{{ dfd.pk }}">Compartilhar DFD</h2>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+              <label class="form-label" for="share-dfd-user-{{ dfd.pk }}">Usuario</label>
+              <select class="form-select" id="share-dfd-user-{{ dfd.pk }}" name="user_id" required>
+                <option value="">Selecione</option>
+                {% for usuario in shareable_users %}
+                  <option value="{{ usuario.pk }}">{{ usuario.get_full_name|default:usuario.username }} ({{ usuario.username }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+              <button type="submit" class="btn btn-primary">Compartilhar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+  {% endfor %}
 {% endblock %}

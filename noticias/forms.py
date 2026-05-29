@@ -1,6 +1,4 @@
 from django import forms
-from django.core.exceptions import ValidationError
-
 from .models import Noticia
 
 
@@ -36,15 +34,5 @@ class NoticiaForm(BootstrapModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['data_publicacao'].input_formats = ['%Y-%m-%dT%H:%M']
-        self.fields['anexo_pdf'].help_text = 'Opcional. Envie um arquivo PDF para exibir ao final da noticia.'
-        self.fields['anexo_pdf'].widget.attrs['accept'] = 'application/pdf,.pdf'
-
-    def clean_anexo_pdf(self):
-        anexo = self.cleaned_data.get('anexo_pdf')
-        if not anexo:
-            return anexo
-        nome = anexo.name.lower()
-        content_type = getattr(anexo, 'content_type', '')
-        if not nome.endswith('.pdf') or content_type not in {'', 'application/pdf', 'application/x-pdf'}:
-            raise ValidationError('Envie um arquivo PDF valido.')
-        return anexo
+        self.fields['anexo_pdf'].label = 'Anexo'
+        self.fields['anexo_pdf'].help_text = 'Opcional. PDFs serão exibidos na postagem; outros arquivos ficarão disponíveis para download.'
