@@ -10,7 +10,7 @@ Todas as mudancas importantes do Aplicacoes SPI serao documentadas neste arquivo
 - Adicionado modulo `assinatura_e_mail`, com formulario autenticado, pre-preenchimento por perfil, previa e download de assinatura institucional em PNG.
 - Adicionado suporte ao dominio `portal.spi.sp.gov.br`, mantendo compatibilidade com os acessos legados por `intranet.spi.sp.gov.br`.
 - Adicionada ordenacao manual de itens da navbar pela tela de gerenciamento, refletindo imediatamente na barra publica.
-- Adicionada carga estruturada do arquivo `docs/trv2.md` no ETP TIC `8`, posicionada apos o item `12.2` e renumerada pelo proprio app.
+- Adicionada carga estruturada de requisitos no ETP TIC `8`, posicionada apos o item `12.2` e renumerada pelo proprio app.
 
 ### Alterado
 
@@ -156,7 +156,7 @@ Todas as mudancas importantes do Aplicacoes SPI serao documentadas neste arquivo
 
 - Ajustada a exportacao do TR para remover recuos em itens e subitens.
 - Atualizadas regras de duplicacao para preservar linhas tabeladas vinculadas aos itens.
-- Atualizado `.gitignore` para ignorar `docs/` e backups locais `db.sqlite3*`.
+- Atualizado `.gitignore` para ignorar arquivos locais de apoio e backups `db.sqlite3*`.
 
 ## [0.1.0] - 2026-05-18
 
@@ -165,7 +165,6 @@ Todas as mudancas importantes do Aplicacoes SPI serao documentadas neste arquivo
 - Publicada a base inicial do projeto Django Aplicacoes SPI.
 - Adicionado modulo de licitacoes com modelos, formularios, servicos, rotas, views e templates.
 - Adicionados arquivos estaticos, templates base e tela de login.
-- Adicionado documento modelo em `docs/tr-modelo.docx`.
 - Adicionado `requirements.txt` com as dependencias do ambiente atual.
 - Adicionado `.gitignore` para evitar versionar ambiente virtual, banco SQLite local, caches e arquivos de ambiente.
 
