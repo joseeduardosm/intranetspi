@@ -56,7 +56,17 @@
               <td>{{ item.titulo }}</td>
               <td>{{ item.parent|default:"-" }}</td>
               <td>{% if item.url %}<code>{{ item.url }}</code>{% else %}<span class="text-muted">-</span>{% endif %}</td>
-              <td>{{ item.ordem }}</td>
+              <td>
+                <div class="d-inline-flex align-items-center gap-2">
+                  <span>{{ item.ordem }}</span>
+                  <form method="post" action="{% url 'navbar:move' item.pk %}" class="d-inline-flex align-items-center gap-1">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit" name="direction" value="up" {% if not item.can_move_up %}disabled{% endif %} aria-label="Mover {{ item.titulo }} para cima">↑</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="submit" name="direction" value="down" {% if not item.can_move_down %}disabled{% endif %} aria-label="Mover {{ item.titulo }} para baixo">↓</button>
+                  </form>
+                </div>
+              </td>
               <td><span class="badge text-bg-{% if item.ativo %}success{% else %}secondary{% endif %}">{% if item.ativo %}Ativo{% else %}Inativo{% endif %}</span></td>
               <td>{% if item.abrir_nova_aba %}Sim{% else %}Nao{% endif %}</td>
               <td class="text-end">

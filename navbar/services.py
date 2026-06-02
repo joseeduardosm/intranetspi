@@ -1,5 +1,7 @@
 from collections import defaultdict
 
+from django.db import transaction
+
 from .models import NavbarItem
 
 
@@ -13,3 +15,56 @@ def active_navbar_tree():
         else:
             roots.append(item)
     return [{'item': item, 'children': children_by_parent.get(item.id, [])} for item in roots]
+
+
+def ordered_siblings(parent_id):
+    return list(
+        NavbarItem.objects.filter(parent_id=parent_id)
+        .select_related('parent')
+        .order_by('ordem', 'titulo', 'id')
+    )
+
+
+@transaction.atomic
+def normalize_navbar_branch(parent_id):
+    siblings = ordered_siblings(parent_id)
+    for index, item in enumerate(siblings, start=1):
+        if item.ordem != index:
+            NavbarItem.objects.filter(pk=item.pk).update(ordem=index)
+
+
+@transaction.atomic
+def move_navbar_item(item, direction):
+    siblings = ordered_siblings(item.parent_id)
+    index_by_id = {sibling.id: index for index, sibling in enumerate(siblings)}
+    current_index = index_by_id.get(item.id)
+    if current_index is None:
+        return False
+
+    target_index = current_index - 1 if direction == 'up' else current_index + 1
+    if target_index < 0 or target_index >= len(siblings):
+        return False
+
+    siblings[current_index], siblings[target_index] = siblings[target_index], siblings[current_index]
+    for index, sibling in enumerate(siblings, start=1):
+        if sibling.ordem != index:
+            NavbarItem.objects.filter(pk=sibling.pk).update(ordem=index)
+    return True
+
+
+def navbar_move_state(items):
+    state = {}
+    siblings_by_parent = {}
+
+    for item in items:
+        siblings_by_parent.setdefault(item.parent_id, ordered_siblings(item.parent_id))
+
+    for parent_id, siblings in siblings_by_parent.items():
+        total = len(siblings)
+        for index, sibling in enumerate(siblings):
+            state[sibling.id] = {
+                'up': index > 0,
+                'down': index < total - 1,
+            }
+
+    return state

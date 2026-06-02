@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}<link rel="stylesheet" href="{% static 'atalhos/css/atalhos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Excluir atalho</h1>
+    <p>Confirme a exclusao do atalho selecionado.</p>
+  </div>
+
+  <form method="post" class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+      {% csrf_token %}
+      <p class="mb-0">Tem certeza que deseja excluir "{{ object.titulo }}"?</p>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-end gap-2 p-3">
+      <a class="btn btn-light" href="{% url 'atalhos:manage_list' %}">Cancelar</a>
+      <button class="btn btn-danger" type="submit">Excluir</button>
+    </div>
+  </form>
+{% endblock %}

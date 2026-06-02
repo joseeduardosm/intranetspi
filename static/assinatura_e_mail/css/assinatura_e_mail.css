@@ -1,0 +1,62 @@
+.assinatura-email-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 480px) minmax(320px, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.assinatura-email-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.assinatura-email-preview-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.assinatura-email-preview-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 420px;
+  border-radius: 8px;
+  background: #f5f7fb;
+  border: 1px solid rgba(31, 45, 74, .12);
+}
+
+.assinatura-email-preview-frame img {
+  width: min(100%, 760px);
+  height: auto;
+  image-rendering: auto;
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, .14);
+  background: #fff;
+}
+
+.assinatura-email-preview-empty {
+  min-height: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #667085;
+  border-radius: 8px;
+  background: #f5f7fb;
+  border: 1px dashed rgba(31, 45, 74, .2);
+  padding: 1rem;
+}
+
+@media (max-width: 991.98px) {
+  .assinatura-email-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .assinatura-email-preview-frame img {
+    width: 100%;
+    height: auto;
+  }
+}

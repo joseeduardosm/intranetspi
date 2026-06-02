@@ -11,60 +11,89 @@
         <h1>Noticias</h1>
         <p>Comunicados, informes e atualizacoes institucionais.</p>
       </div>
-      {% if request.user.is_authenticated and request.user.is_superuser %}
-        <a class="btn btn-outline-secondary" href="{% url 'noticias:manage_list' %}">Gerenciar</a>
-      {% endif %}
+      <div class="d-flex gap-2">
+        {% if request.user.is_authenticated and request.user.is_superuser %}
+          <a class="btn btn-outline-secondary" href="{% url 'atalhos:manage_list' %}">Gerenciar atalhos</a>
+          <a class="btn btn-outline-secondary" href="{% url 'noticias:manage_list' %}">Gerenciar</a>
+        {% endif %}
+      </div>
     </div>
 
-    {% if carousel_noticias %}
-      <section class="noticias-feature-layout">
-        <div id="noticiasCarousel" class="carousel slide noticias-hero" data-bs-ride="carousel" data-bs-interval="6500">
-          <div class="carousel-inner">
-            {% for noticia in carousel_noticias %}
-              <div class="carousel-item {% if forloop.first %}active{% endif %}">
-                <a class="noticias-hero-link" href="{% url 'noticias:public_detail' noticia.pk %}">
-                  <img src="{{ noticia.imagem_destaque.url }}" class="noticias-hero-img" alt="{{ noticia.titulo }}">
-                  <span class="noticias-hero-caption">
-                    {% if noticia.fixada %}<span class="noticias-kicker">Destaque</span>{% endif %}
-                    <strong class="noticias-fit-title" data-fit-title>{{ noticia.titulo }}</strong>
-                  </span>
-                </a>
+    <section class="noticias-home-layout">
+      <div class="noticias-home-main">
+        {% if carousel_noticias %}
+          <section class="noticias-feature-layout">
+            <div class="noticias-feature-hero">
+              <div id="noticiasCarousel" class="carousel slide noticias-hero" data-bs-ride="carousel" data-bs-interval="6500">
+                <div class="carousel-inner">
+                  {% for noticia in carousel_noticias %}
+                    <div class="carousel-item {% if forloop.first %}active{% endif %}">
+                      <a class="noticias-hero-link" href="{% url 'noticias:public_detail' noticia.pk %}">
+                        <img src="{{ noticia.imagem_destaque.url }}" class="noticias-hero-img" alt="{{ noticia.titulo }}">
+                        <span class="noticias-hero-caption">
+                          {% if noticia.fixada %}<span class="noticias-kicker">Destaque</span>{% endif %}
+                          <strong class="noticias-fit-title" data-fit-title>{{ noticia.titulo }}</strong>
+                        </span>
+                      </a>
+                    </div>
+                  {% endfor %}
+                </div>
+                {% if carousel_noticias|length > 1 %}
+                  <button class="carousel-control-prev" type="button" data-bs-target="#noticiasCarousel" data-bs-slide="prev">
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Anterior</span>
+                  </button>
+                  <button class="carousel-control-next" type="button" data-bs-target="#noticiasCarousel" data-bs-slide="next">
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Proximo</span>
+                  </button>
+                {% endif %}
               </div>
-            {% endfor %}
-          </div>
-          {% if carousel_noticias|length > 1 %}
-            <button class="carousel-control-prev" type="button" data-bs-target="#noticiasCarousel" data-bs-slide="prev">
-              <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-              <span class="visually-hidden">Anterior</span>
-            </button>
-            <button class="carousel-control-next" type="button" data-bs-target="#noticiasCarousel" data-bs-slide="next">
-              <span class="carousel-control-next-icon" aria-hidden="true"></span>
-              <span class="visually-hidden">Proximo</span>
-            </button>
-          {% endif %}
-        </div>
+            </div>
 
-        <div class="noticias-side-grid">
-          {% for slot in grid_slots %}
-            {% if slot.noticia %}
-              <a class="noticias-card" href="{% url 'noticias:public_detail' slot.noticia.pk %}">
-                <img src="{{ slot.noticia.imagem_destaque.url }}" alt="{{ slot.noticia.titulo }}">
-                <span class="noticias-card-title noticias-fit-title" data-fit-title>{{ slot.noticia.titulo }}</span>
-              </a>
-            {% else %}
-              <div class="noticias-empty-card" aria-hidden="true"></div>
-            {% endif %}
-          {% endfor %}
-          <a class="noticias-more-card" href="{% url 'noticias:archive' %}" aria-label="Ver mais noticias">
-            <span>Ver mais</span>
-          </a>
-        </div>
-      </section>
-    {% else %}
-      <div class="card border-0 shadow-sm">
-        <div class="card-body p-4 text-muted">Nenhuma noticia publicada no momento.</div>
+            <div class="noticias-feature-bottom-left">
+              {% for slot in bottom_slots %}
+                {% if slot.noticia %}
+                  <a class="noticias-list-card noticias-home-list-card" href="{% url 'noticias:public_detail' slot.noticia.pk %}">
+                    <img src="{{ slot.noticia.imagem_destaque.url }}" alt="{{ slot.noticia.titulo }}">
+                    <span>
+                      <strong>{{ slot.noticia.titulo }}</strong>
+                      <small>{{ slot.noticia.data_publicacao|date:"d/m/Y H:i" }}</small>
+                    </span>
+                  </a>
+                {% else %}
+                  <div class="noticias-empty-card" aria-hidden="true"></div>
+                {% endif %}
+              {% endfor %}
+            </div>
+
+            <a class="noticias-more-card noticias-feature-more" href="{% url 'noticias:archive' %}" aria-label="Ver todas as notícias publicadas">
+              <span class="noticias-more-card-copy noticias-fit-title" data-fit-title data-max-size="44" data-min-size="16">Ver todas as notícias publicadas</span>
+            </a>
+          </section>
+        {% else %}
+          <div class="card border-0 shadow-sm">
+            <div class="card-body p-4 text-muted">Nenhuma noticia publicada no momento.</div>
+          </div>
+        {% endif %}
       </div>
-    {% endif %}
+
+      <aside class="noticias-shortcuts-panel" aria-label="Atalhos">
+        <div class="noticias-shortcuts-header">
+          <h2>Atalhos</h2>
+        </div>
+        <div class="noticias-shortcuts-grid">
+          {% for atalho in atalhos_ativos %}
+            <a class="noticias-shortcut-card" href="{{ atalho.url }}" target="_blank" rel="noopener noreferrer">
+              <img src="{{ atalho.imagem.url }}" alt="{{ atalho.titulo }}">
+              <span class="noticias-shortcut-footer noticias-fit-title" data-fit-title data-max-size="20" data-min-size="8">{{ atalho.titulo }}</span>
+            </a>
+          {% empty %}
+            <div class="noticias-shortcuts-empty">Nenhum atalho ativo.</div>
+          {% endfor %}
+        </div>
+      </aside>
+    </section>
   </div>
 {% endblock %}
 

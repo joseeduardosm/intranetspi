@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}<link rel="stylesheet" href="{% static 'atalhos/css/atalhos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{% if object %}Editar atalho{% else %}Novo atalho{% endif %}</h1>
+      <p>Configure o card que sera exibido na home de noticias.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'atalhos:manage_list' %}">Voltar</a>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="row g-3">
+        {% for field in form %}
+          <div class="col-12 {% if field.name == 'ordem' %}col-xl-4{% endif %}">
+            {% if field.name == 'ativo' %}
+              <div class="form-check mt-2">
+                {{ field }}
+                <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              </div>
+            {% else %}
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+            {% endif %}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-end gap-2 p-3">
+      <a class="btn btn-light" href="{% url 'atalhos:manage_list' %}">Cancelar</a>
+      <button class="btn btn-primary" type="submit">Salvar</button>
+    </div>
+  </form>
+{% endblock %}

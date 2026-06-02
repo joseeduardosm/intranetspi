@@ -34,8 +34,11 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     '10.23.1.245',
     '10.23.1.243',
+    '100.94.53.27',
     'intranet',
     'intranet.spi.sp.gov.br',
+    'portal',
+    'portal.spi.sp.gov.br',
 ]
 
 
@@ -48,6 +51,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'assinatura_e_mail',
+    'atalhos',
     'licitacoes',
     'navbar',
     'noticias',

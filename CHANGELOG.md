@@ -2,6 +2,31 @@
 
 Todas as mudancas importantes do Aplicacoes SPI serao documentadas neste arquivo.
 
+## [0.8.0] - 2026-06-01
+
+### Adicionado
+
+- Adicionado modulo `atalhos`, com CRUD administrativo, validacao de links internos e externos e exibicao publica na home de noticias.
+- Adicionado modulo `assinatura_e_mail`, com formulario autenticado, pre-preenchimento por perfil, previa e download de assinatura institucional em PNG.
+- Adicionado suporte ao dominio `portal.spi.sp.gov.br`, mantendo compatibilidade com os acessos legados por `intranet.spi.sp.gov.br`.
+- Adicionada ordenacao manual de itens da navbar pela tela de gerenciamento, refletindo imediatamente na barra publica.
+- Adicionada carga estruturada do arquivo `docs/trv2.md` no ETP TIC `8`, posicionada apos o item `12.2` e renumerada pelo proprio app.
+
+### Alterado
+
+- Alterada a home publica de noticias para layout em duas colunas, com noticias a esquerda e painel de atalhos a direita.
+- Alterada a grade principal de noticias para concentrar o slider na faixa superior e reposicionar os cards menores abaixo dele.
+- Alterados os cards de atalhos para tamanho fixo em duas colunas, com rodape sem quebra e ajuste dinamico de fonte.
+- Alterado o card "Ver todas as noticias publicadas" para usar bloco proprio, sem imagem, com centralizacao e preenchimento tipografico do placeholder.
+- Alterado o slider de noticias para usar preenchimento proporcional da imagem, evitando distorcao.
+- Alterada a previa da assinatura de e-mail para preservar o layout-base de referencia e ampliar a exibicao na interface.
+
+### Corrigido
+
+- Corrigida a ausencia da tabela inicial de `atalhos` no banco local.
+- Corrigidos artefatos visuais na geracao da assinatura de e-mail, incluindo sobra de texto no bloco institucional e na area do telefone.
+- Corrigido o encaixe do card final da home de noticias, removendo herancas indevidas dos cards com imagem.
+
 ## [0.7.0] - 2026-05-29
 
 ### Adicionado

@@ -104,3 +104,45 @@ class NavbarTests(TestCase):
         delete_response = self.client.post(reverse('navbar:delete', args=[item.pk]))
         self.assertFalse(NavbarItem.objects.filter(pk=item.pk).exists())
         self.assertRedirects(delete_response, reverse('navbar:manage_list'), fetch_redirect_response=False)
+
+    def test_superusuario_reordena_itens_na_listagem_e_navbar_reflete_ordem(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+
+        primeiro = NavbarItem.objects.create(titulo='Primeiro', url='/primeiro/', ordem=1)
+        segundo = NavbarItem.objects.create(titulo='Segundo', url='/segundo/', ordem=2)
+        terceiro = NavbarItem.objects.create(titulo='Terceiro', url='/terceiro/', ordem=3)
+
+        response = self.client.get(reverse('navbar:manage_list'))
+        self.assertContains(response, reverse('navbar:move', args=[segundo.pk]))
+
+        move_response = self.client.post(
+            reverse('navbar:move', args=[terceiro.pk]),
+            {'direction': 'up', 'next': reverse('navbar:manage_list')},
+        )
+        self.assertRedirects(move_response, reverse('navbar:manage_list'), fetch_redirect_response=False)
+
+        ordem_atual = list(NavbarItem.objects.filter(parent__isnull=True).order_by('ordem', 'id').values_list('titulo', flat=True))
+        self.assertEqual(ordem_atual, ['Primeiro', 'Terceiro', 'Segundo'])
+
+        tree = active_navbar_tree()
+        self.assertEqual([entry['item'].titulo for entry in tree], ['Primeiro', 'Terceiro', 'Segundo'])
+
+    def test_reordenacao_funciona_entre_irmaos_do_mesmo_pai(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+
+        parent = NavbarItem.objects.create(titulo='Menu', ordem=1)
+        child_a = NavbarItem.objects.create(titulo='Filho A', url='/a/', parent=parent, ordem=1)
+        child_b = NavbarItem.objects.create(titulo='Filho B', url='/b/', parent=parent, ordem=2)
+        NavbarItem.objects.create(titulo='Outro menu', url='/outro/', ordem=2)
+
+        self.client.post(
+            reverse('navbar:move', args=[child_b.pk]),
+            {'direction': 'up', 'next': reverse('navbar:manage_list')},
+        )
+
+        children = active_navbar_tree()[0]['children']
+        self.assertEqual([child.titulo for child in children], ['Filho B', 'Filho A'])

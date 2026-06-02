@@ -10,6 +10,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from atalhos.models import Atalho
+
 from .forms import NoticiaForm
 from .models import Noticia
 
@@ -143,7 +145,7 @@ class NoticiasTests(TestCase):
         self.assertNotContains(response, 'Agendada futura')
         self.assertNotContains(response, 'Publicada futura')
 
-    def test_grid_lateral_usa_noticias_apos_o_destaque_principal(self):
+    def test_home_distribui_noticias_nos_slots_do_layout(self):
         noticias = [
             self.criar_noticia(
                 titulo=f'Noticia {idx}',
@@ -154,12 +156,13 @@ class NoticiasTests(TestCase):
 
         response = self.client.get(reverse('noticias:public_list'))
 
-        grid_slots = response.context['grid_slots']
+        bottom_slots = response.context['bottom_slots']
         self.assertEqual(response.context['carousel_noticias'][0], noticias[0])
-        self.assertEqual([slot['noticia'] for slot in grid_slots], noticias[1:3])
+        self.assertEqual([slot['noticia'] for slot in bottom_slots], noticias[1:3])
         self.assertContains(response, reverse('noticias:archive'))
         self.assertContains(response, 'Ver mais')
-        self.assertNotContains(response, 'noticias-list-card')
+        self.assertContains(response, 'noticias-home-list-card')
+        self.assertContains(response, 'noticias-feature-bottom-left')
 
     def test_archive_lista_todas_as_noticias_publicadas(self):
         primeira = self.criar_noticia(titulo='Primeira noticia')
@@ -257,6 +260,71 @@ class NoticiasTests(TestCase):
 
         self.assertRedirects(root_response, reverse('noticias:public_list'), fetch_redirect_response=False)
         self.assertRedirects(home_response, reverse('root'), fetch_redirect_response=False)
+
+    def test_home_renderiza_atalhos_ativos_na_coluna_direita(self):
+        self.criar_noticia(titulo='Destaque principal')
+        Atalho.objects.create(
+            titulo='Atalho ativo',
+            imagem='atalhos/ativo.jpg',
+            url='/licitacoes/',
+            ordem=1,
+            ativo=True,
+        )
+        Atalho.objects.create(
+            titulo='Atalho inativo',
+            imagem='atalhos/inativo.jpg',
+            url='/navbar/',
+            ordem=2,
+            ativo=False,
+        )
+
+        response = self.client.get(reverse('noticias:public_list'))
+
+        self.assertContains(response, 'noticias-home-layout')
+        self.assertContains(response, 'noticias-home-main')
+        self.assertContains(response, 'noticias-shortcuts-panel')
+        self.assertContains(response, 'Atalho ativo')
+        self.assertNotContains(response, 'Atalho inativo')
+        self.assertContains(response, 'target="_blank"')
+
+    def test_home_respeita_ordem_dos_atalhos(self):
+        self.criar_noticia(titulo='Noticia base')
+        Atalho.objects.create(
+            titulo='Segundo',
+            imagem='atalhos/segundo.jpg',
+            url='/navbar/',
+            ordem=2,
+            ativo=True,
+        )
+        Atalho.objects.create(
+            titulo='Primeiro',
+            imagem='atalhos/primeiro.jpg',
+            url='/licitacoes/',
+            ordem=1,
+            ativo=True,
+        )
+
+        response = self.client.get(reverse('noticias:public_list'))
+        atalhos_ativos = list(response.context['atalhos_ativos'])
+
+        self.assertEqual([atalho.titulo for atalho in atalhos_ativos], ['Primeiro', 'Segundo'])
+
+    def test_home_superusuario_exibe_links_de_gerenciamento_de_noticias_e_atalhos(self):
+        User = get_user_model()
+        User.objects.create_superuser(username='admin', password='123')
+        self.client.login(username='admin', password='123')
+
+        response = self.client.get(reverse('noticias:public_list'))
+
+        self.assertContains(response, reverse('noticias:manage_list'))
+        self.assertContains(response, reverse('atalhos:manage_list'))
+
+    def test_home_mostra_estado_vazio_quando_nao_houver_atalhos(self):
+        self.criar_noticia(titulo='Noticia base')
+
+        response = self.client.get(reverse('noticias:public_list'))
+
+        self.assertContains(response, 'Nenhum atalho ativo.')
 
     def test_gerenciamento_exige_superusuario(self):
         response = self.client.get(reverse('noticias:manage_list'))

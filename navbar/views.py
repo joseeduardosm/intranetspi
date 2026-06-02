@@ -1,10 +1,14 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.http import HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
+from django.views import View
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
 from .forms import NavbarItemForm
 from .models import NavbarItem
+from .services import move_navbar_item, navbar_move_state, normalize_navbar_branch
 
 
 class SuperuserRequiredMixin(UserPassesTestMixin):
@@ -34,6 +38,10 @@ class NavbarItemListView(SuperuserRequiredMixin, ListView):
         context['ativo_atual'] = self.request.GET.get('ativo', '')
         context['parent_atual'] = self.request.GET.get('parent', '')
         context['parents'] = NavbarItem.objects.filter(parent__isnull=True).order_by('ordem', 'titulo')
+        move_state = navbar_move_state(context['items'])
+        for item in context['items']:
+            item.can_move_up = move_state.get(item.id, {}).get('up', False)
+            item.can_move_down = move_state.get(item.id, {}).get('down', False)
         return context
 
 
@@ -47,7 +55,9 @@ class NavbarItemCreateView(SuperuserRequiredMixin, CreateView):
 
     def form_valid(self, form):
         messages.success(self.request, 'Item da navbar criado.')
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        normalize_navbar_branch(self.object.parent_id)
+        return response
 
 
 class NavbarItemUpdateView(SuperuserRequiredMixin, UpdateView):
@@ -60,10 +70,36 @@ class NavbarItemUpdateView(SuperuserRequiredMixin, UpdateView):
 
     def form_valid(self, form):
         messages.success(self.request, 'Item da navbar atualizado.')
-        return super().form_valid(form)
+        parent_id_anterior = self.get_object().parent_id
+        response = super().form_valid(form)
+        normalize_navbar_branch(parent_id_anterior)
+        normalize_navbar_branch(self.object.parent_id)
+        return response
 
 
 class NavbarItemDeleteView(SuperuserRequiredMixin, DeleteView):
     model = NavbarItem
     template_name = 'navbar/confirm_delete.html'
     success_url = reverse_lazy('navbar:manage_list')
+
+    def form_valid(self, form):
+        self.object = self.get_object()
+        parent_id = self.object.parent_id
+        response = super().form_valid(form)
+        normalize_navbar_branch(parent_id)
+        return response
+
+
+class NavbarItemMoveView(SuperuserRequiredMixin, View):
+    def post(self, request, pk):
+        item = get_object_or_404(NavbarItem, pk=pk)
+        direction = request.POST.get('direction')
+        if direction in {'up', 'down'}:
+            moved = move_navbar_item(item, direction)
+            if moved:
+                messages.success(request, 'Ordem da navbar atualizada.')
+            else:
+                messages.info(request, 'Esse item já está no limite da ordem.')
+
+        next_url = request.POST.get('next') or reverse('navbar:manage_list')
+        return HttpResponseRedirect(next_url)

@@ -9,6 +9,8 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from atalhos.models import Atalho
+
 from .forms import NoticiaForm
 from .models import Noticia
 from .services import noticias_publicadas
@@ -29,10 +31,11 @@ class NoticiaPublicListView(ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         noticias = list(context['noticias'])
-        grid_noticias = noticias[1:3]
         context['carousel_noticias'] = noticias[:4]
-        context['grid_slots'] = [
-            {'noticia': grid_noticias[idx] if idx < len(grid_noticias) else None}
+        context['atalhos_ativos'] = Atalho.objects.filter(ativo=True).order_by('ordem', 'id')
+        bottom_noticias = noticias[1:3]
+        context['bottom_slots'] = [
+            {'noticia': bottom_noticias[idx] if idx < len(bottom_noticias) else None}
             for idx in range(2)
         ]
         return context

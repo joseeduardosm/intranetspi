@@ -26,6 +26,8 @@ urlpatterns = [
     path('login/', views.SuperuserLoginView.as_view(), name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('home/', views.HomeView.as_view(), name='home'),
+    path('assinatura-e-mail/', include('assinatura_e_mail.urls')),
+    path('atalhos/', include('atalhos.urls')),
     path('', include('usuarios.urls')),
     path('licitacoes/', include('licitacoes.urls')),
     path('navbar/', include('navbar.urls')),
