@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Setores{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'setores/css/setores.css' %}">{% endblock %}
+{% block content %}
+  <section class="spi-module-panel">
+    <header class="spi-module-panel-header">Setores</header>
+    <div class="spi-module-grid">
+      <a class="spi-module-card" href="{% url 'setores:list' %}" aria-label="Abrir setores">
+        <span class="spi-module-card-title">Setores</span>
+        <span class="spi-module-card-footer">Listagem</span>
+      </a>
+      <a class="spi-module-card" href="{% url 'setores:organograma' %}" aria-label="Abrir organograma">
+        <span class="spi-module-card-title">Organograma</span>
+        <span class="spi-module-card-footer">Visualização</span>
+      </a>
+    </div>
+  </section>
+{% endblock %}

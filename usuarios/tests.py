@@ -2,6 +2,7 @@ from io import BytesIO
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
+from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -9,6 +10,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from PIL import Image
 
+from setores.models import SetorNode, UserSetorMembership
 from .backends import LDAPBackend
 from .models import LDAPDirectory, UsuarioPerfil
 from .services import profile_update_context
@@ -27,6 +29,8 @@ class UsuariosTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser(username="admin", password="123", email="admin@example.com")
         self.user = User.objects.create_user(username="joao", password="123", email="joao@example.com")
+        self.setor_ti = SetorNode.objects.create(group=Group.objects.create(name="TI"))
+        self.setor_rh = SetorNode.objects.create(group=Group.objects.create(name="RH"))
 
     def test_cria_perfil_automaticamente_ao_criar_usuario(self):
         self.assertTrue(UsuarioPerfil.objects.filter(user=self.user).exists())
@@ -206,7 +210,7 @@ class UsuariosTests(TestCase):
                 "ramal": "5544",
                 "foto": foto_upload(),
                 "cargo": "Coordenadora",
-                "setor": "RH",
+                "setor": str(self.setor_rh.pk),
                 "andar": "2",
                 "bloco": "B",
             },
@@ -215,6 +219,7 @@ class UsuariosTests(TestCase):
         user = User.objects.get(username="maria")
         self.assertEqual(user.email, "maria@spi.local")
         self.assertTrue(UsuarioPerfil.objects.filter(user=user, nome_completo="Maria Souza", ramal="5544").exists())
+        self.assertTrue(UserSetorMembership.objects.filter(user=user, setor=self.setor_rh).exists())
 
     def test_admin_nao_cria_usuario_sem_ramal(self):
         self.client.login(username="admin", password="123")
@@ -228,7 +233,7 @@ class UsuariosTests(TestCase):
                 "email": "maria@spi.local",
                 "foto": foto_upload(),
                 "cargo": "Coordenadora",
-                "setor": "RH",
+                "setor": str(self.setor_rh.pk),
                 "andar": "2",
                 "bloco": "B",
             },
@@ -242,6 +247,13 @@ class UsuariosTests(TestCase):
         self.client.login(username="joao", password="123")
         response = self.client.get(reverse("usuarios:create"))
         self.assertEqual(response.status_code, 403)
+
+    def test_form_usuario_exibe_combobox_de_setores(self):
+        self.client.login(username="admin", password="123")
+        response = self.client.get(reverse("usuarios:create"))
+        self.assertContains(response, '<select name="setor"', html=False)
+        self.assertContains(response, "TI")
+        self.assertContains(response, "RH")
 
     def test_usuario_comum_edita_apenas_o_proprio_cadastro(self):
         outro = User.objects.create_user(username="maria", password="123")
@@ -266,7 +278,7 @@ class UsuariosTests(TestCase):
                 "ramal": "1234",
                 "foto": foto_upload(),
                 "cargo": "Analista",
-                "setor": "TI",
+                "setor": str(self.setor_ti.pk),
                 "andar": "3",
                 "bloco": "A",
                 "administrador_sistema": "on",
@@ -290,7 +302,7 @@ class UsuariosTests(TestCase):
                 "ramal": "9988",
                 "foto": foto_upload(),
                 "cargo": "Analista",
-                "setor": "TI",
+                "setor": str(self.setor_ti.pk),
                 "andar": "3",
                 "bloco": "A",
             },

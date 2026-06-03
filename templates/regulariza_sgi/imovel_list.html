@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Imóveis | RegulaSGI{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'regulariza_sgi/css/regulariza_sgi.css' %}">{% endblock %}
+{% block content %}
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div class="spi-page-title mb-0">
+      <h1>RegulaSGI</h1>
+      <p>Controle cadastral, processual e visual dos imóveis.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'regulariza_sgi:home' %}">Módulo</a>
+      <a class="btn btn-primary" href="{% url 'regulariza_sgi:imovel_create' %}">Novo imóvel</a>
+    </div>
+  </div>
+
+  <section class="card shadow-sm border-0">
+    <div class="card-body border-bottom">
+      <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
+        <input
+          class="form-control form-control-lg flex-grow-1 regulariza-search-input"
+          type="search"
+          name="q"
+          value="{{ q }}"
+          placeholder="Pesquisar por qualquer dado do cadastro do imóvel"
+        >
+        <button class="btn btn-primary" type="submit">Pesquisar</button>
+        {% if q %}<a class="btn btn-light" href="{{ request.path }}">Limpar</a>{% endif %}
+      </form>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive regulariza-table-wrap">
+        <table class="table align-middle mb-0 regulariza-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Inscrição imobiliária (SQL)</th>
+              <th>Endereço</th>
+              <th>Número SGI</th>
+              <th class="text-end">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for imovel in imoveis %}
+              <tr class="regulariza-row-{{ imovel.timeline.color }}">
+                <td class="fw-semibold">{{ imovel.id }}</td>
+                <td>
+                  <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <a class="fw-semibold text-decoration-none" href="{% url 'regulariza_sgi:imovel_detail' imovel.pk %}">{{ imovel.inscricao_imobiliaria }}</a>
+                    {% if imovel.possui_cadin_ativo %}
+                      <span
+                        class="regulariza-cadin-triangle"
+                        data-bs-toggle="tooltip"
+                        title="CADIN {{ imovel.exercicio_cadin }}"
+                        aria-label="CADIN {{ imovel.exercicio_cadin }}"
+                      ></span>
+                    {% endif %}
+                  </div>
+                  <div class="regulariza-status-list mt-2">
+                    {% for badge in imovel.timeline.badges %}
+                      <span class="badge regulariza-inline-badge {% if badge == 'CADIN' %}text-bg-danger{% else %}regulariza-badge-{{ imovel.timeline.color }}{% endif %}">{{ badge }}</span>
+                    {% endfor %}
+                  </div>
+                </td>
+                <td>{{ imovel.endereco_completo }}</td>
+                <td>{{ imovel.numero_sgi }}</td>
+                <td class="text-end">
+                  <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" data-bs-placement="left" title="Ações">...</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item" href="{% url 'regulariza_sgi:imovel_update' imovel.pk %}" data-bs-toggle="tooltip" title="Editar imóvel">Editar</a></li>
+                      <li><a class="dropdown-item" href="{% url 'regulariza_sgi:imovel_delete' imovel.pk %}" data-bs-toggle="tooltip" title="Excluir imóvel">Excluir</a></li>
+                    </ul>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="5" class="text-center text-muted py-5">Nenhum imóvel cadastrado.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+{% endblock %}

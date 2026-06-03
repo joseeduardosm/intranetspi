@@ -4,6 +4,10 @@ from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.utils import timezone
 
+from setores.forms import setor_usuario_choices
+from setores.models import SetorNode
+from setores.services import ensure_user_primary_setor, primary_setor_for_user
+
 from .models import ANDAR_CHOICES, BLOCO_CHOICES, LDAPDirectory, UsuarioPerfil
 
 
@@ -61,6 +65,12 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
         self.fields["foto"].widget.attrs["accept"] = ".png,.jpeg,.jpg,image/png,image/jpeg"
         self.fields["andar"].choices = [("", "Selecione")] + ANDAR_CHOICES
         self.fields["bloco"].choices = BLOCO_CHOICES
+        self.fields["setor"] = forms.ChoiceField(
+            label="Setor",
+            required=True,
+            choices=setor_usuario_choices(self.instance),
+            widget=forms.Select(attrs={"class": "form-select form-select-lg"}),
+        )
         for field_name in ("nome_completo", "email", "ramal", "cargo", "setor", "andar", "bloco"):
             self.fields[field_name].required = True
         self.fields["foto"].required = not bool(self.instance and self.instance.foto)
@@ -69,6 +79,9 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
         self.fields["administrador_sistema"].initial = self.instance.user.is_superuser
         if not (current_user and current_user.is_superuser):
             self.fields.pop("administrador_sistema")
+        setor_atual = primary_setor_for_user(self.instance.user) if self.instance and self.instance.user_id else None
+        if not self.is_bound:
+            self.fields["setor"].initial = str(setor_atual.pk) if setor_atual else ""
 
     def clean_foto(self):
         foto = self.cleaned_data.get("foto")
@@ -83,10 +96,15 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
     def save(self, commit=True):
         perfil = super().save(commit=False)
         perfil.user.email = self.cleaned_data["email"]
+        setor_id = self.cleaned_data["setor"]
         if commit:
             perfil.ultimo_recadastro_em = timezone.now()
+            perfil.setor = ""
             perfil.save()
             perfil.user.save(update_fields=["email"])
+            if setor_id:
+                setor = SetorNode.objects.select_related("group").get(pk=setor_id)
+                ensure_user_primary_setor(perfil.user, setor)
             if "administrador_sistema" in self.cleaned_data:
                 is_admin = self.cleaned_data["administrador_sistema"]
                 user = perfil.user
@@ -120,6 +138,12 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
         self.fields["foto"].widget.attrs["accept"] = ".png,.jpeg,.jpg,image/png,image/jpeg"
         self.fields["andar"].choices = [("", "Selecione")] + ANDAR_CHOICES
         self.fields["bloco"].choices = BLOCO_CHOICES
+        self.fields["setor"] = forms.ChoiceField(
+            label="Setor",
+            required=True,
+            choices=setor_usuario_choices(),
+            widget=forms.Select(attrs={"class": "form-select form-select-lg"}),
+        )
         for field_name in ("login", "nome_completo", "email", "ramal", "cargo", "setor", "andar", "bloco", "password1", "password2"):
             self.fields[field_name].required = True
         self.fields["foto"].required = True
@@ -162,15 +186,19 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
         if commit:
             user.save()
             perfil = user.perfil
-            for field_name in ("nome_completo", "foto", "ramal", "cargo", "setor", "andar", "bloco"):
+            for field_name in ("nome_completo", "foto", "ramal", "cargo", "andar", "bloco"):
                 setattr(perfil, field_name, self.cleaned_data.get(field_name, ""))
+            perfil.setor = ""
             perfil.ultimo_recadastro_em = timezone.now()
             perfil.save()
+            if self.cleaned_data.get("setor"):
+                setor = SetorNode.objects.select_related("group").get(pk=self.cleaned_data["setor"])
+                ensure_user_primary_setor(user, setor)
             self.instance = perfil
             return perfil
 
         perfil = UsuarioPerfil(user=user)
-        for field_name in ("nome_completo", "foto", "ramal", "cargo", "setor", "andar", "bloco"):
+        for field_name in ("nome_completo", "foto", "ramal", "cargo", "andar", "bloco"):
             setattr(perfil, field_name, self.cleaned_data.get(field_name, ""))
         return perfil
 

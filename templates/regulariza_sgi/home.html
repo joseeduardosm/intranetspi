@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}RegulaSGI{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'regulariza_sgi/css/regulariza_sgi.css' %}">{% endblock %}
+{% block content %}
+  <section class="spi-module-panel">
+    <header class="spi-module-panel-header">RegulaSGI</header>
+    <div class="spi-module-grid">
+      <a class="spi-module-card" href="{% url 'regulariza_sgi:imovel_list' %}" aria-label="Abrir imóveis">
+        <span class="spi-module-card-title">Imóveis</span>
+        <span class="spi-module-card-footer">Listagem</span>
+      </a>
+      <a class="spi-module-card" href="{% url 'regulariza_sgi:imovel_create' %}" aria-label="Cadastrar imóvel">
+        <span class="spi-module-card-title">Novo Imóvel</span>
+        <span class="spi-module-card-footer">Cadastro</span>
+      </a>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,60 @@
+<li class="setores-org-tree-item{% if node.children %} has-children{% endif %}">
+  <article class="setores-org-card setores-org-card-nivel-{{ node.level|add:1 }}">
+    <h3>{{ node.setor.group.name }}</h3>
+    <p class="setores-org-lider">
+      <strong>Líder:</strong>
+      {% if node.lider_payload %}
+        <button
+          class="setores-org-person-trigger"
+          type="button"
+          data-bs-toggle="modal"
+          data-bs-target="#ramalContactModal"
+          data-name="{{ node.lider_payload.nome }}"
+          data-cargo="{{ node.lider_payload.cargo|default:'-' }}"
+          data-setor="{{ node.lider_payload.setor|default:node.setor.group.name }}"
+          data-email="{{ node.lider_payload.email|default:'-' }}"
+          data-ramal="{{ node.lider_payload.ramal|default:'-' }}"
+          data-local="{{ node.lider_payload.local|default:'-' }}"
+          data-photo="{{ node.lider_payload.photo_url }}"
+          aria-label="Ver contato de {{ node.lider_payload.nome }}"
+        >{{ node.lider_nome }}</button>
+      {% else %}
+        -
+      {% endif %}
+    </p>
+    <div class="setores-org-users">
+      <strong>Usuários</strong>
+      {% if node.usuarios %}
+        <ul>
+          {% for usuario in node.usuarios %}
+            <li>
+              <button
+                class="setores-org-person-trigger"
+                type="button"
+                data-bs-toggle="modal"
+                data-bs-target="#ramalContactModal"
+                data-name="{{ usuario.payload.nome }}"
+                data-cargo="{{ usuario.payload.cargo|default:'-' }}"
+                data-setor="{{ usuario.payload.setor|default:node.setor.group.name }}"
+                data-email="{{ usuario.payload.email|default:'-' }}"
+                data-ramal="{{ usuario.payload.ramal|default:'-' }}"
+                data-local="{{ usuario.payload.local|default:'-' }}"
+                data-photo="{{ usuario.payload.photo_url }}"
+                aria-label="Ver contato de {{ usuario.label }}"
+              >{{ usuario.label }}</button>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="mb-0">-</p>
+      {% endif %}
+    </div>
+  </article>
+  {% if node.children %}
+    <ul>
+      {% for child in node.children %}
+        {% include "setores/partials/org_node_institutional.html" with node=child %}
+      {% endfor %}
+    </ul>
+  {% endif %}
+</li>

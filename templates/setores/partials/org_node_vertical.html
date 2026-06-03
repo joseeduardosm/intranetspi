@@ -1,0 +1,23 @@
+<div class="setores-org-node-vertical">
+  <article class="setores-org-card">
+    <h3>{{ node.setor.group.name }}</h3>
+    <p><strong>Líder:</strong> {{ node.lider_nome|default:"-" }}</p>
+    <div class="setores-org-users">
+      <strong>Usuários</strong>
+      <ul>
+        {% for usuario in node.usuarios %}
+          <li>{{ usuario.get_full_name|default:usuario.username }}</li>
+        {% empty %}
+          <li>-</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </article>
+  {% if node.children %}
+    <div class="setores-org-children-vertical">
+      {% for child in node.children %}
+        {% include "setores/partials/org_node_vertical.html" with node=child %}
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>

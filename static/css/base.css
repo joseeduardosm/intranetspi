@@ -180,6 +180,10 @@
   text-decoration: underline;
 }
 
+.tooltip {
+  z-index: 2000;
+}
+
 @media (max-width: 1199px) {
   .spi-module-grid {
     grid-template-columns: repeat(3, minmax(160px, 1fr));

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ form_title }} | RegulaSGI{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'regulariza_sgi/css/regulariza_sgi.css' %}">{% endblock %}
+{% block content %}
+  <div class="regulariza-shell">
+    <div class="d-flex justify-content-between align-items-center gap-3 mb-4">
+      <div class="spi-page-title mb-0">
+        <h1>{{ form_title }}</h1>
+        <p>Cadastro de imóvel para controle de imunidade tributária e regularização imobiliária.</p>
+      </div>
+      <a class="btn btn-outline-secondary" href="{% url 'regulariza_sgi:imovel_list' %}">Voltar</a>
+    </div>
+
+    <form method="post" class="card shadow-sm border-0 regulariza-form-card">
+      <div class="card-body p-4">
+        {% csrf_token %}
+        <div class="row g-4">
+          {% for field in form %}
+            <div class="{% if field.name == 'possui_cadin' %}col-12{% elif field.name == 'exercicio_cadin' or field.name == 'notificacao_cadin_municipal' %}col-lg-6 cadin-dependent-field{% elif field.name == 'logradouro' %}col-lg-6{% elif field.name == 'bairro' %}col-lg-4 col-md-6{% elif field.name == 'numero' %}col-lg-2 col-md-6{% else %}col-md-6{% endif %}" {% if field.name == 'exercicio_cadin' %}id="cadin-field-wrap"{% endif %}>
+              {% if field.field.widget.input_type == 'checkbox' %}
+                <div class="form-check mt-4 pt-2">
+                  {{ field }}
+                  <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                </div>
+              {% else %}
+                <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+              {% endif %}
+              {% if field.help_text %}
+                <div class="form-text">{{ field.help_text }}</div>
+              {% endif %}
+              {% for error in field.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+              {% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-footer bg-white d-flex justify-content-end gap-2 p-4">
+        <a class="btn btn-outline-secondary" href="{% url 'regulariza_sgi:imovel_list' %}">Cancelar</a>
+        <button class="btn btn-primary" type="submit">Salvar imóvel</button>
+      </div>
+    </form>
+  </div>
+  {{ municipios_json|json_script:"regulariza-sgi-municipios" }}
+{% endblock %}
+{% block extra_js %}
+  <script>
+    (function () {
+      var municipios = JSON.parse(document.getElementById('regulariza-sgi-municipios').textContent);
+      var ufSelect = document.getElementById('id_uf');
+      var municipioSelect = document.getElementById('id_municipio');
+      var cadinCheckbox = document.getElementById('id_possui_cadin');
+      var cadinFields = document.querySelectorAll('.cadin-dependent-field');
+
+      function rebuildMunicipios() {
+        if (!ufSelect || !municipioSelect) {
+          return;
+        }
+        var current = municipioSelect.value;
+        var options = municipios[ufSelect.value] || [];
+        municipioSelect.innerHTML = '<option value="">Selecione</option>';
+        options.forEach(function (nome) {
+          var option = document.createElement('option');
+          option.value = nome;
+          option.textContent = nome;
+          if (nome === current) {
+            option.selected = true;
+          }
+          municipioSelect.appendChild(option);
+        });
+      }
+
+      function toggleCadinField() {
+        if (!cadinCheckbox || !cadinFields.length) {
+          return;
+        }
+        cadinFields.forEach(function (field) {
+          field.style.display = cadinCheckbox.checked ? '' : 'none';
+        });
+      }
+
+      ufSelect && ufSelect.addEventListener('change', rebuildMunicipios);
+      cadinCheckbox && cadinCheckbox.addEventListener('change', toggleCadinField);
+      rebuildMunicipios();
+      toggleCadinField();
+    }());
+  </script>
+{% endblock %}

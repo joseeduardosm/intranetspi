@@ -97,7 +97,8 @@
     <script>
       document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((element) => {
         new bootstrap.Tooltip(element, {
-          trigger: element.dataset.bsTrigger || 'hover focus'
+          trigger: element.dataset.bsTrigger || 'hover focus',
+          container: 'body'
         });
       });
 

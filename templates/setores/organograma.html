@@ -1,126 +1,50 @@
 {% extends "base.html" %}
 {% load static %}
+{% block title %}Organograma{% endblock %}
 {% block extra_css %}
-  <link rel="stylesheet" href="{% static 'usuarios/css/usuarios.css' %}">
+  <link rel="stylesheet" href="{% static 'setores/css/setores.css' %}">
   <link rel="stylesheet" href="{% static 'usuarios/css/ramais.css' %}">
 {% endblock %}
-
 {% block content %}
-  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
-    <div>
-      <h1>{{ titulo }}</h1>
-      <p>{{ descricao }}</p>
+  <div class="setores-org-page">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+      <div class="spi-page-title mb-0">
+        <h1>Organograma</h1>
+        <p>Secretaria de Parcerias em Investimentos</p>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'setores:list' %}">Setores</a>
+        <a class="btn btn-light" href="{% url 'setores:home' %}">Voltar</a>
+      </div>
     </div>
-    <div class="d-flex flex-wrap gap-2 justify-content-end">
-      <a class="btn btn-outline-secondary" href="{% url 'setores:organograma' %}">Organograma</a>
-      <a class="btn btn-light" href="{% url 'root' %}">Voltar</a>
-    </div>
-  </div>
 
-  <section class="ramais-directory">
-    <form method="get" class="ramais-search">
-      <input class="form-control form-control-lg" type="search" name="q" value="{{ q }}" placeholder="Pesquisar por nome, cargo, setor, ramal ou e-mail">
-      <button class="btn btn-primary" type="submit">Pesquisar</button>
-      {% if q %}<a class="btn btn-light" href="{{ request.path }}">Limpar</a>{% endif %}
-    </form>
-
-    {% if perfis %}
-      <div class="ramais-card-grid">
-        {% for perfil in perfis %}
-          <article class="ramal-credit-card">
-            {% if request.user.is_superuser or request.user.id == perfil.user_id %}
-              <div class="dropdown ramal-card-menu">
-                <button class="btn btn-light btn-sm ramal-card-menu-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Opções do ramal">
-                  ...
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                  <li><a class="dropdown-item" href="{% url 'usuarios:update' perfil.pk %}">Editar</a></li>
-                  {% if request.user.is_superuser %}
-                    <li><a class="dropdown-item text-danger" href="{% url 'usuarios:delete' perfil.pk %}">Excluir</a></li>
-                  {% endif %}
-                </ul>
-              </div>
-            {% endif %}
-            <div class="ramal-card-photo">
-              {% if perfil.foto %}
-                <button
-                  class="ramal-photo-trigger"
-                  type="button"
-                  data-bs-toggle="modal"
-                  data-bs-target="#ramalContactModal"
-                  data-name="{{ perfil.nome_completo|default:perfil.user.username }}"
-                  data-cargo="{{ perfil.cargo|default:'-' }}"
-                  data-setor="{{ perfil.setor|default:'-' }}"
-                  data-email="{{ perfil.user.email|default:'-' }}"
-                  data-ramal="{{ perfil.ramal|default:'-' }}"
-                  data-local="{{ perfil.andar_bloco_display|default:'-' }}"
-                  data-photo="{{ perfil.foto.url }}"
-                  aria-label="Ver detalhes de {{ perfil.nome_completo|default:perfil.user.username }}"
-                >
-                  <img src="{{ perfil.foto.url }}" alt="{{ perfil.nome_completo }}">
-                </button>
-              {% endif %}
-            </div>
-            <div class="ramal-card-data">
-              <h2 class="ramal-field ramal-field-name" title="{{ perfil.nome_completo|default:perfil.user.username }}">{{ perfil.nome_completo|default:perfil.user.username }}</h2>
-              <p class="ramal-field ramal-field-cargo" title="{{ perfil.cargo|default:'-' }}">{{ perfil.cargo|default:"-" }}</p>
-              <p class="ramal-field ramal-field-setor" title="{{ perfil.setor|default:'-' }}">{{ perfil.setor|default:"-" }}</p>
-
-              <div class="ramal-card-spacer"></div>
-
-              <p class="ramal-field ramal-field-email" title="{{ perfil.user.email|default:'-' }}">
-                <button
-                  class="ramal-email-trigger"
-                  type="button"
-                  data-email="{{ perfil.user.email }}"
-                  aria-label="Abrir ações para {{ perfil.user.email }}"
-                >{{ perfil.user.email }}</button>
-              </p>
-              <p class="ramal-field ramal-field-ramal" title="{{ perfil.ramal|default:'-' }}">{{ perfil.ramal|default:"-" }}</p>
-              <p class="ramal-field ramal-field-local" title="{{ perfil.andar_bloco_display|default:'-' }}">{{ perfil.andar_bloco_display|default:"-" }}</p>
-            </div>
-          </article>
-        {% endfor %}
+    <section class="setores-org-board card shadow-sm border-0">
+      <div class="setores-org-toolbar">
+        <div class="setores-org-toolbar-actions">
+          <button class="btn btn-light btn-sm" type="button" id="setoresOrgZoomOut" aria-label="Reduzir zoom">-</button>
+          <button class="btn btn-light btn-sm" type="button" id="setoresOrgZoomReset">Ajustar</button>
+          <button class="btn btn-light btn-sm" type="button" id="setoresOrgZoomIn" aria-label="Aumentar zoom">+</button>
+          <span class="setores-org-zoom-indicator" id="setoresOrgZoomIndicator">100%</span>
+        </div>
       </div>
 
-      {% if is_paginated %}
-        <nav class="ramais-pagination" aria-label="Paginacao de ramais">
-          <div class="text-muted small">
-            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} - {{ page_obj.paginator.count }} ramais
+      <div class="setores-org-viewport" id="setoresOrgViewport">
+        {% if org_tree %}
+          <div class="setores-org-scaler" id="setoresOrgScaler">
+            <div class="setores-org-chart-institutional" id="setoresOrgChart">
+              <ul class="setores-org-root-list">
+                {% for node in org_tree %}
+                  {% include "setores/partials/org_node_institutional.html" with node=node %}
+                {% endfor %}
+              </ul>
+            </div>
           </div>
-          <ul class="pagination mb-0">
-            <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
-              {% if page_obj.has_previous %}
-                <a class="page-link" href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}page={{ page_obj.previous_page_number }}" aria-label="Página anterior">&lt;</a>
-              {% else %}
-                <span class="page-link" aria-hidden="true">&lt;</span>
-              {% endif %}
-            </li>
-
-            {% for page_number in paginator.page_range %}
-              <li class="page-item {% if page_number == page_obj.number %}active{% endif %}">
-                {% if page_number == page_obj.number %}
-                  <span class="page-link">{{ page_number }}</span>
-                {% else %}
-                  <a class="page-link" href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}page={{ page_number }}">{{ page_number }}</a>
-                {% endif %}
-              </li>
-            {% endfor %}
-
-            <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
-              {% if page_obj.has_next %}
-                <a class="page-link" href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}page={{ page_obj.next_page_number }}" aria-label="Próxima página">&gt;</a>
-              {% else %}
-                <span class="page-link" aria-hidden="true">&gt;</span>
-              {% endif %}
-            </li>
-          </ul>
-        </nav>
-      {% endif %}
-    {% else %}
-      <div class="alert alert-light border mb-0">Nenhum ramal encontrado.</div>
-    {% endif %}
-  </section>
+        {% else %}
+          <p class="text-muted mb-0">Nenhum setor cadastrado para montar o organograma.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
 
   <div class="modal fade" id="ramalContactModal" tabindex="-1" aria-labelledby="ramalContactModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered ramal-contact-dialog">
@@ -210,6 +134,122 @@
 
 {% block extra_js %}
   <script>
+    const setoresOrgViewport = document.getElementById('setoresOrgViewport');
+    const setoresOrgScaler = document.getElementById('setoresOrgScaler');
+    const setoresOrgChart = document.getElementById('setoresOrgChart');
+    const setoresOrgZoomIndicator = document.getElementById('setoresOrgZoomIndicator');
+    const setoresOrgZoomOut = document.getElementById('setoresOrgZoomOut');
+    const setoresOrgZoomIn = document.getElementById('setoresOrgZoomIn');
+    const setoresOrgZoomReset = document.getElementById('setoresOrgZoomReset');
+    let setoresOrgFitScale = 1;
+    let setoresOrgUserScale = 1;
+    let setoresOrgPanX = 0;
+    let setoresOrgPanY = 0;
+    let setoresOrgDragging = false;
+    let setoresOrgDragStartX = 0;
+    let setoresOrgDragStartY = 0;
+    let setoresOrgDragOriginX = 0;
+    let setoresOrgDragOriginY = 0;
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function maxSetoresOrgUserScale() {
+      if (!setoresOrgFitScale || setoresOrgFitScale <= 0) return 1;
+      return Math.max(1, 1 / setoresOrgFitScale);
+    }
+
+    function updateSetoresOrgScale() {
+      if (!setoresOrgScaler || !setoresOrgChart || !setoresOrgViewport) return;
+      setoresOrgUserScale = clamp(setoresOrgUserScale, 0.6, maxSetoresOrgUserScale());
+      const finalScale = clamp(setoresOrgFitScale * setoresOrgUserScale, 0.2, 1);
+      setoresOrgScaler.style.transform = `translate(${setoresOrgPanX}px, ${setoresOrgPanY}px) scale(${finalScale})`;
+      if (setoresOrgZoomIndicator) {
+        setoresOrgZoomIndicator.textContent = `${Math.round(finalScale * 100)}%`;
+      }
+    }
+
+    function fitSetoresOrgChart() {
+      if (!setoresOrgScaler || !setoresOrgChart || !setoresOrgViewport) return;
+
+      setoresOrgScaler.style.transform = 'scale(1)';
+      const viewportWidth = Math.max(setoresOrgViewport.clientWidth - 24, 320);
+      const viewportHeight = Math.max(setoresOrgViewport.clientHeight - 24, 320);
+      const chartWidth = setoresOrgChart.scrollWidth;
+      const chartHeight = setoresOrgChart.scrollHeight;
+      const widthScale = viewportWidth / chartWidth;
+      const heightScale = viewportHeight / chartHeight;
+      setoresOrgFitScale = Math.min(1, widthScale, heightScale);
+      updateSetoresOrgScale();
+    }
+
+    if (setoresOrgZoomOut) {
+      setoresOrgZoomOut.addEventListener('click', () => {
+        setoresOrgUserScale = clamp(setoresOrgUserScale - 0.1, 0.6, 1.4);
+        updateSetoresOrgScale();
+      });
+    }
+
+    if (setoresOrgZoomIn) {
+      setoresOrgZoomIn.addEventListener('click', () => {
+        setoresOrgUserScale = clamp(setoresOrgUserScale + 0.1, 0.6, maxSetoresOrgUserScale());
+        updateSetoresOrgScale();
+      });
+    }
+
+    if (setoresOrgZoomReset) {
+      setoresOrgZoomReset.addEventListener('click', () => {
+        setoresOrgUserScale = 1;
+        setoresOrgPanX = 0;
+        setoresOrgPanY = 0;
+        fitSetoresOrgChart();
+      });
+    }
+
+    function startSetoresOrgDrag(event) {
+      if (!setoresOrgViewport || !setoresOrgScaler) return;
+      if (event.button !== 0) return;
+      if (event.target.closest('.setores-org-person-trigger')) return;
+      setoresOrgDragging = true;
+      setoresOrgDragStartX = event.clientX;
+      setoresOrgDragStartY = event.clientY;
+      setoresOrgDragOriginX = setoresOrgPanX;
+      setoresOrgDragOriginY = setoresOrgPanY;
+      setoresOrgViewport.classList.add('is-dragging');
+      event.preventDefault();
+    }
+
+    function moveSetoresOrgDrag(event) {
+      if (!setoresOrgDragging) return;
+      setoresOrgPanX = setoresOrgDragOriginX + (event.clientX - setoresOrgDragStartX);
+      setoresOrgPanY = setoresOrgDragOriginY + (event.clientY - setoresOrgDragStartY);
+      updateSetoresOrgScale();
+    }
+
+    function endSetoresOrgDrag() {
+      if (!setoresOrgDragging || !setoresOrgViewport) return;
+      setoresOrgDragging = false;
+      setoresOrgViewport.classList.remove('is-dragging');
+    }
+
+    if (setoresOrgViewport) {
+      setoresOrgViewport.addEventListener('mousedown', startSetoresOrgDrag);
+      setoresOrgViewport.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const nextScale = setoresOrgUserScale + (event.deltaY < 0 ? 0.08 : -0.08);
+        setoresOrgUserScale = clamp(nextScale, 0.6, maxSetoresOrgUserScale());
+        updateSetoresOrgScale();
+      }, { passive: false });
+    }
+
+    window.addEventListener('mousemove', moveSetoresOrgDrag);
+    window.addEventListener('mouseup', endSetoresOrgDrag);
+    window.addEventListener('mouseleave', endSetoresOrgDrag);
+
+    window.addEventListener('load', fitSetoresOrgChart);
+    window.addEventListener('resize', fitSetoresOrgChart);
+
     const ramalContactModal = document.getElementById('ramalContactModal');
     if (ramalContactModal) {
       ramalContactModal.addEventListener('show.bs.modal', (event) => {
@@ -232,8 +272,13 @@
         document.getElementById('ramalContactLocal').textContent = trigger.dataset.local || '-';
 
         const photoElement = document.getElementById('ramalContactPhoto');
-        photoElement.src = photo;
-        photoElement.alt = name;
+        if (photo) {
+          photoElement.src = photo;
+          photoElement.alt = name;
+        } else {
+          photoElement.removeAttribute('src');
+          photoElement.alt = `Foto não cadastrada para ${name}`;
+        }
       });
     }
 
@@ -301,6 +346,13 @@
       }, 1400);
     }
 
+    if (ramalEmailCopy) {
+      ramalEmailCopy.addEventListener('click', (event) => {
+        event.preventDefault();
+        copyRamalEmail();
+      });
+    }
+
     document.addEventListener('click', (event) => {
       const trigger = event.target.closest('.ramal-email-trigger');
       if (trigger) {
@@ -318,8 +370,5 @@
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') hideRamalEmailPopover();
     });
-
-    window.addEventListener('resize', hideRamalEmailPopover);
-    ramalEmailCopy?.addEventListener('click', copyRamalEmail);
   </script>
 {% endblock %}

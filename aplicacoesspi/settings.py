@@ -56,6 +56,8 @@ INSTALLED_APPS = [
     'licitacoes',
     'navbar',
     'noticias',
+    'regulariza_sgi',
+    'setores',
     'usuarios',
 ]
 

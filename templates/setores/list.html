@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Setores{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'setores/css/setores.css' %}">{% endblock %}
+{% block content %}
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div class="spi-page-title mb-0">
+      <h1>Setores</h1>
+      <p>Estrutura hierárquica dos grupos do sistema.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'setores:home' %}">Módulo</a>
+      <a class="btn btn-outline-secondary" href="{% url 'setores:organograma' %}">Organograma</a>
+      {% if request.user.is_superuser %}
+        <a class="btn btn-primary" href="{% url 'setores:create' %}">Novo setor</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <section class="card shadow-sm border-0">
+    <div class="card-body border-bottom">
+      <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
+        <input class="form-control form-control-lg flex-grow-1 setores-search-input" type="search" name="q" value="{{ q }}" placeholder="Pesquisar por nome do grupo ou grupo pai">
+        <button class="btn btn-primary" type="submit">Pesquisar</button>
+        {% if q %}<a class="btn btn-light" href="{{ request.path }}">Limpar</a>{% endif %}
+      </form>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0 setores-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nome do grupo</th>
+              <th>Grupo pai</th>
+              <th class="text-end">...</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for setor in setores %}
+              <tr>
+                <td class="fw-semibold">{{ setor.id }}</td>
+                <td>{{ setor.group.name }}</td>
+                <td>{{ setor.parent.group.name|default:"-" }}</td>
+                <td class="text-end">
+                  {% if request.user.is_superuser %}
+                    <div class="dropdown">
+                      <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" title="Ações">...</button>
+                      <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="{% url 'setores:update' setor.pk %}" data-bs-toggle="tooltip" title="Editar setor">Editar</a></li>
+                        <li><a class="dropdown-item" href="{% url 'setores:delete' setor.pk %}" data-bs-toggle="tooltip" title="Excluir setor">Excluir</a></li>
+                      </ul>
+                    </div>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-center text-muted py-5">Nenhum setor cadastrado.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+{% endblock %}

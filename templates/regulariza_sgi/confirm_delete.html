@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Excluir | RegulaSGI{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'regulariza_sgi/css/regulariza_sgi.css' %}">{% endblock %}
+{% block content %}
+  <div class="regulariza-shell">
+    <div class="card shadow-sm border-0 regulariza-form-card">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-3">Confirmar exclusão</h1>
+        <p class="mb-0">Deseja realmente excluir <strong>{{ object }}</strong>?</p>
+      </div>
+      <div class="card-footer bg-white d-flex justify-content-end gap-2 p-4">
+        <button class="btn btn-outline-secondary" type="button" onclick="history.back()">Cancelar</button>
+        <form method="post">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit">Excluir</button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock %}

@@ -32,6 +32,8 @@ urlpatterns = [
     path('licitacoes/', include('licitacoes.urls')),
     path('navbar/', include('navbar.urls')),
     path('noticias/', include('noticias.urls')),
+    path('regulariza-sgi/', include('regulariza_sgi.urls')),
+    path('setores/', include('setores.urls')),
     path('admin/', admin.site.urls),
 ]
 

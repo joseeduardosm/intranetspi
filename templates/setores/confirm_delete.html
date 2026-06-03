@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Excluir setor{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'setores/css/setores.css' %}">{% endblock %}
+{% block content %}
+  <div class="setores-shell">
+    <div class="card shadow-sm border-0 setores-form-card">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-3">Excluir setor</h1>
+        <p class="mb-0">Confirma a exclusão de <strong>{{ object.group.name }}</strong>?</p>
+      </div>
+      <div class="card-footer bg-white d-flex justify-content-end gap-2 p-4">
+        <a class="btn btn-light" href="{% url 'setores:list' %}">Cancelar</a>
+        <form method="post">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit">Excluir</button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock %}

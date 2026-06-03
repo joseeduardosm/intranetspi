@@ -1,0 +1,362 @@
+.regulariza-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.regulariza-form-card {
+  border-radius: 12px;
+}
+
+.regulariza-table {
+  min-width: 960px;
+}
+
+.regulariza-search-input {
+  min-width: min(520px, 100%);
+}
+
+.regulariza-table-wrap {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.regulariza-row-verde {
+  --bs-table-bg: #d8f3dc;
+}
+
+.regulariza-row-amarelo {
+  --bs-table-bg: #fff3bf;
+}
+
+.regulariza-row-vermelho {
+  --bs-table-bg: #f8d7da;
+}
+
+.regulariza-row-neutro {
+  --bs-table-bg: #edf2f7;
+}
+
+.regulariza-cadin-triangle {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-bottom: 20px solid #dc3545;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.regulariza-cadin-triangle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 5px;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 13px solid #fff;
+}
+
+.regulariza-cadin-triangle::after {
+  content: "!";
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #111;
+  font-size: .8rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.regulariza-status-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+
+.regulariza-inline-badge {
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.regulariza-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(520px, 1.4fr);
+  gap: 1.5rem;
+}
+
+.regulariza-summary-list dt {
+  color: #475467;
+}
+
+.regulariza-summary-list dd {
+  font-weight: 600;
+}
+
+.regulariza-badge-verde {
+  background: #d1e7dd;
+  color: #0f5132;
+}
+
+.regulariza-badge-amarelo {
+  background: #fff3cd;
+  color: #7a5b00;
+}
+
+.regulariza-badge-vermelho {
+  background: #f8d7da;
+  color: #842029;
+}
+
+.regulariza-badge-neutro {
+  background: #e9ecef;
+  color: #495057;
+}
+
+.regulariza-timeline {
+  position: relative;
+  padding-top: .5rem;
+}
+
+.regulariza-timeline-header,
+.regulariza-timeline-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.regulariza-timeline-header {
+  margin-bottom: 1rem;
+}
+
+.regulariza-timeline-status {
+  display: inline-flex;
+  align-items: center;
+  padding: .3rem .65rem;
+  border-radius: 999px;
+  background: #e8eef9;
+  color: #1f2d4a;
+  font-size: .8rem;
+  font-weight: 700;
+}
+
+.regulariza-timeline-progress-text {
+  color: #475467;
+  font-size: .9rem;
+  font-weight: 600;
+}
+
+.regulariza-timeline-track {
+  position: relative;
+  padding-top: 3.25rem;
+  margin-bottom: 1.35rem;
+}
+
+.regulariza-timeline-line,
+.regulariza-timeline-progress {
+  position: absolute;
+  top: 4.2rem;
+  left: 0;
+  right: 0;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.regulariza-timeline-line {
+  background: #cbd5e1;
+}
+
+.regulariza-timeline-progress {
+  right: auto;
+  background: #198754;
+}
+
+.regulariza-timeline-amarelo .regulariza-timeline-progress {
+  background: #ffc107;
+}
+
+.regulariza-timeline-vermelho .regulariza-timeline-progress {
+  background: #dc3545;
+}
+
+.regulariza-timeline-marker {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+.regulariza-timeline-marker span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  padding: .35rem .6rem;
+  border-radius: 999px;
+  background: #1f2d4a;
+  color: #fff;
+  font-size: .82rem;
+  font-weight: 700;
+}
+
+.regulariza-timeline-marker::after {
+  content: "";
+  position: absolute;
+  top: 2rem;
+  left: 50%;
+  width: 2px;
+  height: 1.7rem;
+  background: rgba(31, 45, 74, .4);
+  transform: translateX(-50%);
+}
+
+.regulariza-timeline-anchor {
+  position: absolute;
+  top: 3.85rem;
+  transform: translateY(-50%);
+}
+
+.regulariza-timeline-anchor-current {
+  left: 0;
+}
+
+.regulariza-timeline-anchor-next {
+  right: 0;
+}
+
+.regulariza-timeline-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #198754;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 3px #198754;
+}
+
+.regulariza-timeline-dot-future {
+  background: #fff;
+  box-shadow: 0 0 0 3px #cbd5e1;
+}
+
+.regulariza-timeline-amarelo .regulariza-timeline-dot {
+  background: #ffc107;
+  box-shadow: 0 0 0 3px #ffc107;
+}
+
+.regulariza-timeline-vermelho .regulariza-timeline-dot {
+  background: #dc3545;
+  box-shadow: 0 0 0 3px #dc3545;
+}
+
+.regulariza-timeline-ends {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.regulariza-timeline-end {
+  min-width: 0;
+}
+
+.regulariza-timeline-end-next {
+  text-align: right;
+}
+
+.regulariza-timeline-end-label {
+  display: block;
+  color: #667085;
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  margin-bottom: .3rem;
+}
+
+.regulariza-timeline-end strong,
+.regulariza-timeline-end span {
+  display: block;
+}
+
+.regulariza-timeline-end span:last-child {
+  color: #475467;
+  font-size: .92rem;
+  margin-top: .25rem;
+}
+
+.regulariza-timeline-footer {
+  margin-top: 1.25rem;
+}
+
+.regulariza-history-resume {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .45rem;
+  color: #475467;
+}
+
+.regulariza-history-resume strong {
+  font-size: 1rem;
+}
+
+.regulariza-history-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 1rem;
+  padding: .8rem 1rem;
+  border: 1px solid rgba(31, 45, 74, .12);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.regulariza-action-card {
+  height: 100%;
+  padding: 1rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid rgba(31, 45, 74, .12);
+}
+
+.regulariza-action-card p {
+  margin-bottom: 1rem;
+}
+
+.regulariza-action-card form p {
+  margin-bottom: .95rem;
+}
+
+.regulariza-action-card label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: .3rem;
+}
+
+.regulariza-action-card ul {
+  list-style: none;
+  padding-left: 0;
+  margin-bottom: .75rem;
+}
+
+@media (max-width: 991.98px) {
+  .regulariza-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .regulariza-timeline-line,
+  .regulariza-timeline-progress {
+    left: 0;
+    right: 0;
+  }
+
+  .regulariza-timeline-ends {
+    grid-template-columns: 1fr;
+  }
+
+  .regulariza-timeline-end-next {
+    text-align: left;
+  }
+}
