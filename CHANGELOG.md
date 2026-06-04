@@ -1,6 +1,31 @@
 # Changelog
 
-Todas as mudancas importantes do Aplicacoes SPI serao documentadas neste arquivo.
+Todas as mudanças importantes do Aplicações SPI serão documentadas neste arquivo.
+
+## [0.9.0] - 2026-06-03
+
+### Adicionado
+
+- Adicionado módulo `regulariza_sgi` para gestão de imóveis, com cadastro, detalhe operacional, SEIs, anexos, timeline processual, protocolo, prorrogação, manifestação, ciclos e status calculados.
+- Adicionado módulo `setores`, baseado em grupos do Django, com CRUD hierárquico de setores, definição de líder, vínculo de usuários, listagem administrativa e organograma navegável.
+- Adicionado seed inicial da estrutura de setores a partir de `docs/grupos.md`, respeitando a hierarquia pai-filho descrita no documento.
+- Adicionado botão `Organograma` na tela de `Ramais`, com acesso direto ao organograma institucional de setores.
+- Adicionado modal de contato no organograma de setores, reaproveitando a experiência de contato já existente em `Ramais`.
+
+### Alterado
+
+- Alterado o cadastro de usuários para substituir o campo textual de setor por combobox alimentado pelos setores cadastrados.
+- Alterado o vínculo de setor dos usuários para sincronizar grupo do Django, vínculo em setor e valor legado exibido em `Ramais`.
+- Alterada a tela de `Ramais` para manter a nomenclatura pública `Setor` e refletir a nova origem dos dados.
+- Alterada a home do sistema para exibir os novos acessos de `Regulariza SGI` e `Setores`.
+- Alterado o organograma de setores para usar uma visualização institucional com zoom por roda do mouse, navegação por arraste, nomes clicáveis e cores graduadas por nível.
+- Ajustados conectores, alinhamento interno dos cards e comportamento de expansão do organograma para reagir melhor ao crescimento dos blocos.
+- Ajustada a listagem do `Regulariza SGI` para exibir colunas operacionais, indicador de CADIN e marcadores de status diretamente na tela de imóveis.
+
+### Dados e migrações
+
+- Adicionadas migrações iniciais dos módulos `regulariza_sgi` e `setores`.
+- Adicionada rotina de reset dos setores manuais em perfis de usuário, limpando o valor legado e zerando o recadastro para forçar atualização no próximo acesso.
 
 ## [0.8.0] - 2026-06-01
 
@@ -51,31 +76,6 @@ Todas as mudancas importantes do Aplicacoes SPI serao documentadas neste arquivo
 - Alterado o rodape global para exibir a mensagem institucional centralizada.
 
 ### Corrigido
-
-## [0.7.0] - 2026-06-03
-
-### Adicionado
-
-- Adicionado módulo `regulariza_sgi` para gestão de imóveis, com cadastro, detalhe operacional, SEIs, anexos, timeline processual, protocolo, prorrogação, manifestação, ciclos e status calculados.
-- Adicionado módulo `setores`, baseado em grupos do Django, com CRUD hierárquico de setores, definição de líder, vínculo de usuários, listagem administrativa e organograma navegável.
-- Adicionado seed inicial da estrutura de setores a partir de `docs/grupos.md`, respeitando a hierarquia pai-filho descrita no documento.
-- Adicionado botão `Organograma` na tela de `Ramais`, com acesso direto ao organograma institucional de setores.
-- Adicionado modal de contato no organograma de setores, reaproveitando a experiência de contato já existente em `Ramais`.
-
-### Alterado
-
-- Alterado o cadastro de usuários para substituir o campo textual de setor por combobox alimentado pelos setores cadastrados.
-- Alterado o vínculo de setor dos usuários para sincronizar grupo do Django, vínculo em setor e valor legado exibido em `Ramais`.
-- Alterada a tela de `Ramais` para manter a nomenclatura pública `Setor` e refletir a nova origem dos dados.
-- Alterada a home do sistema para exibir os novos acessos de `Regulariza SGI` e `Setores`.
-- Alterado o organograma de setores para usar uma visualização institucional com zoom por roda do mouse, navegação por arraste, nomes clicáveis e cores graduadas por nível.
-- Ajustados conectores, alinhamento interno dos cards e comportamento de expansão do organograma para reagir melhor ao crescimento dos blocos.
-- Ajustada a listagem do `Regulariza SGI` para exibir colunas operacionais, indicador de CADIN e marcadores de status diretamente na tela de imóveis.
-
-### Dados e migrações
-
-- Adicionadas migrações iniciais dos módulos `regulariza_sgi` e `setores`.
-- Adicionada rotina de reset dos setores manuais em perfis de usuário, limpando o valor legado e zerando o recadastro para forçar atualização no próximo acesso.
 
 - Corrigido recadastro repetido apos novo login causado por e-mail apagado pelo LDAP.
 - Corrigidas quebras de layout no modal de contato dos ramais.
