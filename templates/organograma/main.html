@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Organograma{% endblock %}
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'organograma/css/organograma.css' %}">
+  <link rel="stylesheet" href="{% static 'usuarios/css/ramais.css' %}">
+{% endblock %}
+{% block content %}
+  <div class="organograma-page-wrapper">
+    <!-- Header Section -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+      <div class="spi-page-title mb-0">
+        <h1>Organograma</h1>
+        <p>Secretaria de Parcerias em Investimentos</p>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary" href="{% url 'setores:list' %}">Gerenciar Setores</a>
+        <a class="btn btn-light" href="{% url 'home' %}">Voltar</a>
+      </div>
+    </div>
+
+    <!-- Tree View & Actions -->
+    <section class="organograma-main-card card shadow-sm border-0">
+      <div class="card-header bg-white border-bottom-0 py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div class="org-search-wrapper">
+          <span class="org-search-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+          </span>
+          <input type="text" id="orgSearchInput" class="form-control form-control-sm" placeholder="Buscar setor...">
+        </div>
+        <div class="org-tree-controls">
+          <button class="btn btn-outline-secondary btn-sm" id="btnCollapseAll" type="button">Recolher Todos</button>
+          <button class="btn btn-outline-secondary btn-sm" id="btnExpandAll" type="button">Expandir Todos</button>
+        </div>
+      </div>
+
+      <div class="card-body p-4">
+        {% if org_tree %}
+          <div class="org-tree-root-container">
+            {% for node in org_tree %}
+              {% include "organograma/partials/tree_node.html" with node=node %}
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-center py-5">
+            <p class="text-muted mb-0">Nenhum setor ativo cadastrado para exibir no organograma.</p>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <!-- Sector Members Modal -->
+  <div class="modal fade" id="sectorMembersModal" tabindex="-1" aria-labelledby="sectorMembersModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
+        <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+          <h5 class="modal-title fw-bold" id="sectorMembersModalTitle">Membros do Setor</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="mb-4">
+            <h6 class="fw-bold text-uppercase text-secondary tracking-wider small mb-3">Líder do Setor</h6>
+            <div id="sectorLiderContainer"></div>
+          </div>
+          <div>
+            <h6 class="fw-bold text-uppercase text-secondary tracking-wider small mb-3">Funcionários</h6>
+            <div id="sectorEmployeesContainer" class="d-flex flex-column gap-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ramal Contact Modal -->
+  <div class="modal fade" id="ramalContactModal" tabindex="-1" aria-labelledby="ramalContactModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered ramal-contact-dialog">
+      <div class="modal-content ramal-contact-modal border-0 shadow-lg" style="border-radius: 16px;">
+        <button class="btn-close ramal-contact-close" type="button" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        <div class="ramal-contact-card">
+          <div class="ramal-contact-photo">
+            <img id="ramalContactPhoto" src="" alt="">
+          </div>
+          <div class="ramal-contact-data">
+            <section class="ramal-contact-field ramal-contact-field-name">
+              <span>Nome</span>
+              <h2 id="ramalContactModalTitle"></h2>
+            </section>
+
+            <section class="ramal-contact-field ramal-contact-field-cargo">
+              <span>Cargo</span>
+              <p id="ramalContactCargo"></p>
+            </section>
+
+            <section class="ramal-contact-field ramal-contact-field-setor">
+              <span>Setor</span>
+              <p id="ramalContactSetor"></p>
+            </section>
+
+            <section class="ramal-contact-field ramal-contact-field-email">
+              <span>E-mail</span>
+              <button
+                id="ramalContactEmail"
+                class="ramal-contact-email ramal-email-trigger"
+                type="button"
+                data-email=""
+                aria-label="Abrir ações para o e-mail"
+              ></button>
+            </section>
+
+            <section class="ramal-contact-field ramal-contact-field-ramal">
+              <span>Ramal</span>
+              <p id="ramalContactRamal"></p>
+            </section>
+
+            <section class="ramal-contact-field ramal-contact-field-celular" id="ramalContactCelularWrapper" style="display: none;">
+              <span>Celular</span>
+              <p><a id="ramalContactCelular" href="" target="_blank" rel="noopener" style="color: #0d6efd; text-decoration: none; font-weight: bold;"></a></p>
+            </section>
+
+            <section class="ramal-contact-field ramal-contact-field-local">
+              <span>Localização</span>
+              <p id="ramalContactLocal"></p>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email Popover Actions -->
+  <div class="ramal-email-popover" id="ramalEmailPopover" role="tooltip" hidden>
+    <div class="ramal-email-popover-address" id="ramalEmailPopoverAddress"></div>
+    <div class="ramal-email-popover-actions">
+      <a class="ramal-email-action" id="ramalEmailTeams" href="#" target="_blank" rel="noopener">
+        <span class="ramal-email-logo ramal-email-logo-teams" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="7" y="4" width="13" height="14" rx="2"></rect>
+            <rect x="3" y="7" width="10" height="10" rx="1.5"></rect>
+            <path d="M6 10h4M8 10v5"></path>
+          </svg>
+        </span>
+        <span>Teams</span>
+      </a>
+      <a class="ramal-email-action" id="ramalEmailOutlook" href="#" target="_blank" rel="noopener">
+        <span class="ramal-email-logo ramal-email-logo-outlook" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="4" y="6" width="15" height="12" rx="2"></rect>
+            <rect x="2" y="8" width="10" height="8" rx="1.5"></rect>
+            <path d="M5 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0M12 9l4 3l4-3"></path>
+          </svg>
+        </span>
+        <span>Outlook</span>
+      </a>
+      <button class="ramal-email-action" id="ramalEmailCopy" type="button">
+        <span class="ramal-email-logo ramal-email-logo-copy" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="8" y="8" width="10" height="12" rx="2"></rect>
+            <path d="M6 16h-.5A1.5 1.5 0 0 1 4 14.5v-9A1.5 1.5 0 0 1 5.5 4h8A1.5 1.5 0 0 1 15 5.5V6"></path>
+          </svg>
+        </span>
+        <span id="ramalEmailCopyText">Copiar</span>
+      </button>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  <script>
+    // Handle opening sectors and retrieving member metadata
+    document.addEventListener('click', (event) => {
+      const sectorNode = event.target.closest('.sector-card-trigger');
+      if (sectorNode) {
+        event.preventDefault();
+        
+        const jsonEl = sectorNode.querySelector('.sector-data');
+        if (!jsonEl) return;
+        
+        try {
+          const data = JSON.parse(jsonEl.textContent);
+          
+          document.getElementById('sectorMembersModalTitle').textContent = data.name;
+          
+          const liderContainer = document.getElementById('sectorLiderContainer');
+          liderContainer.innerHTML = '';
+          if (data.lider) {
+            liderContainer.appendChild(createMemberButton(data.lider, true));
+          } else {
+            liderContainer.innerHTML = '<div class="text-muted small italic py-2">Sem líder designado</div>';
+          }
+          
+          const employeesContainer = document.getElementById('sectorEmployeesContainer');
+          employeesContainer.innerHTML = '';
+          if (data.usuarios && data.usuarios.length > 0) {
+            data.usuarios.forEach(user => {
+              employeesContainer.appendChild(createMemberButton(user, false));
+            });
+          } else {
+            employeesContainer.innerHTML = '<div class="text-muted small italic py-2">Sem funcionários vinculados</div>';
+          }
+          
+          const sectorModalObj = new bootstrap.Modal(document.getElementById('sectorMembersModal'));
+          sectorModalObj.show();
+          
+        } catch (e) {
+          console.error("Error parsing sector JSON", e);
+        }
+      }
+    });
+
+    function createMemberButton(member, isLider) {
+      const button = document.createElement('button');
+      button.className = 'btn btn-outline-secondary w-100 text-start d-flex align-items-center gap-3 py-2 px-3 sector-member-trigger';
+      button.type = 'button';
+      button.style.borderRadius = '10px';
+      button.style.border = '1px solid rgba(148, 163, 184, 0.15)';
+      button.style.backgroundColor = isLider ? 'rgba(13, 110, 253, 0.03)' : '#ffffff';
+      button.style.transition = 'all 0.15s ease';
+      
+      button.dataset.name = member.nome || '-';
+      button.dataset.cargo = member.cargo || '-';
+      button.dataset.setor = member.setor || '-';
+      button.dataset.email = member.email || '-';
+      button.dataset.ramal = member.ramal || '-';
+      button.dataset.celular = member.celular || '';
+      button.dataset.whatsapp = member.whatsapp_url || '';
+      button.dataset.local = member.local || '-';
+      button.dataset.photo = member.photo_url || '';
+      
+      let imgHtml = '';
+      if (member.photo_url) {
+        imgHtml = `<img src="${member.photo_url}" style="width: 42px; height: 42px; border-radius: 50%; object-fit: cover; border: 2px solid ${isLider ? '#0d6efd' : '#e2e8f0'};">`;
+      } else {
+        const initial = (member.nome || '?')[0].toUpperCase();
+        const bgClass = isLider ? 'bg-primary' : 'bg-secondary';
+        imgHtml = `<div class="d-flex align-items-center justify-content-center ${bgClass} text-white fw-bold" style="width: 42px; height: 42px; border-radius: 50%; font-size: 0.95rem;">${initial}</div>`;
+      }
+      
+      button.innerHTML = `
+        ${imgHtml}
+        <div class="flex-grow-1" style="min-width: 0;">
+          <div class="fw-bold text-dark text-truncate" style="font-size: 0.95rem;">${member.nome || '-'}</div>
+          <div class="small text-muted text-truncate" style="font-size: 0.82rem;">${member.cargo || '-'}</div>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+      `;
+      
+      button.addEventListener('click', () => {
+        const sectorModalEl = document.getElementById('sectorMembersModal');
+        const sectorModalObj = bootstrap.Modal.getInstance(sectorModalEl);
+        if (sectorModalObj) {
+          sectorModalObj.hide();
+        }
+        
+        const contactModalEl = document.getElementById('ramalContactModal');
+        const contactModalObj = new bootstrap.Modal(contactModalEl);
+        
+        setTimeout(() => {
+          contactModalObj.show(button);
+        }, 150);
+      });
+      
+      return button;
+    }
+
+    // Contact modal integration
+    const ramalContactModal = document.getElementById('ramalContactModal');
+    if (ramalContactModal) {
+      ramalContactModal.addEventListener('show.bs.modal', (event) => {
+        const trigger = event.relatedTarget;
+        if (!trigger) return;
+
+        const name = trigger.dataset.name || '-';
+        const photo = trigger.dataset.photo || '';
+
+        document.getElementById('ramalContactModalTitle').textContent = name;
+        document.getElementById('ramalContactCargo').textContent = trigger.dataset.cargo || '-';
+        document.getElementById('ramalContactSetor').textContent = trigger.dataset.setor || '-';
+        const modalEmail = document.getElementById('ramalContactEmail');
+        const email = trigger.dataset.email || '-';
+        modalEmail.textContent = email;
+        modalEmail.dataset.email = email;
+        modalEmail.title = email;
+        modalEmail.setAttribute('aria-label', `Abrir ações para ${email}`);
+        const ramalVal = trigger.dataset.ramal || '-';
+        document.getElementById('ramalContactRamal').textContent = (ramalVal !== '-' && ramalVal !== '') ? 'R: ' + ramalVal : '-';
+        document.getElementById('ramalContactLocal').textContent = trigger.dataset.local || '-';
+
+        const celular = trigger.dataset.celular || '';
+        const whatsapp = trigger.dataset.whatsapp || '';
+        const celularWrapper = document.getElementById('ramalContactCelularWrapper');
+        const celularElement = document.getElementById('ramalContactCelular');
+        if (celularWrapper && celularElement) {
+          if (celular) {
+            // Remove caracteres não numéricos para a formatação
+            const cleanNum = celular.replace(/\D/g, '');
+            if (cleanNum.length === 11) {
+              celularElement.textContent = `(${cleanNum.substring(0, 2)}) ${cleanNum.substring(2, 7)}-${cleanNum.substring(7)}`;
+            } else if (cleanNum.length === 10) {
+              celularElement.textContent = `(${cleanNum.substring(0, 2)}) ${cleanNum.substring(2, 6)}-${cleanNum.substring(6)}`;
+            } else {
+              celularElement.textContent = celular;
+            }
+            celularElement.href = whatsapp;
+            celularWrapper.style.display = 'block';
+          } else {
+            celularWrapper.style.display = 'none';
+          }
+        }
+
+        const photoElement = document.getElementById('ramalContactPhoto');
+        if (photo) {
+          photoElement.src = photo;
+          photoElement.alt = name;
+        } else {
+          photoElement.removeAttribute('src');
+          photoElement.alt = `Foto não cadastrada para ${name}`;
+        }
+      });
+    }
+
+    // Email Popover controller
+    const ramalEmailPopover = document.getElementById('ramalEmailPopover');
+    const ramalEmailPopoverAddress = document.getElementById('ramalEmailPopoverAddress');
+    const ramalEmailTeams = document.getElementById('ramalEmailTeams');
+    const ramalEmailOutlook = document.getElementById('ramalEmailOutlook');
+    const ramalEmailCopy = document.getElementById('ramalEmailCopy');
+    const ramalEmailCopyText = document.getElementById('ramalEmailCopyText');
+    let ramalActiveEmail = '';
+
+    function hideRamalEmailPopover() {
+      if (!ramalEmailPopover) return;
+      ramalEmailPopover.hidden = true;
+      ramalActiveEmail = '';
+    }
+
+    function positionRamalEmailPopover(trigger) {
+      const rect = trigger.getBoundingClientRect();
+      const popoverRect = ramalEmailPopover.getBoundingClientRect();
+      const gap = 8;
+      let top = rect.bottom + gap + window.scrollY;
+      let left = rect.left + window.scrollX;
+
+      if (left + popoverRect.width > window.innerWidth - 12) {
+        left = window.innerWidth - popoverRect.width - 12;
+      }
+      if (top + popoverRect.height > window.innerHeight - 12) {
+        top = rect.top - popoverRect.height - gap + window.scrollY;
+      }
+
+      ramalEmailPopover.style.left = `${Math.max(12, left)}px`;
+      ramalEmailPopover.style.top = `${Math.max(12, top)}px`;
+    }
+
+    function showRamalEmailPopover(trigger) {
+      if (!ramalEmailPopover) return;
+      const email = (trigger.dataset.email || trigger.textContent || '').trim();
+      if (!email || email === '-') return;
+
+      ramalActiveEmail = email;
+      ramalEmailPopoverAddress.textContent = email;
+      ramalEmailTeams.href = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`;
+      ramalEmailOutlook.href = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(email)}`;
+      ramalEmailCopyText.textContent = 'Copiar';
+      ramalEmailPopover.hidden = false;
+      positionRamalEmailPopover(trigger);
+    }
+
+    async function copyRamalEmail() {
+      if (!ramalActiveEmail) return;
+      try {
+        await navigator.clipboard.writeText(ramalActiveEmail);
+      } catch (error) {
+        const input = document.createElement('input');
+        input.value = ramalActiveEmail;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+      }
+      ramalEmailCopyText.textContent = 'Copiado';
+      window.setTimeout(() => {
+        if (ramalActiveEmail) ramalEmailCopyText.textContent = 'Copiar';
+      }, 1400);
+    }
+
+    if (ramalEmailCopy) {
+      ramalEmailCopy.addEventListener('click', (event) => {
+        event.preventDefault();
+        copyRamalEmail();
+      });
+    }
+
+    document.addEventListener('click', (event) => {
+      const trigger = event.target.closest('.ramal-email-trigger');
+      if (trigger) {
+        event.preventDefault();
+        event.stopPropagation();
+        showRamalEmailPopover(trigger);
+        return;
+      }
+
+      if (ramalEmailPopover && !ramalEmailPopover.hidden && !event.target.closest('#ramalEmailPopover')) {
+        hideRamalEmailPopover();
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') hideRamalEmailPopover();
+    });
+
+    // Collapse / Expand control
+    const btnCollapseAll = document.getElementById('btnCollapseAll');
+    const btnExpandAll = document.getElementById('btnExpandAll');
+    
+    if (btnCollapseAll) {
+      btnCollapseAll.addEventListener('click', () => {
+        document.querySelectorAll('.org-tree-branch.has-children').forEach(el => {
+          el.classList.add('collapsed');
+        });
+      });
+    }
+    
+    if (btnExpandAll) {
+      btnExpandAll.addEventListener('click', () => {
+        document.querySelectorAll('.org-tree-branch.has-children').forEach(el => {
+          el.classList.remove('collapsed');
+        });
+      });
+    }
+
+    // Toggle branches on double click or clicking connection lines
+    document.querySelectorAll('.org-tree-node').forEach(node => {
+      node.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const branch = node.closest('.org-tree-branch');
+        if (branch && branch.classList.contains('has-children')) {
+          branch.classList.toggle('collapsed');
+        }
+      });
+    });
+
+    // Real-time Search Filter
+    const orgSearchInput = document.getElementById('orgSearchInput');
+    if (orgSearchInput) {
+      orgSearchInput.addEventListener('input', () => {
+        const query = orgSearchInput.value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const nodes = document.querySelectorAll('.org-tree-node');
+        
+        if (!query) {
+          nodes.forEach(node => {
+            node.classList.remove('highlighted', 'dimmed');
+            const branch = node.closest('.org-tree-branch');
+            if (branch) branch.classList.remove('force-expanded');
+          });
+          return;
+        }
+
+        nodes.forEach(node => {
+          const nameAttr = node.dataset.sectorName || '';
+          const normalizedVal = nameAttr.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          
+          if (normalizedVal.includes(query)) {
+            node.classList.add('highlighted');
+            node.classList.remove('dimmed');
+            
+            // Expand all parents to show highlighted node
+            let parentBranch = node.closest('.org-tree-branch').parentElement.closest('.org-tree-branch');
+            while (parentBranch) {
+              parentBranch.classList.remove('collapsed');
+              parentBranch.classList.add('force-expanded');
+              parentBranch = parentBranch.parentElement.closest('.org-tree-branch');
+            }
+          } else {
+            node.classList.add('dimmed');
+            node.classList.remove('highlighted');
+          }
+        });
+      });
+    }
+  </script>
+{% endblock %}

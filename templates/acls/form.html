@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'setores/css/setores.css' %}">
+  <style>
+    /* Ajuste para simular seleção única no list */
+    .setores-picker-item.is-selected {
+      background: #e7f0ff;
+      border-color: rgba(13, 110, 253, .28);
+    }
+  </style>
+{% endblock %}
+{% block content %}
+<div class="setores-shell py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h2 mb-1 text-primary fw-bold">{{ titulo }}</h1>
+      <p class="text-muted">Defina permissões refinadas de acesso aos módulos do sistema.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ voltar_url }}">Voltar</a>
+  </div>
+
+  <form method="post" class="card shadow-sm border-0 setores-form-card" id="acl-rule-form">
+    <div class="card-body p-4">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="row g-4">
+        <!-- Recurso/App -->
+        <div class="col-md-6">
+          <label class="form-label fw-semibold" for="{{ form.recurso.id_for_label }}">{{ form.recurso.label }}</label>
+          {{ form.recurso }}
+          {% for error in form.recurso.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+
+        <!-- Nivel de Acesso -->
+        <div class="col-md-6">
+          <label class="form-label fw-semibold" for="{{ form.nivel.id_for_label }}">{{ form.nivel.label }}</label>
+          {{ form.nivel }}
+          {% for error in form.nivel.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+
+        <!-- Seletores Independentes -->
+        <div class="col-12 border-top pt-4">
+          <p class="text-muted mb-4">Selecione o usuário, o grupo/setor, ou ambos para os quais deseja aplicar esta regra.</p>
+          
+          <div class="row g-4">
+            <!-- Coluna Usuário -->
+            <div class="col-lg-6">
+              <label class="form-label fw-semibold" for="acl-user-search">Usuário</label>
+              <input type="text" class="form-control mb-3" id="acl-user-search" placeholder="Buscar usuário por nome...">
+              {{ form.usuario }}
+              <div class="setores-picker">
+                <div class="setores-picker-column">
+                  <div class="setores-picker-label">Disponíveis</div>
+                  <div class="setores-picker-list" id="acl-users-available" style="max-height: 250px;"></div>
+                </div>
+                <div class="setores-picker-column">
+                  <div class="setores-picker-label">Selecionado</div>
+                  <div class="setores-picker-list is-selected" id="acl-users-selected" style="max-height: 250px;"></div>
+                </div>
+              </div>
+              {% for error in form.usuario.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+
+            <!-- Coluna Grupo/Setor -->
+            <div class="col-lg-6">
+              <label class="form-label fw-semibold" for="acl-group-search">Grupo/Setor</label>
+              <input type="text" class="form-control mb-3" id="acl-group-search" placeholder="Buscar grupo/setor...">
+              {{ form.grupo }}
+              <div class="setores-picker">
+                <div class="setores-picker-column">
+                  <div class="setores-picker-label">Disponíveis</div>
+                  <div class="setores-picker-list" id="acl-groups-available" style="max-height: 250px;"></div>
+                </div>
+                <div class="setores-picker-column">
+                  <div class="setores-picker-label">Selecionado</div>
+                  <div class="setores-picker-list is-selected" id="acl-groups-selected" style="max-height: 250px;"></div>
+                </div>
+              </div>
+              {% for error in form.grupo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-end gap-2 p-4 border-top">
+      <a class="btn btn-light px-4" href="{{ voltar_url }}">Cancelar</a>
+      <button class="btn btn-primary px-4 shadow-sm" type="submit">Salvar Regra</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Função para construir o searchable picker em single-select
+    function setupSinglePicker(selectId, searchId, availableId, selectedId) {
+      const select = document.getElementById(selectId);
+      const search = document.getElementById(searchId);
+      const availableList = document.getElementById(availableId);
+      const selectedList = document.getElementById(selectedId);
+
+      if (!select || !search || !availableList || !selectedList) return;
+
+      select.classList.add('setores-select-hidden');
+
+      const render = (filterText = '') => {
+        const filter = filterText.trim().toLowerCase();
+        availableList.innerHTML = '';
+        selectedList.innerHTML = '';
+
+        let hasSelected = false;
+
+        Array.from(select.options).forEach(option => {
+          if (!option.value) return;
+
+          const label = (option.textContent || '').trim();
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'setores-picker-item';
+          item.textContent = label;
+
+          if (option.selected) {
+            item.classList.add('is-selected');
+            item.addEventListener('click', () => {
+              option.selected = false;
+              render(search.value);
+            });
+            selectedList.appendChild(item);
+            hasSelected = true;
+            return;
+          }
+
+          if (filter && !label.toLowerCase().includes(filter)) {
+            return;
+          }
+
+          item.addEventListener('click', () => {
+            Array.from(select.options).forEach(opt => opt.selected = false);
+            option.selected = true;
+            render(search.value);
+          });
+          availableList.appendChild(item);
+        });
+
+        if (!hasSelected) {
+          select.value = '';
+        }
+      };
+
+      search.addEventListener('input', () => render(search.value));
+      render('');
+    }
+
+    // Inicializa os pickers de forma independente
+    setupSinglePicker('{{ form.usuario.id_for_label }}', 'acl-user-search', 'acl-users-available', 'acl-users-selected');
+    setupSinglePicker('{{ form.grupo.id_for_label }}', 'acl-group-search', 'acl-groups-available', 'acl-groups-selected');
+  });
+</script>
+{% endblock %}

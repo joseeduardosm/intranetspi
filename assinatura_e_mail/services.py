@@ -9,7 +9,7 @@ from django.conf import settings
 
 PNG_WIDTH = 564
 PNG_HEIGHT = 157
-SECRETARIA_FIXA = 'Secretaria de Parceria em Investimentos'
+SECRETARIA_FIXA = 'Secretaria de Parcerias em Investimentos'
 ENDERECO_FIXO = 'Rua Iaiá, 126 - Itaim Bibi'
 CIDADE_FIXA = 'São Paulo/SP - CEP 04542-906'
 NAVY = '#000000'

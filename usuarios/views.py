@@ -17,10 +17,12 @@ SORT_FIELDS = {
     "nome": "nome_completo",
     "email": "user__email",
     "ramal": "ramal",
+    "celular": "celular",
     "cargo": "cargo",
     "setor": "setor",
     "andar": "andar",
     "bloco": "bloco",
+    "nascimento": "data_nascimento",
 }
 
 

@@ -212,3 +212,44 @@
     min-height: 132px;
   }
 }
+
+.spi-marquee-bar {
+  background-color: #d0e1fd; /* 50% lighter blue than theme navy (#1f2d4a) */
+  color: #1f2d4a;
+  overflow: hidden;
+  white-space: nowrap;
+  box-sizing: border-box;
+  font-size: 0.95rem;
+  font-weight: 550;
+  border-bottom: 1px solid rgba(31, 45, 74, 0.12);
+  display: flex;
+  align-items: center;
+  height: 38px;
+  position: relative;
+  z-index: 10;
+}
+
+.spi-marquee-content {
+  display: inline-block;
+  animation: spi-marquee-anim 25s linear infinite;
+  padding-left: 100%;
+}
+
+.spi-marquee-content .title {
+  color: #0c1a30;
+  font-weight: 700;
+  margin-right: 12px;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+}
+
+@keyframes spi-marquee-anim {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+

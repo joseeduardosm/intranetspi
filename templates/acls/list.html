@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h2 mb-1 text-primary fw-bold">{{ titulo }}</h1>
+      <p class="text-muted">Gerencie permissões de Leitura, Modificação e Controle Total por app.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-primary shadow-sm" href="{% url 'acls:create' %}">
+        <i class="bi bi-plus-lg"></i> Nova Regra
+      </a>
+      <a class="btn btn-outline-secondary" href="{% url 'home' %}">Voltar</a>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm mb-4" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-4">ID</th>
+              <th>App/Recurso</th>
+              <th>Nível de Acesso</th>
+              <th>Aplicado A</th>
+              <th>Data de Cadastro</th>
+              <th class="text-end pe-4">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for regra in regras %}
+              <tr>
+                <td class="ps-4 text-muted fw-bold">#{{ regra.id }}</td>
+                <td>
+                  <span class="badge bg-secondary px-2.5 py-1.5 fs-7 fw-semibold">
+                    {{ regra.recurso.nome }}
+                  </span>
+                </td>
+                <td>
+                  {% if regra.nivel == 'CONTROLE_TOTAL' %}
+                    <span class="badge bg-danger px-2.5 py-1.5 fs-7 fw-semibold">Controle Total</span>
+                  {% elif regra.nivel == 'MODIFICACAO' %}
+                    <span class="badge bg-warning text-dark px-2.5 py-1.5 fs-7 fw-semibold">Modificação</span>
+                  {% else %}
+                    <span class="badge bg-info text-dark px-2.5 py-1.5 fs-7 fw-semibold">Leitura</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if regra.usuario %}
+                    <div class="d-flex align-items-center">
+                      <span class="avatar bg-primary text-white rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px;">U</span>
+                      <div>
+                        <strong>{{ regra.usuario.get_full_name|default:regra.usuario.username }}</strong>
+                        <div class="text-muted small">@{{ regra.usuario.username }}</div>
+                      </div>
+                    </div>
+                  {% elif regra.grupo %}
+                    <div class="d-flex align-items-center">
+                      <span class="avatar bg-success text-white rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px;">G</span>
+                      <div>
+                        <strong>{{ regra.grupo.name }}</strong>
+                        <div class="text-muted small">Grupo/Setor</div>
+                      </div>
+                    </div>
+                  {% else %}
+                    <span class="text-muted">-</span>
+                  {% endif %}
+                </td>
+                <td>{{ regra.criado_em|date:"d/m/Y H:i" }}</td>
+                <td class="text-end pe-4">
+                  <a class="btn btn-outline-primary btn-sm me-1" href="{% url 'acls:update' regra.pk %}">
+                    <i class="bi bi-pencil"></i> Editar
+                  </a>
+                  <a class="btn btn-outline-danger btn-sm" href="{% url 'acls:delete' regra.pk %}">
+                    <i class="bi bi-trash"></i> Excluir
+                  </a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6" class="text-center py-5 text-muted">
+                  <i class="bi bi-shield-lock display-4 mb-3 d-block text-muted opacity-50"></i>
+                  Nenhuma regra de acesso cadastrada. Todos os apps estão públicos por padrão.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

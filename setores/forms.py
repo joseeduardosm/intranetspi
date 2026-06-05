@@ -101,7 +101,12 @@ class SetorUserChoiceField(forms.ChoiceField):
 
 def setor_usuario_choices(instance=None):
     choices = [('', 'Selecione um setor')]
-    setores = list(SetorNode.objects.select_related('group').filter(ativo=True).order_by('group__name'))
+    setores = list(
+        SetorNode.objects.select_related('group')
+        .filter(ativo=True)
+        .exclude(group__name__iexact='Administradores')
+        .order_by('group__name')
+    )
     current = primary_setor_for_user(instance.user) if instance and getattr(instance, 'user_id', None) else None
     if current and all(setor.pk != current.pk for setor in setores):
         setores.append(current)

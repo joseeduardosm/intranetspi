@@ -23,11 +23,23 @@ class AssinaturaEmailView(LoginRequiredMixin, FormView):
             initial['cargo_funcao'] = perfil.cargo
             initial['departamento'] = perfil.setor
             initial['ramal'] = perfil.ramal
+            initial['celular'] = perfil.celular
+            initial['data_nascimento'] = perfil.data_nascimento
         initial['email'] = self.request.user.email
         return initial
 
     def form_valid(self, form):
         payload = form.cleaned_data
+        
+        # Save optional fields to profile
+        try:
+            perfil = self.request.user.perfil
+            perfil.celular = payload.get('celular') or ''
+            perfil.data_nascimento = payload.get('data_nascimento')
+            perfil.save()
+        except ObjectDoesNotExist:
+            pass
+
         token = signing.dumps(payload)
         png_bytes = render_signature_png(payload)
         context = self.get_context_data(
@@ -37,6 +49,7 @@ class AssinaturaEmailView(LoginRequiredMixin, FormView):
             gerado=True,
         )
         return self.render_to_response(context)
+
 
 
 class AssinaturaEmailDownloadView(LoginRequiredMixin, View):

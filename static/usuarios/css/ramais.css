@@ -130,8 +130,9 @@
     "spacer"
     "email"
     "ramal"
+    "celular"
     "local";
-  grid-template-rows: 2.55rem 1.2rem 2.55rem minmax(.35rem, 1fr) 1.2rem 1.2rem 1.25rem;
+  grid-template-rows: 2.55rem 1.2rem 2.55rem minmax(.35rem, 1fr) 1.2rem 1.2rem auto 1.25rem;
   row-gap: .16rem;
   padding: 1rem .95rem .95rem;
   color: #253047;
@@ -180,6 +181,20 @@
   grid-area: ramal;
 }
 
+.ramal-field-celular {
+  grid-area: celular;
+}
+
+.ramal-field-celular a {
+  color: #198754;
+  text-decoration: none;
+}
+
+.ramal-field-celular a:hover,
+.ramal-field-celular a:focus {
+  text-decoration: underline;
+}
+
 .ramal-field-local {
   grid-area: local;
 }
@@ -195,6 +210,7 @@
 .ramal-field-cargo,
 .ramal-field-email,
 .ramal-field-ramal,
+.ramal-field-celular,
 .ramal-field-local {
   display: block;
   white-space: nowrap;
@@ -203,6 +219,7 @@
 
 .ramal-field-email,
 .ramal-field-ramal,
+.ramal-field-celular,
 .ramal-field-local {
   color: #344054;
 }
@@ -296,7 +313,7 @@
     "cargo ramal"
     "setor setor"
     "email email"
-    "local local";
+    "local celular";
   grid-template-columns: minmax(0, 1fr) minmax(8rem, .42fr);
   grid-template-rows: 5.4rem 4.25rem 5.1rem 4.4rem 4.4rem;
   gap: .85rem;
@@ -371,6 +388,10 @@
 
 .ramal-contact-field-ramal {
   grid-area: ramal;
+}
+
+.ramal-contact-field-celular {
+  grid-area: celular;
 }
 
 .ramal-contact-field-local {

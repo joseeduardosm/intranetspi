@@ -21,6 +21,8 @@ from django.urls import include, path
 
 from . import views
 
+handler403 = 'aplicacoesspi.views.permission_denied_view'
+
 urlpatterns = [
     path('', views.RootRedirectView.as_view(), name='root'),
     path('login/', views.SuperuserLoginView.as_view(), name='login'),
@@ -34,6 +36,8 @@ urlpatterns = [
     path('noticias/', include('noticias.urls')),
     path('regulariza-sgi/', include('regulariza_sgi.urls')),
     path('setores/', include('setores.urls')),
+    path('acls/', include('acls.urls')),
+    path('organograma/', include('organograma.urls')),
     path('admin/', admin.site.urls),
 ]
 

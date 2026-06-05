@@ -51,10 +51,11 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
 
     class Meta:
         model = UsuarioPerfil
-        fields = ["nome_completo", "foto", "email", "ramal", "cargo", "setor", "andar", "bloco"]
+        fields = ["nome_completo", "foto", "email", "ramal", "celular", "cargo", "setor", "andar", "bloco", "data_nascimento"]
         widgets = {
             "andar": forms.Select(choices=[("", "Selecione")] + ANDAR_CHOICES),
             "bloco": forms.RadioSelect(choices=BLOCO_CHOICES),
+            "data_nascimento": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
 
     def __init__(self, *args, current_user=None, **kwargs):
@@ -81,7 +82,9 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
             self.fields.pop("administrador_sistema")
         setor_atual = primary_setor_for_user(self.instance.user) if self.instance and self.instance.user_id else None
         if not self.is_bound:
-            self.fields["setor"].initial = str(setor_atual.pk) if setor_atual else ""
+            val = str(setor_atual.pk) if setor_atual else ""
+            self.fields["setor"].initial = val
+            self.initial["setor"] = val
 
     def clean_foto(self):
         foto = self.cleaned_data.get("foto")
@@ -124,10 +127,11 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
 
     class Meta:
         model = UsuarioPerfil
-        fields = ["nome_completo", "foto", "email", "ramal", "cargo", "setor", "andar", "bloco"]
+        fields = ["nome_completo", "foto", "email", "ramal", "celular", "cargo", "setor", "andar", "bloco", "data_nascimento"]
         widgets = {
             "andar": forms.Select(choices=[("", "Selecione")] + ANDAR_CHOICES),
             "bloco": forms.RadioSelect(choices=BLOCO_CHOICES),
+            "data_nascimento": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
 
     def __init__(self, *args, current_user=None, **kwargs):
@@ -186,8 +190,11 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
         if commit:
             user.save()
             perfil = user.perfil
-            for field_name in ("nome_completo", "foto", "ramal", "cargo", "andar", "bloco"):
-                setattr(perfil, field_name, self.cleaned_data.get(field_name, ""))
+            for field_name in ("nome_completo", "foto", "ramal", "celular", "cargo", "andar", "bloco", "data_nascimento"):
+                val = self.cleaned_data.get(field_name)
+                if val is None:
+                    val = None if field_name == "data_nascimento" else ""
+                setattr(perfil, field_name, val)
             perfil.setor = ""
             perfil.ultimo_recadastro_em = timezone.now()
             perfil.save()
@@ -198,8 +205,11 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
             return perfil
 
         perfil = UsuarioPerfil(user=user)
-        for field_name in ("nome_completo", "foto", "ramal", "cargo", "andar", "bloco"):
-            setattr(perfil, field_name, self.cleaned_data.get(field_name, ""))
+        for field_name in ("nome_completo", "foto", "ramal", "celular", "cargo", "andar", "bloco", "data_nascimento"):
+            val = self.cleaned_data.get(field_name)
+            if val is None:
+                val = None if field_name == "data_nascimento" else ""
+            setattr(perfil, field_name, val)
         return perfil
 
 

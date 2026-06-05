@@ -1,54 +1,38 @@
 <li class="setores-org-tree-item{% if node.children %} has-children{% endif %}">
-  <article class="setores-org-card setores-org-card-nivel-{{ node.level|add:1 }}">
+  <article class="setores-org-card setores-org-card-nivel-{{ node.level|add:1 }} sector-card-trigger" style="cursor: pointer;" data-sector-name="{{ node.setor.group.name }}">
     <h3>{{ node.setor.group.name }}</h3>
-    <p class="setores-org-lider">
-      <strong>Líder:</strong>
-      {% if node.lider_payload %}
-        <button
-          class="setores-org-person-trigger"
-          type="button"
-          data-bs-toggle="modal"
-          data-bs-target="#ramalContactModal"
-          data-name="{{ node.lider_payload.nome }}"
-          data-cargo="{{ node.lider_payload.cargo|default:'-' }}"
-          data-setor="{{ node.lider_payload.setor|default:node.setor.group.name }}"
-          data-email="{{ node.lider_payload.email|default:'-' }}"
-          data-ramal="{{ node.lider_payload.ramal|default:'-' }}"
-          data-local="{{ node.lider_payload.local|default:'-' }}"
-          data-photo="{{ node.lider_payload.photo_url }}"
-          aria-label="Ver contato de {{ node.lider_payload.nome }}"
-        >{{ node.lider_nome }}</button>
-      {% else %}
-        -
-      {% endif %}
-    </p>
-    <div class="setores-org-users">
-      <strong>Usuários</strong>
-      {% if node.usuarios %}
-        <ul>
-          {% for usuario in node.usuarios %}
-            <li>
-              <button
-                class="setores-org-person-trigger"
-                type="button"
-                data-bs-toggle="modal"
-                data-bs-target="#ramalContactModal"
-                data-name="{{ usuario.payload.nome }}"
-                data-cargo="{{ usuario.payload.cargo|default:'-' }}"
-                data-setor="{{ usuario.payload.setor|default:node.setor.group.name }}"
-                data-email="{{ usuario.payload.email|default:'-' }}"
-                data-ramal="{{ usuario.payload.ramal|default:'-' }}"
-                data-local="{{ usuario.payload.local|default:'-' }}"
-                data-photo="{{ usuario.payload.photo_url }}"
-                aria-label="Ver contato de {{ usuario.label }}"
-              >{{ usuario.label }}</button>
-            </li>
+
+    <script type="application/json" class="sector-data">
+      {
+        "name": "{{ node.setor.group.name|escapejs }}",
+        "lider": {% if node.lider_payload %}{
+          "nome": "{{ node.lider_payload.nome|escapejs }}",
+          "cargo": "{{ node.lider_payload.cargo|escapejs }}",
+          "setor": "{{ node.lider_payload.setor|escapejs }}",
+          "email": "{{ node.lider_payload.email|escapejs }}",
+          "ramal": "{{ node.lider_payload.ramal|escapejs }}",
+          "celular": "{{ node.lider_payload.celular|escapejs }}",
+          "whatsapp_url": "{{ node.lider_payload.whatsapp_url|escapejs }}",
+          "local": "{{ node.lider_payload.local|escapejs }}",
+          "photo_url": "{{ node.lider_payload.photo_url|escapejs }}"
+        }{% else %}null{% endif %},
+        "usuarios": [
+          {% for u in node.usuarios %}
+            {
+              "nome": "{{ u.payload.nome|escapejs }}",
+              "cargo": "{{ u.payload.cargo|escapejs }}",
+              "setor": "{{ u.payload.setor|escapejs }}",
+              "email": "{{ u.payload.email|escapejs }}",
+              "ramal": "{{ u.payload.ramal|escapejs }}",
+              "celular": "{{ u.payload.celular|escapejs }}",
+              "whatsapp_url": "{{ u.payload.whatsapp_url|escapejs }}",
+              "local": "{{ u.payload.local|escapejs }}",
+              "photo_url": "{{ u.payload.photo_url|escapejs }}"
+            }{% if not forloop.last %},{% endif %}
           {% endfor %}
-        </ul>
-      {% else %}
-        <p class="mb-0">-</p>
-      {% endif %}
-    </div>
+        ]
+      }
+    </script>
   </article>
   {% if node.children %}
     <ul>

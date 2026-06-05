@@ -1,0 +1,51 @@
+<div class="org-tree-branch {% if node.children %}has-children{% endif %}">
+  <div class="org-tree-node-wrapper">
+    <div class="org-tree-node sector-card-trigger" data-sector-name="{{ node.setor.group.name }}">
+      <div class="org-tree-node-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-network"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M12 8v8"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/></svg>
+      </div>
+      <div class="org-tree-node-content">
+        <h3 class="org-sector-title">{{ node.setor.group.name }}</h3>
+      </div>
+      
+      <script type="application/json" class="sector-data">
+        {
+          "name": "{{ node.setor.group.name|escapejs }}",
+          "lider": {% if node.lider_payload %}{
+            "nome": "{{ node.lider_payload.nome|escapejs }}",
+            "cargo": "{{ node.lider_payload.cargo|escapejs }}",
+            "setor": "{{ node.lider_payload.setor|escapejs }}",
+            "email": "{{ node.lider_payload.email|escapejs }}",
+            "ramal": "{{ node.lider_payload.ramal|escapejs }}",
+            "celular": "{{ node.lider_payload.celular|escapejs }}",
+            "whatsapp_url": "{{ node.lider_payload.whatsapp_url|escapejs }}",
+            "local": "{{ node.lider_payload.local|escapejs }}",
+            "photo_url": "{{ node.lider_payload.photo_url|escapejs }}"
+          }{% else %}null{% endif %},
+          "usuarios": [
+            {% for u in node.usuarios %}
+              {
+                "nome": "{{ u.payload.nome|escapejs }}",
+                "cargo": "{{ u.payload.cargo|escapejs }}",
+                "setor": "{{ u.payload.setor|escapejs }}",
+                "email": "{{ u.payload.email|escapejs }}",
+                "ramal": "{{ u.payload.ramal|escapejs }}",
+                "celular": "{{ u.payload.celular|escapejs }}",
+                "whatsapp_url": "{{ u.payload.whatsapp_url|escapejs }}",
+                "local": "{{ u.payload.local|escapejs }}",
+                "photo_url": "{{ u.payload.photo_url|escapejs }}"
+              }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+          ]
+        }
+      </script>
+    </div>
+  </div>
+  {% if node.children %}
+    <div class="org-tree-children">
+      {% for child in node.children %}
+        {% include "organograma/partials/tree_node.html" with node=child %}
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>

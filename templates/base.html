@@ -19,6 +19,25 @@
         <div class="collapse navbar-collapse" id="spiNavbar">
           {% navbar_items as nav_items %}
           <ul class="navbar-nav spi-navbar-items mb-2 mb-lg-0">
+            {% if request.user.is_authenticated %}
+              {% user_modules request.user as user_mods %}
+              {% if user_mods %}
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Módulos
+                  </a>
+                  <ul class="dropdown-menu spi-navbar-dropdown">
+                    {% for mod in user_mods %}
+                      <li>
+                        <a class="dropdown-item" href="{{ mod.url }}">
+                          {{ mod.nome }}
+                        </a>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </li>
+              {% endif %}
+            {% endif %}
             {% for entry in nav_items %}
               {% if entry.children %}
                 <li class="nav-item dropdown">
@@ -60,6 +79,33 @@
         </div>
       </div>
     </nav>
+    {% if aniversariantes %}
+      <div class="spi-marquee-bar" id="birthdayMarqueeBar" style="display: none; cursor: pointer;" title="Clique para ocultar os aniversariantes deste mês">
+        <div class="spi-marquee-content">
+          <span class="title">Aniversariantes do mês:</span>
+          {% for a in aniversariantes %}
+            <strong>{{ a.nome }}</strong> ({{ a.dia }}/{{ a.mes }}){% if not forloop.last %} &nbsp;&nbsp;&bull;&nbsp;&nbsp; {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="modal fade" id="birthdayDismissModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+            <div class="modal-header border-0 pb-0">
+              <h5 class="modal-title fw-bold text-dark">Aviso</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body py-4">
+              <p class="text-secondary fs-5 mb-0">Mês que vem trarei os aniversariantes novamente!</p>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+              <button type="button" class="btn btn-primary px-4" data-bs-dismiss="modal" style="border-radius: 8px;">Ok</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
     <main class="container-fluid spi-container py-4">
       {% if messages %}
         <div class="mb-3">
@@ -108,6 +154,40 @@
             bootstrap.Tooltip.getInstance(element)?.hide();
           }
         });
+      });
+
+      // Birthday marquee dismissal logic
+      document.addEventListener('DOMContentLoaded', () => {
+        const marqueeBar = document.getElementById('birthdayMarqueeBar');
+        if (marqueeBar) {
+          const currentMonthKey = new Date().getFullYear() + '-' + (new Date().getMonth() + 1);
+          const userKey = 'birthday_marquee_dismissed_' + '{{ request.user.id|default:"anonymous" }}';
+          const dismissedMonth = localStorage.getItem(userKey);
+          
+          if (dismissedMonth !== currentMonthKey) {
+            marqueeBar.style.display = 'flex';
+          }
+          
+          const dismissModalEl = document.getElementById('birthdayDismissModal');
+          let dismissModalObj = null;
+          if (dismissModalEl) {
+            dismissModalObj = new bootstrap.Modal(dismissModalEl);
+            
+            dismissModalEl.addEventListener('hidden.bs.modal', () => {
+              localStorage.setItem(userKey, currentMonthKey);
+              marqueeBar.style.display = 'none';
+            });
+          }
+          
+          marqueeBar.addEventListener('click', () => {
+            if (dismissModalObj) {
+              dismissModalObj.show();
+            } else {
+              localStorage.setItem(userKey, currentMonthKey);
+              marqueeBar.style.display = 'none';
+            }
+          });
+        }
       });
     </script>
     {% block extra_js %}{% endblock %}

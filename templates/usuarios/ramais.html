@@ -12,7 +12,7 @@
       <p>{{ descricao }}</p>
     </div>
     <div class="d-flex flex-wrap gap-2 justify-content-end">
-      <a class="btn btn-outline-secondary" href="{% url 'setores:organograma' %}">Organograma</a>
+      <a class="btn btn-outline-secondary" href="{% url 'organograma:organograma' %}">Organograma</a>
       <a class="btn btn-light" href="{% url 'root' %}">Voltar</a>
     </div>
   </div>
@@ -53,6 +53,8 @@
                   data-setor="{{ perfil.setor|default:'-' }}"
                   data-email="{{ perfil.user.email|default:'-' }}"
                   data-ramal="{{ perfil.ramal|default:'-' }}"
+                  data-celular="{{ perfil.celular|default:'' }}"
+                  data-whatsapp="{{ perfil.whatsapp_url|default:'' }}"
                   data-local="{{ perfil.andar_bloco_display|default:'-' }}"
                   data-photo="{{ perfil.foto.url }}"
                   aria-label="Ver detalhes de {{ perfil.nome_completo|default:perfil.user.username }}"
@@ -76,7 +78,12 @@
                   aria-label="Abrir ações para {{ perfil.user.email }}"
                 >{{ perfil.user.email }}</button>
               </p>
-              <p class="ramal-field ramal-field-ramal" title="{{ perfil.ramal|default:'-' }}">{{ perfil.ramal|default:"-" }}</p>
+              <p class="ramal-field ramal-field-ramal" title="{{ perfil.ramal|default:'-' }}">R: {{ perfil.ramal|default:"-" }}</p>
+              {% if perfil.celular %}
+                <p class="ramal-field ramal-field-celular" title="{{ perfil.celular }}">
+                  Celular: <a href="{{ perfil.whatsapp_url }}" target="_blank" rel="noopener">{{ perfil.celular }}</a>
+                </p>
+              {% endif %}
               <p class="ramal-field ramal-field-local" title="{{ perfil.andar_bloco_display|default:'-' }}">{{ perfil.andar_bloco_display|default:"-" }}</p>
             </div>
           </article>
@@ -162,6 +169,11 @@
               <p id="ramalContactRamal"></p>
             </section>
 
+            <section class="ramal-contact-field ramal-contact-field-celular" id="ramalContactCelularWrapper" style="display: none;">
+              <span>Celular</span>
+              <p><a id="ramalContactCelular" href="" target="_blank" rel="noopener" style="color: #198754; text-decoration: none; font-weight: bold;"></a></p>
+            </section>
+
             <section class="ramal-contact-field ramal-contact-field-local">
               <span>Localização</span>
               <p id="ramalContactLocal"></p>
@@ -228,8 +240,23 @@
         modalEmail.dataset.email = email;
         modalEmail.title = email;
         modalEmail.setAttribute('aria-label', `Abrir ações para ${email}`);
-        document.getElementById('ramalContactRamal').textContent = trigger.dataset.ramal || '-';
+        const ramalVal = trigger.dataset.ramal || '-';
+        document.getElementById('ramalContactRamal').textContent = (ramalVal !== '-' && ramalVal !== '') ? 'R: ' + ramalVal : '-';
         document.getElementById('ramalContactLocal').textContent = trigger.dataset.local || '-';
+
+        const celular = trigger.dataset.celular || '';
+        const whatsapp = trigger.dataset.whatsapp || '';
+        const celularWrapper = document.getElementById('ramalContactCelularWrapper');
+        const celularElement = document.getElementById('ramalContactCelular');
+        if (celularWrapper && celularElement) {
+          if (celular) {
+            celularElement.textContent = 'Celular: ' + celular;
+            celularElement.href = whatsapp;
+            celularWrapper.style.display = 'block';
+          } else {
+            celularWrapper.style.display = 'none';
+          }
+        }
 
         const photoElement = document.getElementById('ramalContactPhoto');
         photoElement.src = photo;

@@ -43,10 +43,12 @@ class UsuarioPerfil(models.Model):
     nome_completo = models.CharField("Nome completo", max_length=220, blank=True)
     foto = models.ImageField("Foto", upload_to="usuarios/fotos/", blank=True, null=True)
     ramal = models.CharField("Ramal", max_length=40, blank=True)
+    celular = models.CharField("Celular", max_length=40, blank=True)
     cargo = models.CharField("Cargo", max_length=180, blank=True)
     setor = models.CharField("Setor", max_length=180, blank=True)
     andar = models.CharField("Andar", max_length=60, choices=ANDAR_CHOICES, blank=True)
     bloco = models.CharField("Bloco", max_length=60, choices=BLOCO_CHOICES, blank=True)
+    data_nascimento = models.DateField("Data de nascimento", null=True, blank=True)
     ultimo_recadastro_em = models.DateTimeField("Ultimo recadastro", null=True, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
@@ -58,6 +60,15 @@ class UsuarioPerfil(models.Model):
 
     def __str__(self):
         return self.nome_completo or self.user.username
+
+    @property
+    def whatsapp_url(self):
+        if not self.celular:
+            return ""
+        digits = "".join(c for c in self.celular if c.isdigit())
+        if len(digits) in (10, 11) and not digits.startswith("55"):
+            digits = "55" + digits
+        return f"https://wa.me/{digits}"
 
     @property
     def possui_campos_obrigatorios(self):

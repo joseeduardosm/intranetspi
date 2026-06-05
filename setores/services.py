@@ -13,7 +13,7 @@ User = get_user_model()
 
 
 def visible_users_queryset():
-    return User.objects.filter(is_active=True).exclude(username__in={'root'}).order_by('first_name', 'username')
+    return User.objects.filter(is_active=True).order_by('first_name', 'username')
 
 
 def user_display_name(user):
@@ -32,9 +32,12 @@ def user_profile_payload(user):
         'setor': perfil.setor if perfil else '',
         'email': user.email or '',
         'ramal': perfil.ramal if perfil else '',
+        'celular': perfil.celular if perfil else '',
+        'whatsapp_url': perfil.whatsapp_url if perfil else '',
         'local': perfil.andar_bloco_display if perfil else '',
         'photo_url': perfil.foto.url if perfil and perfil.foto else '',
     }
+
 
 
 def setor_choice_pairs(include_inactive=False):
@@ -95,16 +98,34 @@ def build_setor_tree():
         'user__first_name', 'user__username', 'id'
     )
     setores = list(
-        SetorNode.objects.select_related('group', 'parent__group', 'lider', 'lider__perfil')
+        SetorNode.objects.filter(ativo=True)
+        .exclude(group__name__iexact='administradores')
+        .select_related('group', 'parent__group', 'lider', 'lider__perfil')
         .prefetch_related(Prefetch('memberships', queryset=memberships_qs))
         .order_by('group__name', 'id')
     )
+    
+    setor_ids = {s.id for s in setores}
     by_parent = {}
     for setor in setores:
         by_parent.setdefault(setor.parent_id, []).append(setor)
 
-    def build_node(setor, level=0):
+    def build_node(setor, level=0, visited_ids=None):
+        if visited_ids is None:
+            visited_ids = set()
+        
+        if setor.id in visited_ids:
+            return None
+            
+        visited_ids.add(setor.id)
         users = [membership.user for membership in setor.memberships.all()]
+        
+        children_nodes = []
+        for child in by_parent.get(setor.id, []):
+            child_node = build_node(child, level + 1, visited_ids.copy())
+            if child_node:
+                children_nodes.append(child_node)
+                
         return {
             'setor': setor,
             'level': level,
@@ -118,10 +139,18 @@ def build_setor_tree():
                 }
                 for user in users
             ],
-            'children': [build_node(child, level + 1) for child in by_parent.get(setor.id, [])],
+            'children': children_nodes,
         }
 
-    return [build_node(root, 0) for root in by_parent.get(None, [])]
+    roots = [s for s in setores if s.parent_id is None or s.parent_id not in setor_ids]
+    
+    tree = []
+    for r in roots:
+        node = build_node(r, 0)
+        if node:
+            tree.append(node)
+            
+    return tree
 
 
 def group_name_exists(name, exclude_group_id=None):

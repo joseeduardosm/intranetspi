@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Acesso Negado{% endblock %}
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-7 col-lg-6 text-center">
+      <div class="card shadow border-0 rounded-4 overflow-hidden py-4">
+        <div class="card-body p-5">
+          <div class="text-warning mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" fill="currentColor" class="bi bi-shield-lock" viewBox="0 0 16 16" style="color: #f0ad4e;">
+              <path d="M5.338 1.59a6.1 6.1 0 0 0-2.837.856.5.5 0 0 0-.256.43v5.6c0 2.217 1.83 4.195 4.8 5.485a.5.5 0 0 0 .384 0c2.97-1.29 4.8-3.268 4.8-5.485V2.875a.5.5 0 0 0-.256-.43 6.1 6.1 0 0 0-2.837-.856 5 5 0 0 0-3.8 0zm.487.973A4 4 0 0 1 8 3c.73 0 1.405.196 1.986.536L8 5.536 6.014 3.536zm-.49 1.488 1.989 1.989c.195.195.51.195.706 0l1.989-1.989A4.98 4.98 0 0 1 12 7.5c0 1.626-1.393 3.16-4 4.303-2.607-1.143-4-2.677-4-4.303 0-1.464 1.127-2.87 3.325-3.449z"/>
+              <path d="M8 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
+            </svg>
+          </div>
+          <h1 class="h3 mb-3 text-dark fw-bold">Acesso não Autorizado</h1>
+          <p class="text-muted mb-4 fs-5">
+            Você não possui permissão para acessar este módulo. Caso precise de acesso, entre em contato com o administrador do sistema.
+          </p>
+          <div class="d-grid gap-2 col-8 mx-auto">
+            <a href="{% url 'root' %}" class="btn btn-primary btn-lg rounded-pill shadow-sm">
+              Voltar ao Início
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

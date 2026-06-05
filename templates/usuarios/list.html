@@ -38,6 +38,8 @@
               <th><a href="?{{ sort_links.setor }}">Setor{% if current_sort == "setor" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
               <th><a href="?{{ sort_links.andar }}">Andar{% if current_sort == "andar" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
               <th><a href="?{{ sort_links.bloco }}">Bloco{% if current_sort == "bloco" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+              <th><a href="?{{ sort_links.nascimento }}">Nascimento{% if current_sort == "nascimento" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+              <th><a href="?{{ sort_links.celular }}">Celular{% if current_sort == "celular" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
               <th class="text-end">Ações</th>
             </tr>
           </thead>
@@ -51,6 +53,8 @@
                 <td>{{ perfil.setor }}</td>
                 <td>{{ perfil.andar }}</td>
                 <td>{{ perfil.bloco }}</td>
+                <td>{{ perfil.data_nascimento|date:"d/m/Y"|default:"-" }}</td>
+                <td>{{ perfil.celular|default:"-" }}</td>
                 <td class="text-end">
                   {% if request.user.is_superuser or request.user.id == perfil.user_id %}
                     <a class="btn btn-sm btn-outline-secondary" href="{% url 'usuarios:update' perfil.pk %}">Editar</a>
@@ -61,7 +65,7 @@
                 </td>
               </tr>
             {% empty %}
-              <tr><td colspan="8" class="text-muted">Nenhum usuário encontrado.</td></tr>
+              <tr><td colspan="10" class="text-muted">Nenhum usuário encontrado.</td></tr>
             {% endfor %}
           </tbody>
         </table>

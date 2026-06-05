@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.forms import AuthenticationForm
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import FormView, RedirectView
 
@@ -57,3 +57,8 @@ class HomeView(RedirectView):
 
     def get_redirect_url(self, *args, **kwargs):
         return reverse_lazy('root')
+
+
+def permission_denied_view(request, exception=None):
+    return render(request, 'errors/403.html', status=403)
+

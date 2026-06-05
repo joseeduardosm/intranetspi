@@ -72,7 +72,7 @@ class SetoresTests(TestCase):
         self.create_setor()
         self.client.login(username='joao_setor', password='123')
         self.assertEqual(self.client.get(reverse('setores:list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('setores:organograma')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('organograma:organograma')).status_code, 200)
         self.assertEqual(self.client.get(reverse('setores:create')).status_code, 403)
 
     def test_superusuario_faz_crud_completo(self):
@@ -109,7 +109,7 @@ class SetoresTests(TestCase):
         setor = self.create_setor(name='Tecnologia', lider=self.user)
         UserSetorMembership.objects.create(user=self.user, setor=setor)
         self.client.login(username='joao_setor', password='123')
-        response = self.client.get(reverse('setores:organograma'))
+        response = self.client.get(reverse('organograma:organograma'))
         self.assertContains(response, 'Secretaria de Parcerias em Investimentos')
         self.assertContains(response, 'Tecnologia')
         self.assertContains(response, self.user.username)

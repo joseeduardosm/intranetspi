@@ -10,8 +10,13 @@ from .models import SetorNode
 from .services import build_setor_tree
 
 
-class SetoresAccessMixin(LoginRequiredMixin):
+from acls.mixins import ACLRequiredMixin
+
+
+class SetoresAccessMixin(LoginRequiredMixin, ACLRequiredMixin):
     login_url = reverse_lazy('login')
+    recurso_slug = 'setores'
+
 
 
 class SetoresAdminMixin(SetoresAccessMixin, UserPassesTestMixin):
@@ -98,12 +103,3 @@ class SetorDeleteView(SetoresAdminMixin, DeleteView):
         messages.success(self.request, 'Setor excluído.')
         self.object.group.delete()
         return redirect(self.success_url)
-
-
-class SetorOrganogramaView(SetoresAccessMixin, TemplateView):
-    template_name = 'setores/organograma.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['org_tree'] = build_setor_tree()
-        return context

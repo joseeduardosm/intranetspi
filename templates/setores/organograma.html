@@ -86,10 +86,36 @@
               <p id="ramalContactRamal"></p>
             </section>
 
+            <section class="ramal-contact-field ramal-contact-field-celular" id="ramalContactCelularWrapper" style="display: none;">
+              <span>Celular</span>
+              <p><a id="ramalContactCelular" href="" target="_blank" rel="noopener" style="color: #198754; text-decoration: none; font-weight: bold;"></a></p>
+            </section>
+
             <section class="ramal-contact-field ramal-contact-field-local">
               <span>Localização</span>
               <p id="ramalContactLocal"></p>
             </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="sectorMembersModal" tabindex="-1" aria-labelledby="sectorMembersModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+        <div class="modal-header bg-light border-0">
+          <h5 class="modal-title fw-bold text-dark" id="sectorMembersModalTitle">Membros do Setor</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body py-4">
+          <div class="mb-4">
+            <h6 class="fw-bold text-secondary text-uppercase small mb-3">Líder do Setor</h6>
+            <div id="sectorLiderContainer"></div>
+          </div>
+          <div>
+            <h6 class="fw-bold text-secondary text-uppercase small mb-3">Funcionários</h6>
+            <div id="sectorEmployeesContainer" class="d-flex flex-column gap-2"></div>
           </div>
         </div>
       </div>
@@ -268,8 +294,23 @@
         modalEmail.dataset.email = email;
         modalEmail.title = email;
         modalEmail.setAttribute('aria-label', `Abrir ações para ${email}`);
-        document.getElementById('ramalContactRamal').textContent = trigger.dataset.ramal || '-';
+        const ramalVal = trigger.dataset.ramal || '-';
+        document.getElementById('ramalContactRamal').textContent = (ramalVal !== '-' && ramalVal !== '') ? 'R: ' + ramalVal : '-';
         document.getElementById('ramalContactLocal').textContent = trigger.dataset.local || '-';
+
+        const celular = trigger.dataset.celular || '';
+        const whatsapp = trigger.dataset.whatsapp || '';
+        const celularWrapper = document.getElementById('ramalContactCelularWrapper');
+        const celularElement = document.getElementById('ramalContactCelular');
+        if (celularWrapper && celularElement) {
+          if (celular) {
+            celularElement.textContent = 'Celular: ' + celular;
+            celularElement.href = whatsapp;
+            celularWrapper.style.display = 'block';
+          } else {
+            celularWrapper.style.display = 'none';
+          }
+        }
 
         const photoElement = document.getElementById('ramalContactPhoto');
         if (photo) {
@@ -351,6 +392,99 @@
         event.preventDefault();
         copyRamalEmail();
       });
+    }
+
+    // Sector Members modal controller
+    document.addEventListener('click', (event) => {
+      const sectorCard = event.target.closest('.sector-card-trigger');
+      if (sectorCard) {
+        event.preventDefault();
+        
+        const jsonEl = sectorCard.querySelector('.sector-data');
+        if (!jsonEl) return;
+        
+        try {
+          const data = JSON.parse(jsonEl.textContent);
+          
+          document.getElementById('sectorMembersModalTitle').textContent = data.name;
+          
+          const liderContainer = document.getElementById('sectorLiderContainer');
+          liderContainer.innerHTML = '';
+          if (data.lider) {
+            liderContainer.appendChild(createMemberButton(data.lider));
+          } else {
+            liderContainer.innerHTML = '<span class="text-muted small">Sem líder designado</span>';
+          }
+          
+          const employeesContainer = document.getElementById('sectorEmployeesContainer');
+          employeesContainer.innerHTML = '';
+          if (data.usuarios && data.usuarios.length > 0) {
+            data.usuarios.forEach(user => {
+              employeesContainer.appendChild(createMemberButton(user));
+            });
+          } else {
+            employeesContainer.innerHTML = '<span class="text-muted small">Sem usuários vinculados</span>';
+          }
+          
+          const sectorModalObj = new bootstrap.Modal(document.getElementById('sectorMembersModal'));
+          sectorModalObj.show();
+          
+        } catch (e) {
+          console.error("Error parsing sector JSON", e);
+        }
+      }
+    });
+
+    function createMemberButton(member) {
+      const button = document.createElement('button');
+      button.className = 'btn btn-outline-secondary w-100 text-start d-flex align-items-center gap-3 py-2 px-3 sector-member-trigger';
+      button.type = 'button';
+      button.style.borderRadius = '8px';
+      button.style.border = '1px solid rgba(148, 163, 184, 0.2)';
+      button.style.transition = 'all 0.15s ease';
+      
+      button.dataset.name = member.nome || '-';
+      button.dataset.cargo = member.cargo || '-';
+      button.dataset.setor = member.setor || '-';
+      button.dataset.email = member.email || '-';
+      button.dataset.ramal = member.ramal || '-';
+      button.dataset.celular = member.celular || '';
+      button.dataset.whatsapp = member.whatsapp_url || '';
+      button.dataset.local = member.local || '-';
+      button.dataset.photo = member.photo_url || '';
+      
+      let imgHtml = '';
+      if (member.photo_url) {
+        imgHtml = `<img src="${member.photo_url}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover;">`;
+      } else {
+        const initial = (member.nome || '?')[0].toUpperCase();
+        imgHtml = `<div class="d-flex align-items-center justify-content-center bg-secondary text-white fw-bold" style="width: 38px; height: 38px; border-radius: 50%; font-size: 0.9rem;">${initial}</div>`;
+      }
+      
+      button.innerHTML = `
+        ${imgHtml}
+        <div style="min-width: 0;">
+          <div class="fw-bold text-dark text-truncate" style="font-size: 0.92rem;">${member.nome || '-'}</div>
+          <div class="small text-muted text-truncate" style="font-size: 0.82rem;">${member.cargo || '-'}</div>
+        </div>
+      `;
+      
+      button.addEventListener('click', () => {
+        const sectorModalEl = document.getElementById('sectorMembersModal');
+        const sectorModalObj = bootstrap.Modal.getInstance(sectorModalEl);
+        if (sectorModalObj) {
+          sectorModalObj.hide();
+        }
+        
+        const contactModalEl = document.getElementById('ramalContactModal');
+        const contactModalObj = new bootstrap.Modal(contactModalEl);
+        
+        setTimeout(() => {
+          contactModalObj.show(button);
+        }, 150);
+      });
+      
+      return button;
     }
 
     document.addEventListener('click', (event) => {
