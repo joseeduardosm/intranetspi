@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Controla listagens de usuários/ramais, CRUD de perfis e manutenção de diretórios LDAP.
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.exceptions import PermissionDenied
@@ -27,6 +29,8 @@ SORT_FIELDS = {
 
 
 def _sort_params(request):
+    """Normaliza parâmetros de ordenação aceitos pela listagem."""
+
     sort = request.GET.get("sort", "nome").strip().lower()
     direction = request.GET.get("dir", "asc").strip().lower()
     if sort not in SORT_FIELDS:
@@ -37,6 +41,8 @@ def _sort_params(request):
 
 
 def _sort_links(request):
+    """Monta links alternando direção e preservando o termo pesquisado."""
+
     term = request.GET.get("q", "").strip()
     current_sort, current_dir = _sort_params(request)
     links = {}
@@ -52,6 +58,8 @@ def _sort_links(request):
 
 
 def _test_ldap_connection(config):
+    """Testa conexão LDAP sem salvar alterações pendentes do formulário."""
+
     try:
         from ldap3 import Connection, NONE, Server, Tls
         from ldap3.core.exceptions import LDAPException
@@ -74,6 +82,8 @@ def _test_ldap_connection(config):
 
 
 class AuthenticatedListMixin(LoginRequiredMixin, ListView):
+    """Base para listagens autenticadas de perfis com busca e ordenação."""
+
     paginate_by = 20
     context_object_name = "perfis"
     template_name = "usuarios/list.html"
@@ -83,6 +93,7 @@ class AuthenticatedListMixin(LoginRequiredMixin, ListView):
     show_delete = False
 
     def get_queryset(self):
+        # Usuários técnicos ficam fora das listagens funcionais da intranet.
         queryset = UsuarioPerfil.objects.select_related("user").exclude(user__username__in=SYSTEM_USERNAMES)
         queryset = user_search_queryset(queryset, self.request.GET.get("q"))
         sort, direction = _sort_params(self.request)
@@ -109,6 +120,8 @@ class AuthenticatedListMixin(LoginRequiredMixin, ListView):
 
 
 class RamaisListView(AuthenticatedListMixin):
+    """Mostra somente perfis completos o suficiente para o diretório de ramais."""
+
     paginate_by = 8
     page_title = "Ramais"
     page_description = "Diretorio interno de usuarios."
@@ -122,6 +135,8 @@ class RamaisListView(AuthenticatedListMixin):
 
 
 class UsuariosListView(AuthenticatedListMixin):
+    """Listagem administrativa de usuários com paginação mais densa."""
+
     paginate_by = 10
     page_title = "Usuarios"
     page_description = "Gestao de usuarios do sistema."
@@ -137,6 +152,8 @@ class UsuariosListView(AuthenticatedListMixin):
 
 
 class UsuarioPerfilCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
+    """Permite que superusuários criem usuários locais completos."""
+
     model = UsuarioPerfil
     form_class = UsuarioCreateForm
     template_name = "usuarios/form.html"
@@ -165,12 +182,15 @@ class UsuarioPerfilCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateVie
 
 
 class UsuarioPerfilUpdateView(LoginRequiredMixin, UpdateView):
+    """Permite edição pelo próprio usuário ou por superusuários."""
+
     model = UsuarioPerfil
     form_class = UsuarioPerfilForm
     template_name = "usuarios/form.html"
 
     def dispatch(self, request, *args, **kwargs):
         self.object = get_object_or_404(UsuarioPerfil.objects.select_related("user"), pk=kwargs["pk"])
+        # O bloqueio é feito antes do processamento do form para proteger perfis alheios.
         if not self._can_edit(request.user, self.object):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
@@ -187,6 +207,7 @@ class UsuarioPerfilUpdateView(LoginRequiredMixin, UpdateView):
         return kwargs
 
     def get_success_url(self):
+        # Usuário comum retorna aos ramais; administração volta à lista de manutenção.
         if self.request.user.id == self.object.user_id:
             return reverse("usuarios:ramais")
         return reverse("usuarios:list")
@@ -204,6 +225,8 @@ class UsuarioPerfilUpdateView(LoginRequiredMixin, UpdateView):
 
 
 class UsuarioPerfilDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
+    """Exclui o perfil e, em seguida, o usuário Django correspondente."""
+
     model = UsuarioPerfil
     template_name = "usuarios/confirm_delete.html"
     success_url = reverse_lazy("usuarios:list")
@@ -226,11 +249,15 @@ class UsuarioPerfilDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteVie
 
 
 class LDAPAdminMixin(LoginRequiredMixin, UserPassesTestMixin):
+    """Restringe telas LDAP a superusuários autenticados."""
+
     def test_func(self):
         return self.request.user.is_authenticated and self.request.user.is_superuser
 
 
 class LDAPDirectoryListView(LDAPAdminMixin, ListView):
+    """Lista diretórios LDAP cadastrados para manutenção administrativa."""
+
     model = LDAPDirectory
     template_name = "usuarios/ldap_directory_list.html"
     context_object_name = "directories"
@@ -242,6 +269,8 @@ class LDAPDirectoryListView(LDAPAdminMixin, ListView):
 
 
 class LDAPDirectoryCreateView(LDAPAdminMixin, View):
+    """Cria diretório LDAP ou testa conexão antes de salvar."""
+
     template_name = "usuarios/ldap_directory_form.html"
 
     def get(self, request):
@@ -252,6 +281,7 @@ class LDAPDirectoryCreateView(LDAPAdminMixin, View):
         form = LDAPDirectoryForm(request.POST)
         feedback = None
         if form.is_valid():
+            # O botão pressionado define se a submissão testa ou grava a configuração.
             if "test" in request.POST:
                 level, message = _test_ldap_connection(form.save(commit=False))
                 feedback = (level, message)
@@ -265,6 +295,8 @@ class LDAPDirectoryCreateView(LDAPAdminMixin, View):
 
 
 class LDAPDirectoryUpdateView(LDAPAdminMixin, View):
+    """Atualiza diretório LDAP com o mesmo fluxo de teste da criação."""
+
     template_name = "usuarios/ldap_directory_form.html"
 
     def dispatch(self, request, *args, **kwargs):
@@ -296,6 +328,8 @@ class LDAPDirectoryUpdateView(LDAPAdminMixin, View):
 
 
 class LDAPDirectoryDeleteView(LDAPAdminMixin, DeleteView):
+    """Remove configurações LDAP que não devem mais ser usadas."""
+
     model = LDAPDirectory
     template_name = "usuarios/confirm_delete.html"
     success_url = reverse_lazy("usuarios:ldap_list")

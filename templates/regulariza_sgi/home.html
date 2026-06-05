@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Exibir atalhos iniciais do módulo Regulariza SGI. -->
 {% block title %}RegulaSGI{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'regulariza_sgi/css/regulariza_sgi.css' %}">{% endblock %}
 {% block content %}
+  <!-- Menu inicial com acesso à listagem e ao cadastro de imóvel. -->
   <div class="spi-module-grid">
     <a class="spi-module-card" href="{% url 'regulariza_sgi:imovel_list' %}" aria-label="Abrir imóveis">
       <span class="spi-module-card-title">Imóveis</span>

@@ -1,3 +1,5 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Renderiza o formulário de criação e atualização de dados de usuário/perfil. -->
 {% extends "base.html" %}
 {% load static %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'usuarios/css/usuarios.css' %}">{% endblock %}
@@ -11,6 +13,7 @@
     <a class="btn btn-outline-secondary" href="{{ voltar_url }}">Voltar</a>
   </div>
 
+  <!-- O mesmo formulário atende cadastro novo e edição, alternando campos de senha. -->
   <form method="post" enctype="multipart/form-data" class="card border-0 shadow-sm">
     {% csrf_token %}
     <div class="card-body p-4">
@@ -35,6 +38,7 @@
         {% endif %}
         {% for field in form %}
           {% if field.name != "login" and field.name != "password1" and field.name != "password2" %}
+            <!-- Campos especiais de permissão usam checkbox; demais campos seguem layout em grade. -->
             <div class="col-12 {% if field.name == 'administrador_sistema' %}col-xl-12{% else %}col-xl-6{% endif %}">
               {% if field.name == "administrador_sistema" %}
                 <div class="form-check mt-4">

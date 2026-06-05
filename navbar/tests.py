@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Validar árvore ativa, CRUD, renderização e reordenação da navbar.
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -8,6 +11,8 @@ from .services import active_navbar_tree
 
 
 class NavbarTests(TestCase):
+    """Cobre regras do modelo, tags, gerenciamento e ordenação do menu."""
+
     def test_active_navbar_tree_ordena_pais_e_filhos_ativos(self):
         parent = NavbarItem.objects.create(titulo='SEF', url='/sef/', ordem=2)
         child_b = NavbarItem.objects.create(titulo='Fornecedores', url='/fornecedores/', parent=parent, ordem=2)

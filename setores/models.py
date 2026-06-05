@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Define a estrutura hierárquica dos setores e os vínculos entre usuários
+# e grupos utilizados pelo módulo.
 from __future__ import annotations
 
 from django.conf import settings
@@ -7,6 +10,8 @@ from django.db import models
 
 
 class SetorNode(models.Model):
+    """Representa um setor como nó de árvore ligado a um grupo do Django."""
+
     group = models.OneToOneField(Group, on_delete=models.CASCADE, related_name='setor_node')
     parent = models.ForeignKey(
         'self',
@@ -39,6 +44,7 @@ class SetorNode(models.Model):
         if self.id is not None and self.parent_id == self.id:
             raise ValidationError({'parent': 'Um setor não pode ser pai dele mesmo.'})
 
+        # Percorre os ancestrais para impedir ciclos que quebrariam o organograma.
         visited = set()
         cursor = self.parent
         while cursor:
@@ -57,6 +63,8 @@ class SetorNode(models.Model):
 
 
 class UserSetorMembership(models.Model):
+    """Registra a participação de um usuário em um setor específico."""
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

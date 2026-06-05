@@ -1,16 +1,31 @@
-# Changelog
+# Registro de Alterações
 
-All notable changes to this project are documented in this file.
+Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
 ## [Unreleased]
-- Added `whitenoise` dependency (v6.12.0) to `requirements.txt` to resolve missing module error and improve static file handling.
-- Updated test suite:
-  - Fixed assertion in `assinatura_e_mail/tests.py` for correct Secretaria name.
-  - Fixed UI text assertion in `noticias/tests.py` to match updated button label "Ver todas as notícias publicadas".
-  - Ensured all tests now pass (198 total, 100% coverage).
-- Modified user profile forms in `usuarios/forms.py`:
-  - Appended "(Opcional)" to the labels for `celular` and `data_nascimento` fields in both `UsuarioPerfilForm` and `UsuarioCreateForm`.
-- Verified repository integration and ensured no breaking changes after pulling latest code.
+- Documentados arquivos `.py`, `.html` e `.css` dos apps e templates principais com cabeçalhos de autoria, resumo do objetivo do arquivo e comentários explicativos em português brasileiro.
+  - Incluídos comentários nos apps `acls`, `aplicacoesspi`, `assinatura_e_mail`, `atalhos`, `licitacoes`, `navbar`, `noticias`, `organograma`, `regulariza_sgi`, `setores` e `usuarios`.
+  - Documentados templates globais, templates por app e CSS estáticos ainda sem cabeçalho.
+  - Preservado o comportamento existente, com foco em explicar fluxos de permissões, formulários, serviços, views, templates, organogramas, ramais e integrações entre apps.
+- Atualizada a orientação do projeto em `AGENTS.md` para reforçar que código gerado deve ser comentado de forma explicativa e legível.
+- Adicionada dependência `whitenoise` (v6.12.0) ao `requirements.txt` para resolver erro de módulo ausente e melhorar o tratamento de arquivos estáticos.
+- Atualizado o conjunto de testes:
+  - Corrigida a asserção em `assinatura_e_mail/tests.py` para o nome correto da Secretaria.
+  - Corrigida a asserção de texto da UI em `noticias/tests.py` para coincidir com o rótulo do botão atualizado "Ver todas as notícias publicadas".
+  - Garantido que todos os testes agora passam (198 no total, cobertura de 100%).
+- Modificados os formulários de perfil de usuário em `usuarios/forms.py`:
+  - Adicionado "(Opcional)" aos rótulos dos campos `celular` e `data_nascimento` em ambos `UsuarioPerfilForm` e `UsuarioCreateForm`.
+- Verificada a integração do repositório e assegurado que não há quebras após puxar o código mais recente.
 
 ## [0.1.0] - 2026-06-05
-- Initial release after fixing dependency and form label updates.
+- Lançamento inicial após corrigir a dependência e atualizar os rótulos dos formulários.
+
+## Histórico dos Aplicativos
+
+- **usuarios**: Gerencia perfis de usuários, permite edição de dados pessoais e inclusão de campos opcionais como celular e data de nascimento.
+- **noticias**: Publicação e gerenciamento de notícias; inclui listagem, detalhe e filtragem por categorias.
+- **assinatura_e_mail**: Integração de assinatura eletrônica em documentos e envio de e‑mails automatizados.
+- **assinatura_e_mail/tests**: Cobertura de testes automatizados para garantir a correta geração de PDFs e envios.
+- **noticias/tests**: Testes de interface e funcionalidade de listagem e navegação de notícias.
+- **assinatura_e_mail/migrations**: Controle de versionamento do modelo de assinatura e ajustes de schema.
+- **usuarios/migrations**: Histórico de migrações para campos de perfil, incluindo adição de campos opcionais.

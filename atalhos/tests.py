@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Validar regras de formulário, upload e acesso administrativo dos atalhos.
+
 import shutil
 import tempfile
 
@@ -11,6 +14,8 @@ from .models import Atalho
 
 
 def imagem_teste():
+    """Cria um arquivo pequeno para simular upload de imagem nos testes."""
+
     return SimpleUploadedFile(
         'atalho.png',
         b'GIF87a\x01\x00\x01\x00\x80\x01\x00\x00\x00\x00\xff\xff\xff,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02L\x01\x00;',
@@ -19,12 +24,16 @@ def imagem_teste():
 
 
 class AtalhosTests(TestCase):
+    """Cobre validação de URL e acesso ao CRUD de atalhos."""
+
     def setUp(self):
+        # Isola uploads de teste em um diretório temporário para não tocar a mídia real.
         self.media_root = tempfile.mkdtemp()
         self.override = override_settings(MEDIA_ROOT=self.media_root)
         self.override.enable()
 
     def tearDown(self):
+        # Remove o diretório temporário mesmo quando algum teste falha.
         self.override.disable()
         shutil.rmtree(self.media_root, ignore_errors=True)
 

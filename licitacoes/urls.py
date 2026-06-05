@@ -1,9 +1,13 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Mapear rotas de ETP TIC, DFD, TR, fornecedores e pesquisa de preço.
+
 from django.urls import path
 
 from . import views
 
 app_name = 'licitacoes'
 
+# O roteamento é organizado por fluxo documental: ETP TIC, DFD, TR, pesquisa e fornecedores.
 urlpatterns = [
     path('', views.LicitacoesHomeView.as_view(), name='home'),
     path('etp-tic/', views.EtpTicListView.as_view(), name='etp_list'),

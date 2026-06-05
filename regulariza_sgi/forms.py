@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Definir formulários de imóveis, anexos, SEI e eventos do ciclo processual.
+
 from django import forms
 
 from .models import CicloProcessual, Imovel, ImovelAnexo, ImovelProcessoSEI
@@ -9,6 +12,8 @@ BOOTSTRAP_SELECT = 'form-select'
 
 
 class BootstrapModelForm(forms.ModelForm):
+    """Aplica classes Bootstrap aos campos conforme o widget."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
@@ -25,6 +30,8 @@ class BootstrapModelForm(forms.ModelForm):
 
 
 class ImovelForm(BootstrapModelForm):
+    """Formulário principal de cadastro e edição do imóvel."""
+
     class Meta:
         model = Imovel
         fields = [
@@ -48,6 +55,7 @@ class ImovelForm(BootstrapModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Municípios dependem da UF selecionada e são atualizados também no frontend.
         uf = self.data.get('uf') or getattr(self.instance, 'uf', 'SP') or 'SP'
         self.fields['municipio'].widget = forms.Select(attrs={'class': BOOTSTRAP_SELECT})
         self.fields['municipio'].choices = [('', 'Selecione')] + municipio_choices(uf)
@@ -57,6 +65,7 @@ class ImovelForm(BootstrapModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        # O bloco CADIN exige dados de cobrança; sem CADIN, os campos são limpos.
         possui_cadin = cleaned.get('possui_cadin')
         exercicio = (cleaned.get('exercicio_cadin') or '').strip()
         notificacao = (cleaned.get('notificacao_cadin_municipal') or '').strip()
@@ -71,18 +80,24 @@ class ImovelForm(BootstrapModelForm):
 
 
 class ProcessoSEIForm(BootstrapModelForm):
+    """Formulário de processo SEI associado ao imóvel."""
+
     class Meta:
         model = ImovelProcessoSEI
         fields = ['numero_sei', 'link_sei']
 
 
 class ImovelAnexoForm(BootstrapModelForm):
+    """Formulário de anexo do imóvel."""
+
     class Meta:
         model = ImovelAnexo
         fields = ['nome_exibicao', 'arquivo']
 
 
 class ProtocoloForm(forms.Form):
+    """Coleta os dados que iniciam a contagem de resposta da prefeitura."""
+
     numero_protocolo = forms.CharField(label='Número do protocolo', max_length=120, widget=forms.TextInput(attrs={'class': BOOTSTRAP_INPUT}))
     data_protocolo = forms.DateField(
         label='Data do protocolo',
@@ -97,6 +112,8 @@ class ProtocoloForm(forms.Form):
 
 
 class ProrrogacaoForm(forms.Form):
+    """Coleta prorrogação do prazo de resposta do ciclo atual."""
+
     prorrogacao_dias = forms.IntegerField(
         label='Prorrogação (dias)',
         min_value=1,
@@ -110,6 +127,8 @@ class ProrrogacaoForm(forms.Form):
 
 
 class ManifestacaoForm(forms.Form):
+    """Coleta manifestação da prefeitura e prazo de imunidade quando deferida."""
+
     resultado = forms.ChoiceField(
         label='Resultado',
         choices=CicloProcessual.Resultado.choices,
@@ -129,6 +148,7 @@ class ManifestacaoForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
+        # Deferimento precisa de prazo para calcular vencimento e renovação.
         if cleaned.get('resultado') == CicloProcessual.Resultado.DEFERIDO and not cleaned.get('prazo_imunidade_anos'):
             self.add_error('prazo_imunidade_anos', 'Informe o prazo da imunidade.')
         if cleaned.get('resultado') != CicloProcessual.Resultado.DEFERIDO:

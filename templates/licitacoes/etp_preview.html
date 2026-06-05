@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Exibir a prévia do ETP TIC legado ou dinâmico antes da exportação. -->
 {% block extra_css %}<link rel="stylesheet" href="{% static 'licitacoes/css/licitacoes.css' %}">{% endblock %}
 {% load licitacoes_extras %}
 
 {% block content %}
+  <!-- Mostra a versão renderizada do ETP TIC antes da exportação. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start">
     <div>
       <h1>Preview ETP TIC</h1>

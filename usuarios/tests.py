@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Cobre perfis, ramais, LDAP, permissões e recadastro obrigatório do app usuários.
 from io import BytesIO
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
@@ -20,12 +22,16 @@ User = get_user_model()
 
 
 def foto_upload(name="foto.png"):
+    """Gera uma imagem mínima em memória para validações de upload."""
+
     buffer = BytesIO()
     Image.new("RGB", (1, 1), color="white").save(buffer, format="PNG")
     return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
 
 
 class UsuariosTests(TestCase):
+    """Valida fluxos de cadastro, listagem, recadastro e diretórios LDAP."""
+
     def setUp(self):
         self.admin = User.objects.create_superuser(username="admin", password="123", email="admin@example.com")
         self.user = User.objects.create_user(username="joao", password="123", email="joao@example.com")
@@ -388,6 +394,8 @@ class UsuariosTests(TestCase):
 
 
 class LDAPBackendTests(TestCase):
+    """Isola o backend LDAP com módulos falsos para cobrir os fallbacks de bind."""
+
     def setUp(self):
         LDAPDirectory.objects.create(
             nome="Primario",
@@ -401,6 +409,8 @@ class LDAPBackendTests(TestCase):
         )
 
     def _fake_ldap_modules(self, accepted_users, mail="joao@example.com"):
+        """Monta módulos ldap3 falsos e registra tentativas de autenticação."""
+
         attempts = []
 
         class LDAPBindError(Exception):

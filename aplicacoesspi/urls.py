@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Definir o roteamento principal e conectar os apps do portal SPI.
+
 """
 URL configuration for aplicacoesspi project.
 
@@ -21,8 +24,10 @@ from django.urls import include, path
 
 from . import views
 
+# View global de acesso negado usada pelas regras de permissão do projeto.
 handler403 = 'aplicacoesspi.views.permission_denied_view'
 
+# Roteamento principal que conecta a página inicial, autenticação e os apps do portal.
 urlpatterns = [
     path('', views.RootRedirectView.as_view(), name='root'),
     path('login/', views.SuperuserLoginView.as_view(), name='login'),
@@ -42,5 +47,6 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:
+    # Em desenvolvimento, o Django entrega arquivos estáticos e mídia diretamente.
     urlpatterns += static(settings.STATIC_URL, document_root=settings.BASE_DIR / 'static')
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

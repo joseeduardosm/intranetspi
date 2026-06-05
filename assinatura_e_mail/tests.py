@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Validar o fluxo de geração, prévia e download da assinatura de e-mail.
+
 import io
 
 from PIL import Image
@@ -10,7 +13,10 @@ from .services import PNG_HEIGHT, PNG_WIDTH, SECRETARIA_FIXA, render_signature_p
 
 
 class AssinaturaEmailTests(TestCase):
+    """Cobre autenticação, preenchimento inicial, renderização e download do PNG."""
+
     def setUp(self):
+        # Usuário de referência com perfil preenchido para simular o fluxo mais comum.
         self.user = get_user_model().objects.create_user(
             username='jose',
             password='123',
@@ -99,4 +105,3 @@ class AssinaturaEmailTests(TestCase):
 
     def test_secretaria_fixa_esta_disponivel_no_servico(self):
         self.assertEqual(SECRETARIA_FIXA, 'Secretaria de Parcerias em Investimentos')
-

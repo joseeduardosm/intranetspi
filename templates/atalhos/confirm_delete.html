@@ -1,14 +1,18 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Confirmar a exclusão de um atalho antes de remover o registro. -->
 
 {% block extra_css %}<link rel="stylesheet" href="{% static 'atalhos/css/atalhos.css' %}">{% endblock %}
 
 {% block content %}
+  <!-- Cabeçalho simples para destacar que esta tela executa uma ação destrutiva. -->
   <div class="spi-page-title">
     <h1>Excluir atalho</h1>
     <p>Confirme a exclusao do atalho selecionado.</p>
   </div>
 
+  <!-- O POST confirma a exclusão; cancelar retorna para a listagem sem alterar dados. -->
   <form method="post" class="card border-0 shadow-sm">
     <div class="card-body p-4">
       {% csrf_token %}

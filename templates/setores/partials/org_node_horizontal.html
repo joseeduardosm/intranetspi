@@ -1,3 +1,5 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Partial alternativo para organograma horizontal com setor, líder e usuários. -->
 <div class="setores-org-node-horizontal">
   <article class="setores-org-card">
     <h3>{{ node.setor.group.name }}</h3>
@@ -14,6 +16,7 @@
     </div>
   </article>
   {% if node.children %}
+    <!-- Os filhos reaproveitam o mesmo partial para manter a árvore horizontal. -->
     <div class="setores-org-children-horizontal">
       {% for child in node.children %}
         {% include "setores/partials/org_node_horizontal.html" with node=child %}

@@ -1,3 +1,5 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Exibe o organograma institucional com zoom, arraste e modais de contato. -->
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Organograma{% endblock %}
@@ -7,6 +9,7 @@
 {% endblock %}
 {% block content %}
   <div class="setores-org-page">
+    <!-- Navegação superior da visualização pública do organograma. -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
       <div class="spi-page-title mb-0">
         <h1>Organograma</h1>
@@ -18,6 +21,7 @@
       </div>
     </div>
 
+    <!-- Área interativa do organograma, com escala automática e controles manuais. -->
     <section class="setores-org-board card shadow-sm border-0">
       <div class="setores-org-toolbar">
         <div class="setores-org-toolbar-actions">
@@ -30,6 +34,7 @@
 
       <div class="setores-org-viewport" id="setoresOrgViewport">
         {% if org_tree %}
+          <!-- Cada nó é renderizado recursivamente a partir da árvore montada no serviço. -->
           <div class="setores-org-scaler" id="setoresOrgScaler">
             <div class="setores-org-chart-institutional" id="setoresOrgChart">
               <ul class="setores-org-root-list">
@@ -46,6 +51,7 @@
     </section>
   </div>
 
+  <!-- Modal reutilizado para dados de contato de líderes e funcionários. -->
   <div class="modal fade" id="ramalContactModal" tabindex="-1" aria-labelledby="ramalContactModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered ramal-contact-dialog">
       <div class="modal-content ramal-contact-modal">
@@ -101,6 +107,7 @@
     </div>
   </div>
 
+  <!-- Modal de composição do setor: líder e funcionários vinculados. -->
   <div class="modal fade" id="sectorMembersModal" tabindex="-1" aria-labelledby="sectorMembersModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
@@ -122,6 +129,7 @@
     </div>
   </div>
 
+  <!-- Popover com atalhos de comunicação a partir do e-mail exibido no modal. -->
   <div class="ramal-email-popover" id="ramalEmailPopover" role="tooltip" hidden>
     <div class="ramal-email-popover-address" id="ramalEmailPopoverAddress"></div>
     <div class="ramal-email-popover-actions">
@@ -160,6 +168,7 @@
 
 {% block extra_js %}
   <script>
+    // Estado de escala e arraste do organograma, separado entre ajuste automático e zoom do usuário.
     const setoresOrgViewport = document.getElementById('setoresOrgViewport');
     const setoresOrgScaler = document.getElementById('setoresOrgScaler');
     const setoresOrgChart = document.getElementById('setoresOrgChart');
@@ -199,6 +208,7 @@
     function fitSetoresOrgChart() {
       if (!setoresOrgScaler || !setoresOrgChart || !setoresOrgViewport) return;
 
+      // Calcula a escala inicial para que a árvore caiba na área visível.
       setoresOrgScaler.style.transform = 'scale(1)';
       const viewportWidth = Math.max(setoresOrgViewport.clientWidth - 24, 320);
       const viewportHeight = Math.max(setoresOrgViewport.clientHeight - 24, 320);
@@ -236,6 +246,7 @@
     function startSetoresOrgDrag(event) {
       if (!setoresOrgViewport || !setoresOrgScaler) return;
       if (event.button !== 0) return;
+      // Cliques em pessoas abrem contato; por isso não iniciam o arraste do quadro.
       if (event.target.closest('.setores-org-person-trigger')) return;
       setoresOrgDragging = true;
       setoresOrgDragStartX = event.clientX;
@@ -278,6 +289,7 @@
 
     const ramalContactModal = document.getElementById('ramalContactModal');
     if (ramalContactModal) {
+      // Preenche o modal a partir dos data attributes enviados pelos nós do organograma.
       ramalContactModal.addEventListener('show.bs.modal', (event) => {
         const trigger = event.relatedTarget;
         if (!trigger) return;
@@ -360,6 +372,7 @@
       const email = (trigger.dataset.email || trigger.textContent || '').trim();
       if (!email || email === '-') return;
 
+      // Os links são montados sob demanda para Teams, Outlook e cópia do endereço.
       ramalActiveEmail = email;
       ramalEmailPopoverAddress.textContent = email;
       ramalEmailTeams.href = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`;
@@ -394,7 +407,7 @@
       });
     }
 
-    // Sector Members modal controller
+    // Controla o modal de membros usando o JSON embutido em cada cartão de setor.
     document.addEventListener('click', (event) => {
       const sectorCard = event.target.closest('.sector-card-trigger');
       if (sectorCard) {
@@ -436,6 +449,7 @@
     });
 
     function createMemberButton(member) {
+      // Cria botões de pessoas compatíveis com o mesmo modal de contato dos ramais.
       const button = document.createElement('button');
       button.className = 'btn btn-outline-secondary w-100 text-start d-flex align-items-center gap-3 py-2 px-3 sector-member-trigger';
       button.type = 'button';

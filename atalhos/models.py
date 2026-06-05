@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Definir o modelo de atalho e a validação de URLs internas ou externas.
+
 from urllib.parse import urlparse
 
 from django.core.exceptions import ValidationError
@@ -6,6 +9,8 @@ from django.db import models
 
 
 def validar_url_interna_ou_externa(value):
+    """Aceita caminhos internos iniciados por / ou URLs externas http/https completas."""
+
     normalized = (value or '').strip()
     if not normalized:
         raise ValidationError('Informe uma URL valida.')
@@ -19,6 +24,8 @@ def validar_url_interna_ou_externa(value):
 
 
 class Atalho(models.Model):
+    """Representa um card/link configurável exibido próximo às notícias."""
+
     titulo = models.CharField('Titulo', max_length=120)
     imagem = models.ImageField(
         'Imagem',
@@ -41,5 +48,5 @@ class Atalho(models.Model):
         verbose_name_plural = 'Atalhos'
 
     def __str__(self):
+        # O título identifica o atalho nas telas administrativas e no admin do Django.
         return self.titulo
-

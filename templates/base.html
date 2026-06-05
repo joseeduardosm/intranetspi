@@ -1,3 +1,5 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Template base da intranet com navbar, mensagens, bloqueios de perfil e blocos extensíveis. -->
 {% load static navbar_tags %}
 <!doctype html>
 <html lang="pt-br">
@@ -10,6 +12,7 @@
     {% block extra_css %}{% endblock %}
   </head>
   <body class="spi-body">
+    <!-- Navbar global com módulos permitidos ao usuário e itens configuráveis. -->
     <nav class="navbar navbar-expand-lg navbar-dark spi-navbar shadow-sm">
       <div class="container-fluid px-4">
         <a class="navbar-brand fw-semibold" href="{% url 'root' %}">Intranet SPI</a>
@@ -38,7 +41,8 @@
                 </li>
               {% endif %}
             {% endif %}
-            {% for entry in nav_items %}
+          {% for entry in nav_items %}
+              <!-- Itens com filhos viram dropdown; itens simples apontam direto para a URL cadastrada. -->
               {% if entry.children %}
                 <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle" href="{% if entry.item.url %}{{ entry.item.url }}{% else %}#{% endif %}" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -70,6 +74,7 @@
           </ul>
         </div>
         <div class="d-flex gap-2 align-items-center ms-lg-3">
+          <!-- Ações de sessão aparecem fora do collapse para permanecerem visíveis no topo. -->
           {% if request.user.is_authenticated %}
             <span class="text-white-50 small">{{ request.user.username }}</span>
             <a class="btn btn-outline-light btn-sm" href="{% url 'logout' %}">Sair</a>
@@ -80,6 +85,7 @@
       </div>
     </nav>
     {% if aniversariantes %}
+      <!-- Barra mensal de aniversariantes, ocultável por usuário via localStorage. -->
       <div class="spi-marquee-bar" id="birthdayMarqueeBar" style="display: none; cursor: pointer;" title="Clique para ocultar os aniversariantes deste mês">
         <div class="spi-marquee-content">
           <span class="title">Aniversariantes do mês:</span>
@@ -89,6 +95,7 @@
         </div>
       </div>
 
+      <!-- Confirmação exibida quando o usuário oculta a barra de aniversariantes do mês. -->
       <div class="modal fade" id="birthdayDismissModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
           <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
@@ -107,6 +114,7 @@
       </div>
     {% endif %}
     <main class="container-fluid spi-container py-4">
+      <!-- Mensagens do Django são renderizadas antes do conteúdo específico da página. -->
       {% if messages %}
         <div class="mb-3">
           {% for message in messages %}
@@ -117,6 +125,7 @@
       {% block content %}{% endblock %}
     </main>
     {% if request.user.is_authenticated and usuario_profile_requires_update and not usuario_profile_update_allowed and usuario_perfil %}
+      <!-- Bloqueio de navegação até que o usuário atualize o cadastro obrigatório. -->
       <div class="spi-profile-alert-backdrop" aria-hidden="true"></div>
       <div class="spi-profile-alert-modal" role="dialog" aria-modal="true" aria-label="Atualize seus dados">
         <h3>Atualize seus dados antes de continuar</h3>
@@ -141,6 +150,7 @@
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+      // Inicializa tooltips declarados pelos templates filhos.
       document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((element) => {
         new bootstrap.Tooltip(element, {
           trigger: element.dataset.bsTrigger || 'hover focus',
@@ -156,7 +166,7 @@
         });
       });
 
-      // Birthday marquee dismissal logic
+      // Controla a exibição mensal da barra de aniversariantes por usuário.
       document.addEventListener('DOMContentLoaded', () => {
         const marqueeBar = document.getElementById('birthdayMarqueeBar');
         if (marqueeBar) {

@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Confirmar exclusões dos fluxos de licitações antes de remover registros. -->
 {% block extra_css %}<link rel="stylesheet" href="{% static 'licitacoes/css/licitacoes.css' %}">{% endblock %}
 
 {% block content %}
+  <!-- Confirma a ação destrutiva antes de enviar o POST de exclusão. -->
   <div class="spi-page-title">
     <h1>{{ titulo|default:"Confirmar exclusao" }}</h1>
     <p>{{ descricao|default:"Esta acao nao pode ser desfeita." }}</p>

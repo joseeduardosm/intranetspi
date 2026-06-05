@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Definir imóveis, processos SEI, anexos, ciclos e marcos processuais.
+
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -5,6 +8,8 @@ from .services import ESTADOS
 
 
 class Imovel(models.Model):
+    """Cadastro principal do imóvel acompanhado pelo fluxo de regularização."""
+
     inscricao_imobiliaria = models.CharField('Inscrição imobiliária', max_length=120, unique=True)
     matricula = models.CharField('Matrícula', max_length=120)
     processo_judicial = models.CharField('Processo judicial de desapropriação', max_length=120)
@@ -31,6 +36,7 @@ class Imovel(models.Model):
 
     def clean(self):
         super().clean()
+        # Campos de CADIN só são obrigatórios e preservados quando há cobrança ativa.
         if self.possui_cadin and not self.exercicio_cadin:
             raise ValidationError({'exercicio_cadin': 'Informe o exercício do CADIN.'})
         if self.possui_cadin and not self.notificacao_cadin_municipal:
@@ -41,16 +47,22 @@ class Imovel(models.Model):
 
     @property
     def endereco_completo(self):
+        """Monta endereço completo para listagens e cabeçalhos."""
+
         return f'{self.logradouro}, {self.numero} - {self.bairro} - {self.municipio}/{self.uf}'
 
     @property
     def possui_cadin_ativo(self):
+        """Considera CADIN ativo até existir ciclo deferido que regularize o imóvel."""
+
         if not self.possui_cadin:
             return False
         return not self.ciclos.filter(resultado=CicloProcessual.Resultado.DEFERIDO).exists()
 
 
 class ImovelProcessoSEI(models.Model):
+    """Processo SEI vinculado ao imóvel."""
+
     imovel = models.ForeignKey(Imovel, on_delete=models.CASCADE, related_name='processos_sei')
     numero_sei = models.CharField('Número SEI', max_length=120)
     link_sei = models.URLField('Link SEI', max_length=500)
@@ -67,6 +79,8 @@ class ImovelProcessoSEI(models.Model):
 
 
 class ImovelAnexo(models.Model):
+    """Arquivo complementar associado ao imóvel."""
+
     imovel = models.ForeignKey(Imovel, on_delete=models.CASCADE, related_name='anexos')
     nome_exibicao = models.CharField('Nome exibido', max_length=180)
     arquivo = models.FileField(upload_to='regulariza_sgi/anexos/')
@@ -82,6 +96,8 @@ class ImovelAnexo(models.Model):
 
 
 class CicloProcessual(models.Model):
+    """Ciclo de protocolo, manifestação, deferimento/indeferimento e renovação."""
+
     class Tipo(models.TextChoices):
         INICIAL = 'inicial', 'Inicial'
         CONTRARRAZAO = 'contrarrazao', 'Contrarrazão'
@@ -121,6 +137,8 @@ class CicloProcessual(models.Model):
 
 
 class MarcoProcessual(models.Model):
+    """Marco calculado ou registrado dentro de um ciclo processual."""
+
     ciclo = models.ForeignKey(CicloProcessual, on_delete=models.CASCADE, related_name='marcos')
     tipo = models.CharField(max_length=40)
     titulo = models.CharField(max_length=120)

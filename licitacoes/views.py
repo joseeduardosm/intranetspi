@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Controlar telas, permissões, CRUDs e exportações dos fluxos de licitações.
+
 from copy import copy
 from io import BytesIO
 
@@ -94,6 +97,7 @@ from usuarios.services import SYSTEM_USERNAMES
 User = get_user_model()
 
 
+# Helpers de auditoria e marcação mantêm autoria/atualização sem repetir lógica nas views.
 def _audit_user(request):
     return request.user if request.user.is_authenticated else None
 
@@ -112,6 +116,8 @@ def _touch_termo(termo, request):
 
 
 def parser_legend(max_hash_level):
+    """Retorna a legenda dos marcadores aceitos no editor de itens em lote."""
+
     return [
         {'marker': '@', 'label': 'subseção'},
         {'marker': '#', 'label': f'item/subitem até {max_hash_level} níveis'},
@@ -135,6 +141,8 @@ SESSAO_CHILDREN_RED_FIELD = 'filhos_em_vermelho'
 
 
 def item_red_mode(request):
+    """Lê o modo de destaque em vermelho escolhido no formulário."""
+
     value = request.POST.get(ITEM_RED_MODE_FIELD, ITEM_RED_MODE_COMMON)
     valid_values = {option[0] for option in ITEM_RED_MODE_OPTIONS}
     return value if value in valid_values else ITEM_RED_MODE_COMMON
@@ -156,6 +164,8 @@ def apply_item_red_mode_to_text(texto, mode):
 
 
 def apply_item_red_mode_to_nodes(nodes, mode):
+    """Aplica destaque em vermelho aos nós parseados conforme o modo selecionado."""
+
     if mode == ITEM_RED_MODE_COMMON:
         return nodes
     for node in nodes:
@@ -179,6 +189,8 @@ def apply_red_to_session_items(sessao):
 
 
 def parser_context(context, request, max_hash_level):
+    """Adiciona instruções do parser e modo de destaque ao contexto do formulário."""
+
     context['parser_legend'] = parser_legend(max_hash_level)
     context['item_red_mode_field'] = ITEM_RED_MODE_FIELD
     context['item_red_mode_options'] = ITEM_RED_MODE_OPTIONS
@@ -201,6 +213,8 @@ def sessao_focus_url(sessao):
 
 
 def item_delete_return_url(item):
+    """Escolhe o melhor ponto de retorno depois da exclusão de um item do TR."""
+
     siblings = list(item.sessao.itens.filter(parent_id=item.parent_id).exclude(pk=item.pk).order_by('ordem', 'id'))
     next_item = next((sibling for sibling in siblings if (sibling.ordem, sibling.id) > (item.ordem, item.id)), None)
     if next_item:
@@ -277,6 +291,8 @@ def etp_sessao_focus_url(sessao):
 
 
 def etp_item_delete_return_url(item):
+    """Escolhe o melhor ponto de retorno depois da exclusão de um item do ETP TIC."""
+
     siblings = list(item.sessao.itens.filter(parent_id=item.parent_id).exclude(pk=item.pk).order_by('ordem', 'id'))
     next_item = next((sibling for sibling in siblings if (sibling.ordem, sibling.id) > (item.ordem, item.id)), None)
     if next_item:
@@ -293,20 +309,28 @@ def etp_item_delete_return_url(item):
 
 
 class SuperuserRequiredMixin(UserPassesTestMixin):
+    """Exige usuário autenticado para acessar os fluxos internos de licitações."""
+
     def test_func(self):
         return self.request.user.is_authenticated
 
 
 def is_system_admin(user):
+    """Centraliza a regra de administrador do sistema."""
+
     return bool(user and user.is_authenticated and (user.is_superuser or user.is_staff))
 
 
 class AdminRequiredMixin(UserPassesTestMixin):
+    """Restringe cadastros administrativos a staff ou superusuários."""
+
     def test_func(self):
         return is_system_admin(self.request.user)
 
 
 def owned_queryset(model, user):
+    """Filtra documentos do usuário, compartilhados com ele ou todos para administradores."""
+
     queryset = model.objects.all()
     if is_system_admin(user):
         return queryset
@@ -314,6 +338,8 @@ def owned_queryset(model, user):
 
 
 def owned_delete_queryset(model, user):
+    """Permite exclusão por administradores ou pelo criador do documento."""
+
     queryset = model.objects.all()
     if is_system_admin(user):
         return queryset
@@ -338,6 +364,8 @@ def shareable_users_for(user):
 
 
 def assign_owner(instance, request):
+    """Preenche autoria inicial e atualização quando o modelo possui esses campos."""
+
     user = _audit_user(request)
     if not instance.criado_por_id:
         instance.criado_por = user
@@ -347,10 +375,14 @@ def assign_owner(instance, request):
 
 
 class LicitacoesHomeView(SuperuserRequiredMixin, TemplateView):
+    """Exibe a página inicial com os módulos documentais de licitações."""
+
     template_name = 'licitacoes/home.html'
 
 
 class LicitacoesAdminContextMixin:
+    """Disponibiliza no template se o usuário pode executar ações administrativas."""
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['is_system_admin'] = is_system_admin(self.request.user)
@@ -358,6 +390,8 @@ class LicitacoesAdminContextMixin:
 
 
 class EtpTicListView(LicitacoesAdminContextMixin, SuperuserRequiredMixin, ListView):
+    """Lista ETPs TIC acessíveis ao usuário e prepara opções de compartilhamento."""
+
     model = EtpTic
     template_name = 'licitacoes/etp_list.html'
     context_object_name = 'etps'
@@ -372,6 +406,8 @@ class EtpTicListView(LicitacoesAdminContextMixin, SuperuserRequiredMixin, ListVi
 
 
 class EtpTicCreateView(SuperuserRequiredMixin, CreateView):
+    """Cria um ETP TIC novo já configurado para o editor dinâmico."""
+
     model = EtpTic
     form_class = EtpTicCreateForm
     template_name = 'licitacoes/form.html'
@@ -392,6 +428,8 @@ class EtpTicCreateView(SuperuserRequiredMixin, CreateView):
 
 
 class EtpTicEditView(SuperuserRequiredMixin, UpdateView):
+    """Edita metadados ou a seção atual de um ETP TIC."""
+
     model = EtpTic
     context_object_name = 'etp'
 
@@ -852,6 +890,8 @@ class ItemEtpDuplicateView(SuperuserRequiredMixin, View):
 
 
 class DfdListView(LicitacoesAdminContextMixin, SuperuserRequiredMixin, ListView):
+    """Lista DFDs acessíveis ao usuário e prepara compartilhamento."""
+
     model = Dfd
     template_name = 'licitacoes/dfd_list.html'
     context_object_name = 'dfds'
@@ -866,6 +906,8 @@ class DfdListView(LicitacoesAdminContextMixin, SuperuserRequiredMixin, ListView)
 
 
 class DfdCreateView(SuperuserRequiredMixin, CreateView):
+    """Cria um DFD e direciona para o preenchimento por seção."""
+
     model = Dfd
     form_class = DfdCreateForm
     template_name = 'licitacoes/form.html'
@@ -884,6 +926,8 @@ class DfdCreateView(SuperuserRequiredMixin, CreateView):
 
 
 class DfdEditView(SuperuserRequiredMixin, UpdateView):
+    """Edita seções do DFD e controla avanço, conclusão e retorno."""
+
     model = Dfd
     context_object_name = 'dfd'
 
@@ -1091,6 +1135,8 @@ class DfdExportDocxView(SuperuserRequiredMixin, View):
 
 
 class TermoListView(LicitacoesAdminContextMixin, SuperuserRequiredMixin, ListView):
+    """Lista Termos de Referência acessíveis ao usuário."""
+
     model = TermoReferencia
     template_name = 'licitacoes/tr_list.html'
     context_object_name = 'termos'
@@ -1105,6 +1151,8 @@ class TermoListView(LicitacoesAdminContextMixin, SuperuserRequiredMixin, ListVie
 
 
 class TermoCreateView(SuperuserRequiredMixin, CreateView):
+    """Cria um Termo de Referência e atribui autoria."""
+
     model = TermoReferencia
     form_class = TermoReferenciaForm
     template_name = 'licitacoes/form.html'
@@ -1184,6 +1232,8 @@ class TermoShareView(SuperuserRequiredMixin, View):
 
 
 class TermoDetailView(SuperuserRequiredMixin, DetailView):
+    """Exibe o TR em árvore com seções, itens e tabelas vinculadas."""
+
     model = TermoReferencia
     template_name = 'licitacoes/tr_detail.html'
     context_object_name = 'termo'
@@ -1198,6 +1248,8 @@ class TermoDetailView(SuperuserRequiredMixin, DetailView):
 
 
 class PesquisaPrecoOpenView(SuperuserRequiredMixin, View):
+    """Abre a pesquisa existente do TR ou redireciona para criação."""
+
     def get(self, request, pk):
         termo = owned_object_or_404(TermoReferencia, request.user, pk=pk)
         pesquisa = getattr(termo, 'pesquisa_preco', None)
@@ -1207,6 +1259,8 @@ class PesquisaPrecoOpenView(SuperuserRequiredMixin, View):
 
 
 class PesquisaPrecoCreateView(SuperuserRequiredMixin, CreateView):
+    """Cria a pesquisa de preço associada a um TR."""
+
     model = PesquisaPreco
     form_class = PesquisaPrecoCreateForm
     template_name = 'licitacoes/pesquisa_preco_form.html'
@@ -1464,18 +1518,24 @@ class PesquisaPrecoOrcamentoView(SuperuserRequiredMixin, View):
 
 
 class PesquisaPrecoExportXlsxView(SuperuserRequiredMixin, View):
+    """Exporta o quadro comparativo da pesquisa de preço em XLSX."""
+
     def get(self, request, termo_pk):
         pesquisa = get_object_or_404(PesquisaPreco.objects.select_related('termo'), termo_id=termo_pk, termo__in=owned_queryset(TermoReferencia, request.user))
         return _pesquisa_preco_xlsx_response(pesquisa)
 
 
 class FornecedorListView(AdminRequiredMixin, ListView):
+    """Lista fornecedores cadastrados para uso nas pesquisas de preço."""
+
     model = Fornecedor
     template_name = 'licitacoes/fornecedor_list.html'
     context_object_name = 'fornecedores'
 
 
 class FornecedorCreateView(AdminRequiredMixin, CreateView):
+    """Cadastra fornecedores disponíveis para cotação."""
+
     model = Fornecedor
     form_class = FornecedorForm
     template_name = 'licitacoes/form.html'
@@ -2004,6 +2064,8 @@ class TermoExportDocxView(SuperuserRequiredMixin, View):
 
 
 def _docx_response(titulo, secoes, filename):
+    """Gera um DOCX simples a partir de seções já renderizadas."""
+
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Cm, Pt
@@ -2043,6 +2105,8 @@ def _docx_response(titulo, secoes, filename):
 
 
 def _etp_dynamic_docx_response(etp):
+    """Gera o DOCX do ETP TIC criado pelo editor dinâmico."""
+
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Cm, Pt, RGBColor
@@ -2116,6 +2180,8 @@ def _etp_dynamic_docx_response(etp):
 
 
 def _pesquisa_preco_xlsx_response(pesquisa):
+    """Preenche o modelo XLSX do quadro comparativo de pesquisa de preço."""
+
     from openpyxl import load_workbook
     from openpyxl.utils import get_column_letter
 
@@ -2295,6 +2361,8 @@ def _pesquisa_preco_xlsx_response(pesquisa):
 
 
 def _dfd_docx_response(dfd):
+    """Gera o DOCX do DFD com textos, marcações e tabela de itens."""
+
     from docx import Document
     from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -2430,6 +2498,8 @@ def _dfd_docx_response(dfd):
 
 
 def _render(request, template_name, context):
+    """Importa render localmente para manter os imports pesados próximos ao uso."""
+
     from django.shortcuts import render
 
     return render(request, template_name, context)

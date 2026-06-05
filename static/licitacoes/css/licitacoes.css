@@ -1,8 +1,13 @@
+/* Criado por José Eduardo Santana Martins em 04/06/2026 */
+/* Objetivo: Definir estilos específicos das telas de licitações, documentos e pesquisas. */
+
+/* Mantém painéis auxiliares visíveis durante a edição de documentos longos. */
 .spi-sticky {
   position: sticky;
   top: 1rem;
 }
 
+/* Ajustes de navegação e leitura para seções e tabelas documentais. */
 .spi-tr-section {
   scroll-margin-top: 1rem;
 }
@@ -23,6 +28,7 @@
   color: #0d6efd;
 }
 
+/* Botão destacado da pesquisa de preço dentro do detalhe do TR. */
 .spi-btn-pesquisa-preco {
   background: #ffd966;
   border-color: #f2c94c;
@@ -37,6 +43,7 @@
   color: #7a4700;
 }
 
+/* Cores de acompanhamento dos fornecedores conforme dias sem resposta. */
 .spi-pesquisa-row-verde {
   --bs-table-bg: #d1e7dd;
 }
@@ -72,6 +79,7 @@
   min-width: 1180px;
 }
 
+/* Tabelas de TR e ETP usam larguras estáveis para preservar menus e índices. */
 .spi-tr-table {
   min-width: 1180px;
 }
@@ -111,6 +119,7 @@
   word-break: break-word;
 }
 
+/* Menus compactos de ação por seção/item em tabelas e árvores. */
 .spi-subsecao-row {
   font-weight: 700;
   color: #344054;
@@ -182,6 +191,7 @@
   scroll-margin-top: 1rem;
 }
 
+/* Realce temporário do item após redirecionar para uma âncora. */
 .spi-tr-table tr[id^="item-"]:target,
 .spi-tr-table tr[id^="item-etp-"]:target {
   animation: spi-focus-row 4s ease-out;
@@ -211,6 +221,7 @@
   }
 }
 
+/* Stepper das seções de ETP TIC e DFD. */
 .spi-stepper {
   display: grid;
   grid-template-columns: repeat(18, minmax(42px, 1fr));
@@ -248,6 +259,7 @@
   min-width: 980px;
 }
 
+/* Campos de texto longos ficam mais compactos para documentos extensos. */
 textarea.form-control,
 .spi-textarea-compact {
   font-size: .875rem;
@@ -261,6 +273,7 @@ textarea.form-control,
   text-align: justify;
 }
 
+/* Linha do tempo das notas de fornecedores na pesquisa de preço. */
 .spi-notes-timeline {
   position: relative;
   display: grid;

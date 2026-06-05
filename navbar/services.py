@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Montar a árvore ativa da navbar e controlar normalização/reordenação de itens.
+
 from collections import defaultdict
 
 from django.db import transaction
@@ -6,6 +9,8 @@ from .models import NavbarItem
 
 
 def active_navbar_tree():
+    """Retorna itens ativos em estrutura de menu principal com filhos ativos."""
+
     items = list(NavbarItem.objects.filter(ativo=True).select_related('parent').order_by('ordem', 'titulo', 'id'))
     children_by_parent = defaultdict(list)
     roots = []
@@ -18,6 +23,8 @@ def active_navbar_tree():
 
 
 def ordered_siblings(parent_id):
+    """Lista itens irmãos de um mesmo pai na ordem de exibição."""
+
     return list(
         NavbarItem.objects.filter(parent_id=parent_id)
         .select_related('parent')
@@ -27,6 +34,8 @@ def ordered_siblings(parent_id):
 
 @transaction.atomic
 def normalize_navbar_branch(parent_id):
+    """Renumera a ordem dos irmãos de uma ramificação da navbar."""
+
     siblings = ordered_siblings(parent_id)
     for index, item in enumerate(siblings, start=1):
         if item.ordem != index:
@@ -35,6 +44,8 @@ def normalize_navbar_branch(parent_id):
 
 @transaction.atomic
 def move_navbar_item(item, direction):
+    """Move um item para cima ou para baixo entre irmãos do mesmo nível."""
+
     siblings = ordered_siblings(item.parent_id)
     index_by_id = {sibling.id: index for index, sibling in enumerate(siblings)}
     current_index = index_by_id.get(item.id)
@@ -53,6 +64,8 @@ def move_navbar_item(item, direction):
 
 
 def navbar_move_state(items):
+    """Calcula quais itens da listagem podem subir ou descer."""
+
     state = {}
     siblings_by_parent = {}
 

@@ -1,9 +1,13 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Mapear rotas de imóveis, recursos filhos e eventos processuais.
+
 from django.urls import path
 
 from . import views
 
 app_name = 'regulariza_sgi'
 
+# Rotas organizadas por imóvel, processos SEI, anexos e ações do ciclo atual.
 urlpatterns = [
     path('', views.RegularizaSgiHomeView.as_view(), name='home'),
     path('imoveis/', views.ImovelListView.as_view(), name='imovel_list'),

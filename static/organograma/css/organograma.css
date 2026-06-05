@@ -1,4 +1,7 @@
-/* Premium Organograma Stylesheet */
+/* Criado por José Eduardo Santana Martins em 04/06/2026 */
+/* Objetivo: Estilizar árvore hierárquica, busca e estados visuais do organograma. */
+
+/* Variáveis visuais usadas por cartões, conectores e estados da árvore. */
 :root {
   --org-primary: #0d6efd;
   --org-primary-hover: #0b5ed7;
@@ -11,6 +14,7 @@
   --org-shadow-hover: 0 10px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 16px -6px rgba(15, 23, 42, 0.05);
 }
 
+/* Entrada suave da página do organograma. */
 .organograma-page-wrapper {
   animation: fadeIn 0.4s ease-out;
 }
@@ -20,14 +24,14 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Card layout settings */
+/* Cartão principal que envolve busca, controles e árvore. */
 .organograma-main-card {
   border-radius: 16px;
   overflow: hidden;
   background: #ffffff;
 }
 
-/* Search widget styling */
+/* Campo de busca da árvore de setores. */
 .org-search-wrapper {
   position: relative;
   max-width: 320px;
@@ -61,7 +65,7 @@
   outline: none;
 }
 
-/* Control buttons */
+/* Botões para expandir ou recolher todos os ramos. */
 .org-tree-controls .btn {
   border-radius: 8px;
   font-weight: 500;
@@ -79,7 +83,7 @@
   border-color: #cbd5e1;
 }
 
-/* Tree Structure - Vertical Indented Layout (Inbreakable) */
+/* Estrutura vertical da árvore com indentação por nível. */
 .org-tree-root-container {
   display: flex;
   flex-direction: column;
@@ -102,7 +106,7 @@
   padding-bottom: 0.25rem;
 }
 
-/* Card of sector */
+/* Cartão de setor clicável. */
 .org-tree-node {
   background: var(--org-bg-node);
   border: 1px solid var(--org-border);
@@ -133,7 +137,7 @@
   transition: transform 0.2s ease;
 }
 
-/* Hover effects */
+/* Estados de interação do cartão de setor. */
 .org-tree-node:hover {
   transform: translateY(-2px) translateX(2px);
   border-color: rgba(13, 110, 253, 0.4);
@@ -173,7 +177,7 @@
   line-height: 1.4;
 }
 
-/* Recursive child indentation and connector lines */
+/* Indentação recursiva dos filhos e linhas conectoras. */
 .org-tree-children {
   display: flex;
   flex-direction: column;
@@ -183,7 +187,7 @@
   margin-top: 0.25rem;
 }
 
-/* Vertical line of parent connector */
+/* Linha vertical que conecta o pai aos filhos. */
 .org-tree-children::before {
   content: '';
   position: absolute;
@@ -196,12 +200,12 @@
   transition: background-color 0.25s ease;
 }
 
-/* Highlight line when hovering parent branch */
+/* Realce da linha conectora ao passar pelo ramo. */
 .org-tree-branch:hover > .org-tree-children::before {
   background: var(--org-connector-active);
 }
 
-/* Horizontal line connector to each child node */
+/* Linha horizontal que liga cada filho ao ramo vertical. */
 .org-tree-children > .org-tree-branch > .org-tree-node-wrapper::before {
   content: '';
   position: absolute;
@@ -218,7 +222,7 @@
   background: var(--org-connector-active);
 }
 
-/* Dynamic State: Collapsed branch */
+/* Estado recolhido dos ramos com filhos. */
 .org-tree-branch.collapsed > .org-tree-children {
   display: none;
 }
@@ -243,7 +247,7 @@
   padding-right: 2rem;
 }
 
-/* Search Highlights */
+/* Destaques e apagamento visual durante a busca. */
 .org-tree-node.highlighted {
   border-color: #3b82f6;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15), var(--org-shadow-hover);

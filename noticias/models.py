@@ -1,8 +1,13 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Definir notícia, anexos, status editorial e validações de publicação.
+
 from django.core.exceptions import ValidationError
 from django.db import models
 
 
 class Noticia(models.Model):
+    """Representa uma notícia institucional com imagem, anexo e status editorial."""
+
     class Status(models.TextChoices):
         RASCUNHO = 'RASCUNHO', 'Rascunho'
         AGENDADA = 'AGENDADA', 'Agendada'
@@ -28,13 +33,18 @@ class Noticia(models.Model):
 
     @property
     def anexo_nome(self):
+        """Retorna apenas o nome do arquivo anexado para exibição nos templates."""
+
         return self.anexo_pdf.name.rsplit('/', 1)[-1] if self.anexo_pdf else ''
 
     @property
     def anexo_e_pdf(self):
+        """Indica se o anexo deve ser incorporado como PDF na página pública."""
+
         return self.anexo_nome.lower().endswith('.pdf')
 
     def clean(self):
         super().clean()
+        # Notícias agendadas ou publicadas precisam de data para controle de visibilidade.
         if self.status in {self.Status.AGENDADA, self.Status.PUBLICADA} and not self.data_publicacao:
             raise ValidationError({'data_publicacao': 'Informe a data de publicacao para noticias agendadas ou publicadas.'})

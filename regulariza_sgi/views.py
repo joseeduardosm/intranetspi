@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Controlar telas de imóveis, anexos, processos SEI e eventos processuais.
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
@@ -13,14 +16,20 @@ from .services import MUNICIPIOS_POR_UF, compute_timeline_context, create_follow
 
 
 class RegularizaSgiAccessMixin(LoginRequiredMixin):
+    """Exige login para acessar o módulo Regulariza SGI."""
+
     login_url = reverse_lazy('login')
 
 
 class RegularizaSgiHomeView(RegularizaSgiAccessMixin, TemplateView):
+    """Exibe a página inicial do módulo com atalhos principais."""
+
     template_name = 'regulariza_sgi/home.html'
 
 
 class ImovelListView(RegularizaSgiAccessMixin, ListView):
+    """Lista imóveis com busca ampla e indicadores de timeline/CADIN."""
+
     model = Imovel
     template_name = 'regulariza_sgi/imovel_list.html'
     context_object_name = 'imoveis'
@@ -28,6 +37,7 @@ class ImovelListView(RegularizaSgiAccessMixin, ListView):
 
     def get_queryset(self):
         queryset = Imovel.objects.all()
+        # A busca percorre dados cadastrais, processos SEI e anexos relacionados.
         term = self.request.GET.get('q', '').strip()
         if term:
             queryset = queryset.filter(
@@ -51,6 +61,7 @@ class ImovelListView(RegularizaSgiAccessMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Cada imóvel recebe uma timeline calculada para colorir a linha da tabela.
         for imovel in context['imoveis']:
             imovel.timeline = compute_timeline_context(imovel)
         context['q'] = self.request.GET.get('q', '').strip()
@@ -58,6 +69,8 @@ class ImovelListView(RegularizaSgiAccessMixin, ListView):
 
 
 class ImovelCreateView(RegularizaSgiAccessMixin, CreateView):
+    """Cadastra um imóvel e direciona para o detalhe após salvar."""
+
     model = Imovel
     form_class = ImovelForm
     template_name = 'regulariza_sgi/imovel_form.html'
@@ -74,6 +87,8 @@ class ImovelCreateView(RegularizaSgiAccessMixin, CreateView):
 
 
 class ImovelUpdateView(RegularizaSgiAccessMixin, UpdateView):
+    """Atualiza dados cadastrais do imóvel."""
+
     model = Imovel
     form_class = ImovelForm
     template_name = 'regulariza_sgi/imovel_form.html'
@@ -90,6 +105,8 @@ class ImovelUpdateView(RegularizaSgiAccessMixin, UpdateView):
 
 
 class ImovelDeleteView(RegularizaSgiAccessMixin, DeleteView):
+    """Remove um imóvel após confirmação."""
+
     model = Imovel
     template_name = 'regulariza_sgi/confirm_delete.html'
     success_url = reverse_lazy('regulariza_sgi:imovel_list')
@@ -100,12 +117,15 @@ class ImovelDeleteView(RegularizaSgiAccessMixin, DeleteView):
 
 
 class ImovelDetailView(RegularizaSgiAccessMixin, DetailView):
+    """Exibe resumo do imóvel, timeline, histórico e formulários de ações do ciclo."""
+
     model = Imovel
     template_name = 'regulariza_sgi/imovel_detail.html'
     context_object_name = 'imovel'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # O detalhe concentra formulários de eventos porque eles dependem do ciclo atual.
         imovel = self.object
         ciclo = current_cycle(imovel)
         timeline = compute_timeline_context(imovel)
@@ -124,6 +144,8 @@ class ImovelDetailView(RegularizaSgiAccessMixin, DetailView):
         return context
 
     def _proximo_ciclo_tipo(self, ciclo):
+        """Define se o próximo ciclo será renovação ou contrarrazão."""
+
         if not ciclo or not ciclo.resultado:
             return ''
         if ciclo.resultado == CicloProcessual.Resultado.DEFERIDO:
@@ -132,11 +154,14 @@ class ImovelDetailView(RegularizaSgiAccessMixin, DetailView):
 
 
 class ImovelChildMixin(RegularizaSgiAccessMixin):
+    """Mixin para recursos filhos que sempre pertencem a um imóvel."""
+
     parent_model = Imovel
     parent_kwarg = 'imovel_pk'
     parent_context_name = 'imovel'
 
     def dispatch(self, request, *args, **kwargs):
+        # Carrega o imóvel pai antes de operar processos SEI ou anexos.
         self.imovel = get_object_or_404(self.parent_model, pk=kwargs[self.parent_kwarg])
         return super().dispatch(request, *args, **kwargs)
 
@@ -150,6 +175,8 @@ class ImovelChildMixin(RegularizaSgiAccessMixin):
 
 
 class ProcessoSEICreateView(ImovelChildMixin, CreateView):
+    """Adiciona um processo SEI ao imóvel."""
+
     model = ImovelProcessoSEI
     form_class = ProcessoSEIForm
     template_name = 'regulariza_sgi/resource_form.html'
@@ -166,6 +193,8 @@ class ProcessoSEICreateView(ImovelChildMixin, CreateView):
 
 
 class ProcessoSEIUpdateView(ImovelChildMixin, UpdateView):
+    """Edita um processo SEI vinculado ao imóvel atual."""
+
     model = ImovelProcessoSEI
     form_class = ProcessoSEIForm
     template_name = 'regulariza_sgi/resource_form.html'
@@ -184,6 +213,8 @@ class ProcessoSEIUpdateView(ImovelChildMixin, UpdateView):
 
 
 class ProcessoSEIDeleteView(ImovelChildMixin, DeleteView):
+    """Remove um processo SEI do imóvel atual."""
+
     model = ImovelProcessoSEI
     template_name = 'regulariza_sgi/confirm_delete.html'
 
@@ -196,6 +227,8 @@ class ProcessoSEIDeleteView(ImovelChildMixin, DeleteView):
 
 
 class AnexoCreateView(ImovelChildMixin, CreateView):
+    """Adiciona um anexo ao imóvel."""
+
     model = ImovelAnexo
     form_class = ImovelAnexoForm
     template_name = 'regulariza_sgi/resource_form.html'
@@ -212,6 +245,8 @@ class AnexoCreateView(ImovelChildMixin, CreateView):
 
 
 class AnexoUpdateView(ImovelChildMixin, UpdateView):
+    """Edita metadados ou arquivo de um anexo do imóvel."""
+
     model = ImovelAnexo
     form_class = ImovelAnexoForm
     template_name = 'regulariza_sgi/resource_form.html'
@@ -230,6 +265,8 @@ class AnexoUpdateView(ImovelChildMixin, UpdateView):
 
 
 class AnexoDeleteView(ImovelChildMixin, DeleteView):
+    """Remove um anexo do imóvel atual."""
+
     model = ImovelAnexo
     template_name = 'regulariza_sgi/confirm_delete.html'
 
@@ -242,9 +279,12 @@ class AnexoDeleteView(ImovelChildMixin, DeleteView):
 
 
 class CurrentCycleMutationView(RegularizaSgiAccessMixin, View):
+    """Base para ações que alteram o ciclo processual mais recente do imóvel."""
+
     form_class = None
 
     def dispatch(self, request, *args, **kwargs):
+        # A ação só é possível quando há ciclo atual criado pelo sinal do imóvel.
         self.imovel = get_object_or_404(Imovel, pk=kwargs['pk'])
         self.ciclo = current_cycle(self.imovel)
         if not self.ciclo:
@@ -255,6 +295,7 @@ class CurrentCycleMutationView(RegularizaSgiAccessMixin, View):
         form = self.form_class(request.POST)
         if form.is_valid():
             return self.form_valid(form)
+        # Em caso de erro, reaproveita o detalhe com o formulário inválido no contexto correto.
         view = ImovelDetailView()
         view.request = request
         view.object = self.imovel
@@ -263,6 +304,8 @@ class CurrentCycleMutationView(RegularizaSgiAccessMixin, View):
 
 
 class RegistrarProtocoloView(CurrentCycleMutationView):
+    """Registra protocolo e inicia a contagem de manifestação prevista."""
+
     form_class = ProtocoloForm
     context_form_name = 'protocolo_form'
 
@@ -279,6 +322,8 @@ class RegistrarProtocoloView(CurrentCycleMutationView):
 
 
 class RegistrarProrrogacaoView(CurrentCycleMutationView):
+    """Acrescenta prorrogação ao prazo de resposta do ciclo atual."""
+
     form_class = ProrrogacaoForm
     context_form_name = 'prorrogacao_form'
 
@@ -294,6 +339,8 @@ class RegistrarProrrogacaoView(CurrentCycleMutationView):
 
 
 class RegistrarManifestacaoView(CurrentCycleMutationView):
+    """Registra deferimento ou indeferimento e recalcula prazos derivados."""
+
     form_class = ManifestacaoForm
     context_form_name = 'manifestacao_form'
 
@@ -311,6 +358,8 @@ class RegistrarManifestacaoView(CurrentCycleMutationView):
 
 
 class ReiniciarCicloView(RegularizaSgiAccessMixin, View):
+    """Cria ciclo posterior após resultado do ciclo atual."""
+
     def post(self, request, pk):
         imovel = get_object_or_404(Imovel, pk=pk)
         ciclo = current_cycle(imovel)

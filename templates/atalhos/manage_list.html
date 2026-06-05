@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Listar atalhos cadastrados e oferecer ações administrativas de CRUD. -->
 
 {% block extra_css %}<link rel="stylesheet" href="{% static 'atalhos/css/atalhos.css' %}">{% endblock %}
 
 {% block content %}
+  <!-- Cabeçalho da gestão com links para visualizar notícias ou criar novo atalho. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
     <div>
       <h1>Gerenciar Atalhos</h1>
@@ -15,6 +18,7 @@
     </div>
   </div>
 
+  <!-- Tabela administrativa com ordem, status e ações de edição/exclusão. -->
   <div class="card border-0 shadow-sm">
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0">
@@ -30,6 +34,7 @@
         </thead>
         <tbody>
           {% for atalho in atalhos %}
+            <!-- Cada linha representa um atalho configurado para a área pública. -->
             <tr>
               <td>{{ atalho.id }}</td>
               <td>{{ atalho.titulo }}</td>
@@ -42,6 +47,7 @@
               </td>
             </tr>
           {% empty %}
+            <!-- Estado vazio orienta o administrador quando ainda não há registros. -->
             <tr><td colspan="6" class="text-muted">Nenhum atalho cadastrado.</td></tr>
           {% endfor %}
         </tbody>

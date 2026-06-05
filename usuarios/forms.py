@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Reúne formulários de LDAP e perfis de usuário, com validações de cadastro
+# obrigatório e integração com setores.
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -17,6 +20,8 @@ FOTO_EXTENSOES_PERMITIDAS = {"png", "jpeg", "jpg"}
 
 
 class BootstrapFormMixin:
+    """Aplica classes Bootstrap conforme o tipo de widget renderizado."""
+
     def _bootstrap_fields(self):
         for field in self.fields.values():
             if isinstance(field.widget, forms.CheckboxInput):
@@ -34,6 +39,8 @@ class BootstrapFormMixin:
 
 
 class LDAPDirectoryForm(BootstrapFormMixin, forms.ModelForm):
+    """Formulário administrativo para cadastrar e testar diretórios LDAP."""
+
     class Meta:
         model = LDAPDirectory
         fields = ["nome", "host", "port", "use_ssl", "base_dn", "bind_dn", "bind_password", "ativo"]
@@ -45,6 +52,8 @@ class LDAPDirectoryForm(BootstrapFormMixin, forms.ModelForm):
 
 
 class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
+    """Edita perfil existente e sincroniza e-mail, setor e papel administrativo."""
+
     login = forms.CharField(label="Login", required=False, disabled=True)
     email = forms.EmailField(label="E-mail", required=True)
     administrador_sistema = forms.BooleanField(label="Administrador do Sistema", required=False)
@@ -67,6 +76,7 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
         self.current_user = current_user
         super().__init__(*args, **kwargs)
         self._bootstrap_fields()
+        # Setor é apresentado como combobox alimentado pela árvore ativa de setores.
         self.fields["foto"].help_text = "Envie uma imagem PNG, JPEG ou JPG."
         self.fields["foto"].widget.attrs["accept"] = ".png,.jpeg,.jpg,image/png,image/jpeg"
         self.fields["andar"].choices = [("", "Selecione")] + ANDAR_CHOICES
@@ -84,6 +94,7 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
         self.fields["email"].initial = self.instance.user.email
         self.fields["administrador_sistema"].initial = self.instance.user.is_superuser
         if not (current_user and current_user.is_superuser):
+            # Usuários comuns atualizam o próprio cadastro, mas não alteram privilégios.
             self.fields.pop("administrador_sistema")
         setor_atual = primary_setor_for_user(self.instance.user) if self.instance and self.instance.user_id else None
         if not self.is_bound:
@@ -92,6 +103,8 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
             self.initial["setor"] = val
 
     def clean_foto(self):
+        """Garante foto no primeiro cadastro e limita formatos aceitos."""
+
         foto = self.cleaned_data.get("foto")
         if not foto and not (self.instance and self.instance.foto):
             raise ValidationError("A foto e obrigatoria no primeiro cadastro.")
@@ -106,6 +119,7 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
         perfil.user.email = self.cleaned_data["email"]
         setor_id = self.cleaned_data["setor"]
         if commit:
+            # O texto legado de setor é recalculado pelo serviço de vínculo com SetorNode.
             perfil.ultimo_recadastro_em = timezone.now()
             perfil.setor = ""
             perfil.save()
@@ -124,6 +138,8 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
 
 
 class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
+    """Cria usuário local, perfil obrigatório e vínculo inicial de setor."""
+
     login = forms.CharField(label="Login", max_length=150)
     email = forms.EmailField(label="E-mail", required=True)
     password1 = forms.CharField(label="Senha", widget=forms.PasswordInput)
@@ -148,6 +164,7 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
         self.current_user = current_user
         super().__init__(*args, **kwargs)
         self._bootstrap_fields()
+        # O formulário de criação exige os mesmos dados que liberam o usuário após login.
         self.fields["foto"].help_text = "Envie uma imagem PNG, JPEG ou JPG."
         self.fields["foto"].widget.attrs["accept"] = ".png,.jpeg,.jpg,image/png,image/jpeg"
         self.fields["andar"].choices = [("", "Selecione")] + ANDAR_CHOICES
@@ -165,6 +182,8 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
             self.fields.pop("administrador_sistema")
 
     def clean_login(self):
+        """Bloqueia login duplicado sem depender de diferença entre maiúsculas/minúsculas."""
+
         username = (self.cleaned_data.get("login") or "").strip()
         if User.objects.filter(username__iexact=username).exists():
             raise forms.ValidationError("Ja existe um usuario com este login.")
@@ -172,6 +191,7 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        # A validação manual mantém as duas senhas no mesmo formulário de perfil.
         password1 = cleaned_data.get("password1")
         password2 = cleaned_data.get("password2")
         if password1 and password2 and password1 != password2:
@@ -179,6 +199,8 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
         return cleaned_data
 
     def clean_foto(self):
+        """Obrigatoriedade e extensão da foto no primeiro cadastro local."""
+
         foto = self.cleaned_data.get("foto")
         if not foto:
             raise ValidationError("A foto e obrigatoria no primeiro cadastro.")
@@ -188,6 +210,7 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
         return foto
 
     def save(self, commit=True):
+        # Cria o User primeiro para que o signal gere o UsuarioPerfil associado.
         user = User(
             username=self.cleaned_data["login"],
             email=self.cleaned_data["email"],
@@ -209,6 +232,7 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
             perfil.ultimo_recadastro_em = timezone.now()
             perfil.save()
             if self.cleaned_data.get("setor"):
+                # A associação com setor também adiciona o usuário ao grupo Django do setor.
                 setor = SetorNode.objects.select_related("group").get(pk=self.cleaned_data["setor"])
                 ensure_user_primary_setor(user, setor)
             self.instance = perfil
@@ -224,10 +248,14 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
 
 
 class UsuarioSearchForm(forms.Form):
+    """Campo simples de busca para telas que filtram perfis."""
+
     q = forms.CharField(required=False)
 
 
 def user_search_queryset(queryset, term):
+    """Aplica busca textual nas colunas exibidas nas listagens de usuários."""
+
     term = (term or "").strip()
     if not term:
         return queryset

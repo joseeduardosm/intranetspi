@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Renderizar formulários genéricos de cadastro e edição de licitações. -->
 {% block extra_css %}<link rel="stylesheet" href="{% static 'licitacoes/css/licitacoes.css' %}">{% endblock %}
 
 {% block content %}
+  <!-- Template genérico usado por formulários simples do app de licitações. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
     <div>
       <h1>{{ titulo|default:"Formulario" }}</h1>

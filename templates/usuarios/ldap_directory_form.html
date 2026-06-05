@@ -1,3 +1,5 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Renderiza o formulário de configuração e teste de diretórios LDAP. -->
 {% extends "base.html" %}
 {% load static %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'usuarios/css/usuarios.css' %}">{% endblock %}
@@ -11,6 +13,7 @@
     <a class="btn btn-outline-secondary" href="{% url 'usuarios:ldap_list' %}">Voltar</a>
   </div>
 
+  <!-- O envio diferencia teste de conexão e salvamento pelos nomes dos botões. -->
   <form method="post" class="card border-0 shadow-sm">
     {% csrf_token %}
     <div class="card-body p-4">
@@ -20,6 +23,7 @@
       {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
       <div class="row g-3">
         {% for field in form %}
+          <!-- Campos booleanos usam checkbox; parâmetros de conexão ficam em colunas largas. -->
           <div class="col-12 {% if field.name == 'nome' or field.name == 'host' or field.name == 'port' or field.name == 'use_ssl' or field.name == 'ativo' %}col-xl-6{% endif %}">
             {% if field.name == "use_ssl" or field.name == "ativo" %}
               <div class="form-check mt-4">

@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Calcular municípios, prazos, timeline, ciclos e marcos do Regulariza SGI.
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -84,12 +87,16 @@ TIMELINE_COLOR_NEUTRAL = 'neutro'
 
 @dataclass
 class SegmentoPrazo:
+    """Intervalo usado para calcular progresso da timeline."""
+
     inicio: date
     fim: date
 
 
 @dataclass
 class TimelineEdge:
+    """Marco exibido nas extremidades da timeline do imóvel."""
+
     titulo: str
     data: date | None
     legenda: str
@@ -98,10 +105,14 @@ class TimelineEdge:
 
 
 def today_local():
+    """Retorna a data local do ambiente Django."""
+
     return timezone.localdate()
 
 
 def add_years_safe(base_date: date, years: int) -> date:
+    """Soma anos tratando 29 de fevereiro em anos não bissextos."""
+
     try:
         return base_date.replace(year=base_date.year + years)
     except ValueError:
@@ -109,6 +120,8 @@ def add_years_safe(base_date: date, years: int) -> date:
 
 
 def municipio_choices(uf: str | None):
+    """Retorna opções de município disponíveis para a UF informada."""
+
     return [(nome, nome) for nome in MUNICIPIOS_POR_UF.get(uf or '', [])]
 
 
@@ -119,6 +132,8 @@ def format_date(value):
 
 
 def timeline_color(progress_percent: float | None):
+    """Escolhe a cor da timeline conforme o percentual do prazo consumido."""
+
     if progress_percent is None:
         return TIMELINE_COLOR_NEUTRAL
     if progress_percent < 75:
@@ -129,6 +144,8 @@ def timeline_color(progress_percent: float | None):
 
 
 def progress_percent_for_segment(segmento: SegmentoPrazo | None, reference_date: date | None = None):
+    """Calcula o percentual consumido de um segmento de prazo."""
+
     if not segmento:
         return None
     reference_date = reference_date or today_local()
@@ -141,10 +158,14 @@ def progress_percent_for_segment(segmento: SegmentoPrazo | None, reference_date:
 
 
 def current_cycle(imovel):
+    """Retorna o ciclo processual mais recente do imóvel."""
+
     return imovel.ciclos.order_by('-numero', '-id').first()
 
 
 def ciclo_segmento_ativo(ciclo):
+    """Define o trecho de prazo atualmente acompanhado na timeline."""
+
     if not ciclo:
         return None
     if not ciclo.data_protocolo:
@@ -159,6 +180,8 @@ def ciclo_segmento_ativo(ciclo):
 
 
 def ciclo_status(ciclo):
+    """Traduz o estado do ciclo em rótulo exibido na listagem e detalhe."""
+
     hoje = today_local()
     if not ciclo:
         return 'Cadastrado'
@@ -184,6 +207,8 @@ def ciclo_status(ciclo):
 
 
 def ciclo_badges(imovel, ciclo):
+    """Monta badges de status do ciclo e alerta CADIN quando aplicável."""
+
     badges = [ciclo_status(ciclo)]
     if imovel.possui_cadin_ativo:
         badges.append('CADIN')
@@ -195,6 +220,8 @@ def usuario_display(usuario):
 
 
 def timeline_edges(ciclo):
+    """Define os marcos atual e próximo exibidos nas pontas da timeline."""
+
     if not ciclo:
         return None, None
     if not ciclo.data_protocolo:
@@ -272,6 +299,8 @@ def timeline_edges(ciclo):
 
 
 def compute_timeline_context(imovel):
+    """Agrupa todos os dados necessários para renderizar a timeline do imóvel."""
+
     ciclo = current_cycle(imovel)
     segmento = ciclo_segmento_ativo(ciclo)
     progress_percent = progress_percent_for_segment(segmento)
@@ -311,6 +340,8 @@ def compute_timeline_context(imovel):
 
 
 def sync_ciclo(ciclo, usuario=None, tipo_evento=None):
+    """Recalcula datas derivadas do ciclo e reconstrói seus marcos."""
+
     if ciclo.data_protocolo and ciclo.prazo_resposta_dias:
         ciclo.data_manifestacao_prevista = ciclo.data_protocolo + timedelta(
             days=ciclo.prazo_resposta_dias + ciclo.prorrogacao_dias
@@ -339,6 +370,8 @@ def sync_ciclo(ciclo, usuario=None, tipo_evento=None):
 
 
 def rebuild_marcos(ciclo, usuario=None, tipo_evento=None):
+    """Reconstrói os marcos do ciclo preservando usuário de eventos já registrados."""
+
     usuario_evento = usuario_display(usuario)
     anteriores = {marco.tipo: marco.usuario_responsavel for marco in ciclo.marcos.all()}
     ciclo.marcos.all().delete()
@@ -447,6 +480,8 @@ def rebuild_marcos(ciclo, usuario=None, tipo_evento=None):
 
 
 def create_initial_cycle(imovel):
+    """Cria o ciclo inicial do imóvel quando ele ainda não possui ciclos."""
+
     if imovel.ciclos.exists():
         return current_cycle(imovel)
     ciclo = imovel.ciclos.create(
@@ -459,6 +494,8 @@ def create_initial_cycle(imovel):
 
 
 def create_followup_cycle(imovel, tipo, usuario=None):
+    """Cria ciclo posterior de renovação ou contrarrazão."""
+
     ciclo_atual = current_cycle(imovel)
     next_number = (ciclo_atual.numero if ciclo_atual else 0) + 1
     ciclo = imovel.ciclos.create(
@@ -471,6 +508,8 @@ def create_followup_cycle(imovel, tipo, usuario=None):
 
 
 def area_display(value: Decimal | None):
+    """Formata área em metros quadrados usando vírgula decimal."""
+
     if value is None:
         return ''
     return f'{value:.2f}'.replace('.', ',')

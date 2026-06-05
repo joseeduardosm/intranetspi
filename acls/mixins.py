@@ -1,9 +1,12 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseForbidden
 from functools import wraps
 from .utils import obter_nivel_acesso, RANK_PERMISSAO
 from .models import RegraAcesso
+
 
 class ACLRequiredMixin(UserPassesTestMixin):
     """
@@ -19,11 +22,13 @@ class ACLRequiredMixin(UserPassesTestMixin):
     acl_nivel_minimo = RegraAcesso.NIVEL_LEITURA
 
     def get_acl_level(self):
+        # Calcula o nível uma única vez por requisição da view e reutiliza no contexto.
         if not hasattr(self, '_acl_level'):
             self._acl_level = obter_nivel_acesso(self.request.user, self.recurso_slug)
         return self._acl_level
 
     def test_func(self):
+        # Views sem recurso configurado permanecem liberadas para preservar compatibilidade.
         if not self.recurso_slug:
             return True
             
@@ -67,6 +72,7 @@ def acl_required(recurso_slug, nivel_minimo=RegraAcesso.NIVEL_LEITURA):
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
+            # Replica a mesma hierarquia do mixin para views baseadas em função.
             nivel_atual = obter_nivel_acesso(request.user, recurso_slug)
             if not nivel_atual:
                 raise PermissionDenied("Acesso negado pelas regras de ACL.")

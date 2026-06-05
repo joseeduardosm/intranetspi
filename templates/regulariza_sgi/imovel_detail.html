@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Exibir imóvel, timeline, histórico, SEI, anexos e ações do ciclo. -->
 {% block title %}{{ imovel.inscricao_imobiliaria }} | RegulaSGI{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'regulariza_sgi/css/regulariza_sgi.css' %}">{% endblock %}
 {% block content %}
+  <!-- Cabeçalho do imóvel com ações de retorno e edição. -->
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div class="spi-page-title mb-0">
       <h1>{{ imovel.inscricao_imobiliaria }}</h1>
@@ -14,6 +17,7 @@
     </div>
   </div>
 
+  <!-- Resumo cadastral e timeline do ciclo processual atual. -->
   <section class="regulariza-summary-grid mb-4">
     <article class="card shadow-sm border-0">
       <div class="card-body">
@@ -86,6 +90,7 @@
     </article>
   </section>
 
+  <!-- Modal com histórico completo de ciclos e marcos processuais. -->
   <div class="modal fade" id="timelineHistoryModal" tabindex="-1" aria-labelledby="timelineHistoryModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content">

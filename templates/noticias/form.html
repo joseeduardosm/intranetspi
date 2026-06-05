@@ -1,6 +1,9 @@
 {% extends "base.html" %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Exibir o formulário de criação e edição de notícias. -->
 
 {% block content %}
+  <!-- O título muda conforme o formulário esteja criando ou editando a notícia. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
     <div>
       <h1>{% if object %}Editar noticia{% else %}Nova noticia{% endif %}</h1>
@@ -9,6 +12,7 @@
     <a class="btn btn-outline-secondary" href="{% url 'noticias:manage_list' %}">Voltar</a>
   </div>
 
+  <!-- Formulário editorial com imagem, anexo, texto, status e agendamento. -->
   <form method="post" enctype="multipart/form-data" class="card border-0 shadow-sm">
     <div class="card-body p-4">
       {% csrf_token %}

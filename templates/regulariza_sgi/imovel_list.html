@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Listar imóveis com busca, status de timeline e indicador CADIN. -->
 {% block title %}Imóveis | RegulaSGI{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'regulariza_sgi/css/regulariza_sgi.css' %}">{% endblock %}
 {% block content %}
+  <!-- Cabeçalho da listagem com atalhos para o módulo e novo cadastro. -->
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div class="spi-page-title mb-0">
       <h1>RegulaSGI</h1>
@@ -14,6 +17,7 @@
     </div>
   </div>
 
+  <!-- Busca ampla e tabela colorida conforme o estado da timeline do imóvel. -->
   <section class="card shadow-sm border-0">
     <div class="card-body border-bottom">
       <form method="get" class="d-flex flex-wrap gap-2 align-items-center">

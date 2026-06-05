@@ -1,6 +1,9 @@
 {% extends "base.html" %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Exibir o formulário de criação e edição de itens da navbar. -->
 
 {% block content %}
+  <!-- O título muda conforme o formulário esteja criando ou editando um item. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
     <div>
       <h1>{% if object %}Editar item da navbar{% else %}Novo item da navbar{% endif %}</h1>
@@ -9,6 +12,7 @@
     <a class="btn btn-outline-secondary" href="{% url 'navbar:manage_list' %}">Voltar</a>
   </div>
 
+  <!-- Formulário com campos de link, hierarquia, ordem, status e nova aba. -->
   <form method="post" class="card border-0 shadow-sm">
     <div class="card-body p-4">
       {% csrf_token %}
@@ -31,6 +35,7 @@
         {% endfor %}
       </div>
     </div>
+    <!-- Ações finais preservam retorno para a listagem quando o usuário cancela. -->
     <div class="card-footer bg-white d-flex justify-content-end gap-2 p-3">
       <a class="btn btn-light" href="{% url 'navbar:manage_list' %}">Cancelar</a>
       <button class="btn btn-primary" type="submit">Salvar</button>

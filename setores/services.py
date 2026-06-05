@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Reúne consultas e sincronizações usadas por formulários, perfis e organograma
+# para manter usuários, grupos e setores coerentes.
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
@@ -13,14 +16,20 @@ User = get_user_model()
 
 
 def visible_users_queryset():
+    """Retorna usuários ativos em ordem amigável para seletores."""
+
     return User.objects.filter(is_active=True).order_by('first_name', 'username')
 
 
 def user_display_name(user):
+    """Escolhe o melhor nome disponível para exibição de uma pessoa."""
+
     return (user.get_full_name() or user.first_name or user.username).strip()
 
 
 def user_profile_payload(user):
+    """Monta dados de contato em formato consumido pelos modais do organograma."""
+
     try:
         perfil = user.perfil
     except ObjectDoesNotExist:
@@ -41,6 +50,8 @@ def user_profile_payload(user):
 
 
 def setor_choice_pairs(include_inactive=False):
+    """Gera pares de opções para campos externos que precisam listar setores."""
+
     queryset = SetorNode.objects.select_related('group')
     if not include_inactive:
         queryset = queryset.filter(ativo=True)
@@ -48,6 +59,8 @@ def setor_choice_pairs(include_inactive=False):
 
 
 def primary_setor_for_user(user):
+    """Resolve o setor principal considerando perfil legado e vínculos atuais."""
+
     if not user or not user.is_authenticated:
         return None
     perfil = getattr(user, 'perfil', None)
@@ -63,6 +76,8 @@ def primary_setor_for_user(user):
 
 @transaction.atomic
 def sync_user_memberships_for_setor(setor, selected_users):
+    """Sincroniza usuários selecionados com memberships e grupos do Django."""
+
     selected_ids = {user.id for user in selected_users}
     current_memberships = UserSetorMembership.objects.filter(setor=setor).select_related('user')
     current_ids = {membership.user_id for membership in current_memberships}
@@ -73,6 +88,7 @@ def sync_user_memberships_for_setor(setor, selected_users):
 
     stale_memberships = current_memberships.exclude(user_id__in=selected_ids)
     for membership in stale_memberships:
+        # Ao remover o vínculo, limpa também o texto legado do perfil quando ele aponta para este setor.
         membership.user.groups.remove(setor.group)
         perfil = getattr(membership.user, 'perfil', None)
         if perfil and perfil.setor == setor.group.name:
@@ -83,6 +99,8 @@ def sync_user_memberships_for_setor(setor, selected_users):
 
 @transaction.atomic
 def ensure_user_primary_setor(user, setor):
+    """Garante vínculo, grupo e texto de perfil para o setor principal do usuário."""
+
     if not user or not setor:
         return
     UserSetorMembership.objects.get_or_create(user=user, setor=setor)
@@ -94,6 +112,8 @@ def ensure_user_primary_setor(user, setor):
 
 
 def build_setor_tree():
+    """Monta a árvore ativa de setores com líderes e usuários para os templates."""
+
     memberships_qs = UserSetorMembership.objects.select_related('user', 'user__perfil').order_by(
         'user__first_name', 'user__username', 'id'
     )
@@ -111,6 +131,8 @@ def build_setor_tree():
         by_parent.setdefault(setor.parent_id, []).append(setor)
 
     def build_node(setor, level=0, visited_ids=None):
+        """Converte um setor em nó serializável, protegendo contra ciclos residuais."""
+
         if visited_ids is None:
             visited_ids = set()
         
@@ -154,6 +176,8 @@ def build_setor_tree():
 
 
 def group_name_exists(name, exclude_group_id=None):
+    """Verifica duplicidade de grupo ao criar ou renomear setores."""
+
     queryset = Group.objects.filter(name__iexact=name.strip())
     if exclude_group_id:
         queryset = queryset.exclude(pk=exclude_group_id)

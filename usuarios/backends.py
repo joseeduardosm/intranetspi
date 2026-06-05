@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Implementa autenticação LDAP e sincroniza dados básicos do usuário autenticado.
 import logging
 
 from django.contrib.auth import get_user_model
@@ -11,6 +13,8 @@ UserModel = get_user_model()
 
 
 class LDAPBackend(BaseBackend):
+    """Backend de autenticação corporativa com fallback de bind por DN, UPN e NTLM."""
+
     def authenticate(self, request, username=None, password=None, **kwargs):
         if not username or not password:
             return None
@@ -43,6 +47,7 @@ class LDAPBackend(BaseBackend):
                 if "@" in username
                 else f"(sAMAccountName={username})"
             )
+            # Primeiro o bind de serviço localiza o usuário dentro da base configurada.
             connection.search(
                 search_base=config.base_dn,
                 search_filter=search_filter,
@@ -62,6 +67,7 @@ class LDAPBackend(BaseBackend):
             entry = connection.entries[0]
             user_dn = str(entry.distinguishedName)
             try:
+                # A senha informada só é aceita após bind real com a identidade do usuário.
                 self._bind_user(server, config.base_dn, username, password, user_dn, Connection, LDAPBindError, NTLM)
             except LDAPBindError as exc:
                 logger.warning("LDAP credenciais invalidas para %s: %s", username, exc)
@@ -83,6 +89,7 @@ class LDAPBackend(BaseBackend):
             }
             user, created = UserModel.objects.get_or_create(username=username_value, defaults=defaults)
             if created:
+                # Usuários LDAP não recebem senha local utilizável.
                 user.set_unusable_password()
                 user.save(update_fields=["password"])
             else:
@@ -103,6 +110,7 @@ class LDAPBackend(BaseBackend):
                     user.save(update_fields=update_fields)
 
             perfil = ensure_usuario_perfil(user)
+            # Mantém o nome exibido nos ramais alinhado ao diretório corporativo.
             full_name = display_name or " ".join(part for part in [given_name, surname] if part).strip() or username_value
             if perfil.nome_completo != full_name:
                 perfil.nome_completo = full_name
@@ -112,6 +120,8 @@ class LDAPBackend(BaseBackend):
             connection.unbind()
 
     def _bind_user(self, server, base_dn, username, password, user_dn, Connection, LDAPBindError, NTLM):
+        """Tenta autenticar por DN e recorre a UPN/NTLM para ambientes Active Directory."""
+
         try:
             user_conn = Connection(server, user=user_dn, password=password, auto_bind=True)
             user_conn.unbind()
@@ -146,6 +156,8 @@ class LDAPBackend(BaseBackend):
             raise dn_exc
 
     def get_user(self, user_id):
+        """Recupera usuário autenticado para a sessão Django."""
+
         try:
             return UserModel.objects.get(pk=user_id)
         except UserModel.DoesNotExist:

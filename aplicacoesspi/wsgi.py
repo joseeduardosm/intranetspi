@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Expor a aplicação WSGI usada por servidores web tradicionais.
+
 """
 WSGI config for aplicacoesspi project.
 
@@ -11,6 +14,7 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
+# Define o módulo de configurações usado quando o servidor WSGI inicializa o Django.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'aplicacoesspi.settings')
 
 application = get_wsgi_application()

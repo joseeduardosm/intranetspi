@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Registrar modelos de licitações no admin do Django com listagens úteis.
+
 from django.contrib import admin
 
 from .models import (
@@ -19,6 +22,7 @@ from .models import (
 )
 
 
+# Registros do admin priorizam colunas de identificação, processo, status e vínculo principal.
 @admin.register(EtpTic)
 class EtpTicAdmin(admin.ModelAdmin):
     list_display = ('id', 'nome', 'numero_processo', 'status', 'usa_editor_dinamico', 'secao_atual', 'atualizado_em', 'atualizado_por')

@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Controlar listagem pública, detalhe, PDF e gestão editorial de notícias.
+
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.http import FileResponse, Http404
@@ -17,11 +20,15 @@ from .services import noticias_publicadas
 
 
 class SuperuserRequiredMixin(UserPassesTestMixin):
+    """Restringe a gestão editorial de notícias aos superusuários."""
+
     def test_func(self):
         return self.request.user.is_authenticated and self.request.user.is_superuser
 
 
 class NoticiaPublicListView(ListView):
+    """Exibe a página pública inicial com carousel, notícias secundárias e atalhos."""
+
     template_name = 'noticias/public_list.html'
     context_object_name = 'noticias'
 
@@ -30,6 +37,7 @@ class NoticiaPublicListView(ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # A home distribui as primeiras notícias entre carousel e cards inferiores.
         noticias = list(context['noticias'])
         context['carousel_noticias'] = noticias[:4]
         context['atalhos_ativos'] = Atalho.objects.filter(ativo=True).order_by('ordem', 'id')
@@ -42,6 +50,8 @@ class NoticiaPublicListView(ListView):
 
 
 class NoticiaArchiveView(ListView):
+    """Lista todas as notícias publicadas em páginas paginadas."""
+
     template_name = 'noticias/archive.html'
     context_object_name = 'noticias'
     paginate_by = 20
@@ -51,6 +61,8 @@ class NoticiaArchiveView(ListView):
 
 
 class NoticiaPublicDetailView(DetailView):
+    """Exibe o detalhe público de uma notícia publicada."""
+
     template_name = 'noticias/public_detail.html'
     context_object_name = 'noticia'
 
@@ -60,6 +72,8 @@ class NoticiaPublicDetailView(DetailView):
 
 @method_decorator(xframe_options_sameorigin, name='dispatch')
 class NoticiaPdfView(DetailView):
+    """Entrega o anexo PDF inline para incorporação no detalhe da notícia."""
+
     def get_queryset(self):
         return noticias_publicadas().exclude(anexo_pdf='')
 
@@ -73,6 +87,8 @@ class NoticiaPdfView(DetailView):
 
 
 class NoticiaManageListView(SuperuserRequiredMixin, ListView):
+    """Lista notícias para gestão editorial com filtro por status e paginação."""
+
     model = Noticia
     template_name = 'noticias/manage_list.html'
     context_object_name = 'noticias'
@@ -87,6 +103,7 @@ class NoticiaManageListView(SuperuserRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Mantém uma paginação compacta quando houver muitas páginas no painel.
         context['status_atual'] = self.request.GET.get('status', '')
         context['status_opcoes'] = Noticia.Status.choices
         page_obj = context.get('page_obj')
@@ -106,6 +123,8 @@ class NoticiaManageListView(SuperuserRequiredMixin, ListView):
 
 
 class NoticiaCreateView(SuperuserRequiredMixin, CreateView):
+    """Cria uma notícia no painel editorial."""
+
     model = Noticia
     form_class = NoticiaForm
     template_name = 'noticias/form.html'
@@ -119,6 +138,8 @@ class NoticiaCreateView(SuperuserRequiredMixin, CreateView):
 
 
 class NoticiaUpdateView(SuperuserRequiredMixin, UpdateView):
+    """Atualiza dados editoriais de uma notícia existente."""
+
     model = Noticia
     form_class = NoticiaForm
     template_name = 'noticias/form.html'
@@ -132,6 +153,8 @@ class NoticiaUpdateView(SuperuserRequiredMixin, UpdateView):
 
 
 class NoticiaDuplicateView(SuperuserRequiredMixin, View):
+    """Duplica uma notícia como rascunho para reaproveitar conteúdo e arquivos."""
+
     def post(self, request, pk):
         noticia = get_object_or_404(Noticia, pk=pk)
         duplicate = Noticia.objects.create(
@@ -148,12 +171,16 @@ class NoticiaDuplicateView(SuperuserRequiredMixin, View):
 
 
 class NoticiaDeleteView(SuperuserRequiredMixin, DeleteView):
+    """Remove uma notícia após confirmação do superusuário."""
+
     model = Noticia
     template_name = 'noticias/confirm_delete.html'
     success_url = reverse_lazy('noticias:manage_list')
 
 
 class NoticiaPublicarView(SuperuserRequiredMixin, View):
+    """Publica manualmente uma notícia, preenchendo a data quando necessário."""
+
     def post(self, request, pk):
         noticia = get_object_or_404(Noticia, pk=pk)
         noticia.status = Noticia.Status.PUBLICADA
@@ -166,6 +193,8 @@ class NoticiaPublicarView(SuperuserRequiredMixin, View):
 
 
 class NoticiaRascunharView(SuperuserRequiredMixin, View):
+    """Retorna uma notícia para rascunho sem apagar a data cadastrada."""
+
     def post(self, request, pk):
         noticia = get_object_or_404(Noticia, pk=pk)
         noticia.status = Noticia.Status.RASCUNHO

@@ -1,5 +1,9 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Renderizar recursivamente um nó da árvore de setores do organograma. -->
+
 <div class="org-tree-branch {% if node.children %}has-children{% endif %}">
   <div class="org-tree-node-wrapper">
+    <!-- Cartão clicável do setor; o JSON interno alimenta os modais de membros. -->
     <div class="org-tree-node sector-card-trigger" data-sector-name="{{ node.setor.group.name }}">
       <div class="org-tree-node-icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-network"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M12 8v8"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/></svg>
@@ -8,6 +12,7 @@
         <h3 class="org-sector-title">{{ node.setor.group.name }}</h3>
       </div>
       
+      <!-- Payload seguro para JavaScript com líder e usuários vinculados ao setor. -->
       <script type="application/json" class="sector-data">
         {
           "name": "{{ node.setor.group.name|escapejs }}",
@@ -44,6 +49,7 @@
   {% if node.children %}
     <div class="org-tree-children">
       {% for child in node.children %}
+        <!-- Inclusão recursiva para filhos do setor atual. -->
         {% include "organograma/partials/tree_node.html" with node=child %}
       {% endfor %}
     </div>

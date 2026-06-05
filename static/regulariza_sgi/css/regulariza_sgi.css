@@ -1,3 +1,7 @@
+/* Criado por José Eduardo Santana Martins em 04/06/2026 */
+/* Objetivo: Estilizar listagem, formulários, indicadores CADIN e timeline processual. */
+
+/* Container padrão dos formulários do módulo. */
 .regulariza-shell {
   max-width: 1180px;
   margin: 0 auto;
@@ -15,6 +19,7 @@
   min-width: min(520px, 100%);
 }
 
+/* Tabela de imóveis com rolagem horizontal e cores por estado da timeline. */
 .regulariza-table-wrap {
   overflow-x: auto;
   overflow-y: visible;
@@ -36,6 +41,7 @@
   --bs-table-bg: #edf2f7;
 }
 
+/* Indicador triangular de CADIN ativo na listagem. */
 .regulariza-cadin-triangle {
   display: inline-block;
   width: 0;
@@ -83,6 +89,7 @@
   font-weight: 700;
 }
 
+/* Resumo do detalhe combina dados cadastrais e timeline atual. */
 .regulariza-summary-grid {
   display: grid;
   grid-template-columns: minmax(320px, 1fr) minmax(520px, 1.4fr);
@@ -117,6 +124,7 @@
   color: #495057;
 }
 
+/* Timeline processual com progresso, marco atual e próximo prazo. */
 .regulariza-timeline {
   position: relative;
   padding-top: .5rem;
@@ -313,6 +321,7 @@
   background: #f8fafc;
 }
 
+/* Cards de ações processuais exibidos no detalhe do imóvel. */
 .regulariza-action-card {
   height: 100%;
   padding: 1rem;
@@ -342,6 +351,7 @@
 }
 
 @media (max-width: 991.98px) {
+  /* Em telas menores, resumo e timeline passam para uma coluna. */
   .regulariza-summary-grid {
     grid-template-columns: 1fr;
   }

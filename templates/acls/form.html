@@ -1,10 +1,12 @@
 {% extends "base.html" %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+
 {% load static %}
 {% block title %}{{ titulo }}{% endblock %}
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'setores/css/setores.css' %}">
   <style>
-    /* Ajuste para simular seleção única no list */
+    /* Ajuste local para reaproveitar o picker de setores como seleção única no ACL. */
     .setores-picker-item.is-selected {
       background: #e7f0ff;
       border-color: rgba(13, 110, 253, .28);
@@ -13,6 +15,7 @@
 {% endblock %}
 {% block content %}
 <div class="setores-shell py-4">
+  <!-- Cabeçalho compartilhado entre cadastro e edição da regra. -->
   <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
       <h1 class="h2 mb-1 text-primary fw-bold">{{ titulo }}</h1>
@@ -24,31 +27,32 @@
   <form method="post" class="card shadow-sm border-0 setores-form-card" id="acl-rule-form">
     <div class="card-body p-4">
       {% csrf_token %}
+      <!-- Erros globais cobrem validações que dependem de mais de um campo. -->
       {% if form.non_field_errors %}
         <div class="alert alert-danger">{{ form.non_field_errors }}</div>
       {% endif %}
 
       <div class="row g-4">
-        <!-- Recurso/App -->
+        <!-- Recurso/App protegido pela regra. -->
         <div class="col-md-6">
           <label class="form-label fw-semibold" for="{{ form.recurso.id_for_label }}">{{ form.recurso.label }}</label>
           {{ form.recurso }}
           {% for error in form.recurso.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
         </div>
 
-        <!-- Nivel de Acesso -->
+        <!-- Nível de acesso aplicado ao usuário ou grupo selecionado. -->
         <div class="col-md-6">
           <label class="form-label fw-semibold" for="{{ form.nivel.id_for_label }}">{{ form.nivel.label }}</label>
           {{ form.nivel }}
           {% for error in form.nivel.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
         </div>
 
-        <!-- Seletores Independentes -->
+        <!-- Seletores independentes permitem aplicar a mesma regra a usuário, grupo ou ambos. -->
         <div class="col-12 border-top pt-4">
           <p class="text-muted mb-4">Selecione o usuário, o grupo/setor, ou ambos para os quais deseja aplicar esta regra.</p>
           
           <div class="row g-4">
-            <!-- Coluna Usuário -->
+            <!-- Coluna de usuário individual. -->
             <div class="col-lg-6">
               <label class="form-label fw-semibold" for="acl-user-search">Usuário</label>
               <input type="text" class="form-control mb-3" id="acl-user-search" placeholder="Buscar usuário por nome...">
@@ -66,7 +70,7 @@
               {% for error in form.usuario.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
             </div>
 
-            <!-- Coluna Grupo/Setor -->
+            <!-- Coluna de grupo/setor. -->
             <div class="col-lg-6">
               <label class="form-label fw-semibold" for="acl-group-search">Grupo/Setor</label>
               <input type="text" class="form-control mb-3" id="acl-group-search" placeholder="Buscar grupo/setor...">
@@ -99,7 +103,7 @@
 {% block extra_js %}
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    // Função para construir o searchable picker em single-select
+    // Constrói um picker pesquisável de seleção única mantendo o select original para o Django.
     function setupSinglePicker(selectId, searchId, availableId, selectedId) {
       const select = document.getElementById(selectId);
       const search = document.getElementById(searchId);
@@ -158,7 +162,7 @@
       render('');
     }
 
-    // Inicializa os pickers de forma independente
+    // Inicializa usuários e grupos de forma independente para permitir combinação dos dois alvos.
     setupSinglePicker('{{ form.usuario.id_for_label }}', 'acl-user-search', 'acl-users-available', 'acl-users-selected');
     setupSinglePicker('{{ form.grupo.id_for_label }}', 'acl-group-search', 'acl-groups-available', 'acl-groups-selected');
   });

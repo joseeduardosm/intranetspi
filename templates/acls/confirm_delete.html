@@ -1,9 +1,12 @@
 {% extends "base.html" %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+
 {% block title %}{{ titulo }}{% endblock %}
 {% block content %}
 <div class="container py-5">
   <div class="row justify-content-center">
     <div class="col-md-6 col-lg-5">
+      <!-- Cartão de confirmação usado para evitar exclusão acidental de regras de acesso. -->
       <div class="card shadow-lg border-0 rounded-4 overflow-hidden">
         <div class="card-body p-4 text-center">
           <div class="text-danger mb-4">
@@ -15,6 +18,7 @@
           <h2 class="h3 mb-3 text-dark fw-bold">{{ titulo }}</h2>
           <p class="text-muted mb-4">{{ descricao }}</p>
           
+          <!-- O POST confirma a exclusão; o link retorna para a listagem sem alterar dados. -->
           <form method="post">
             {% csrf_token %}
             <div class="d-grid gap-2">

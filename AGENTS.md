@@ -8,3 +8,4 @@
 - Rodar testes específicos do app alterado quando houver mudança em views, models, forms ou templates. Mas evitar testes excessivos para economizar tokens.
 - Criar migrações quando alterar models.
 - cada modulo deve ter seu arquivo .css separado para quando mexer no estilo, afetar somente aquele modulo obrigatoriamente.
+- Todo codigo gerado precisa ser comentado de maneira explicativa. Nao precisa ser cada linha. Mas o codigo precisa ficar legivel, compreensivel e explicativo pelos comentarios.

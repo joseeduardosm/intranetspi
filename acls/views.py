@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.urls import reverse_lazy
@@ -5,13 +7,17 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from .models import RegraAcesso
 from .forms import RegraAcessoForm
 
+
 class ACLAdminRequiredMixin(UserPassesTestMixin):
     """Garante que apenas administradores do sistema gerenciem permissões."""
+
     def test_func(self):
         return self.request.user.is_authenticated and (self.request.user.is_superuser or self.request.user.is_staff)
 
 
 class ACLRuleListView(LoginRequiredMixin, ACLAdminRequiredMixin, ListView):
+    """Lista as regras de acesso com dados relacionados já carregados."""
+
     model = RegraAcesso
     template_name = 'acls/list.html'
     context_object_name = 'regras'
@@ -27,6 +33,8 @@ class ACLRuleListView(LoginRequiredMixin, ACLAdminRequiredMixin, ListView):
 
 
 class ACLRuleCreateView(LoginRequiredMixin, ACLAdminRequiredMixin, CreateView):
+    """Cria uma nova regra de acesso para usuário, grupo ou ambos."""
+
     model = RegraAcesso
     form_class = RegraAcessoForm
     template_name = 'acls/form.html'
@@ -44,6 +52,8 @@ class ACLRuleCreateView(LoginRequiredMixin, ACLAdminRequiredMixin, CreateView):
 
 
 class ACLRuleUpdateView(LoginRequiredMixin, ACLAdminRequiredMixin, UpdateView):
+    """Atualiza uma regra existente sem alterar o fluxo padrão do formulário."""
+
     model = RegraAcesso
     form_class = RegraAcessoForm
     template_name = 'acls/form.html'
@@ -61,6 +71,8 @@ class ACLRuleUpdateView(LoginRequiredMixin, ACLAdminRequiredMixin, UpdateView):
 
 
 class ACLRuleDeleteView(LoginRequiredMixin, ACLAdminRequiredMixin, DeleteView):
+    """Confirma e remove uma regra de acesso cadastrada."""
+
     model = RegraAcesso
     template_name = 'acls/confirm_delete.html'
     success_url = reverse_lazy('acls:list')

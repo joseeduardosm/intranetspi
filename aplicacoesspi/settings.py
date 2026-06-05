@@ -1,3 +1,7 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Centralizar as configurações globais do Django, apps, autenticação,
+# arquivos estáticos, mídia, banco de dados e templates do projeto.
+
 """
 Django settings for aplicacoesspi project.
 
@@ -13,7 +17,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# Diretório base usado para montar caminhos de banco, templates, estáticos e mídia.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -26,9 +30,10 @@ SECRET_KEY = os.environ.get(
     'django-insecure-dev-key-change-me',
 )
 
-# SECURITY WARNING: don't run with debug turned on in production!
+# Ambiente local/intranet: manter atenção ao desativar DEBUG em produção.
 DEBUG = True
 
+# Hosts conhecidos que podem acessar o portal na rede local e nos domínios institucionais.
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
@@ -44,6 +49,7 @@ ALLOWED_HOSTS = [
 
 # Application definition
 
+# Apps Django padrão, módulos do portal e apps de controle transversal do sistema.
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -63,6 +69,7 @@ INSTALLED_APPS = [
     'organograma',
 ]
 
+# Middleware de segurança, arquivos estáticos, sessão, autenticação, mensagens e proteção de clickjacking.
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -79,9 +86,11 @@ ROOT_URLCONF = 'aplicacoesspi.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        # Templates globais ficam em BASE_DIR/templates; templates por app continuam habilitados.
         'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
+            # Processadores globais disponibilizam request, usuário, mensagens e estado do perfil.
             'context_processors': [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
@@ -100,6 +109,7 @@ WSGI_APPLICATION = 'aplicacoesspi.wsgi.application'
 
 DATABASES = {
     'default': {
+        # Banco SQLite usado pelo ambiente atual do projeto.
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
@@ -144,14 +154,16 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-
+# Arquivos enviados pelo usuário ficam separados dos estáticos coletados.
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Fluxos de autenticação centralizam login, saída e redirecionamento inicial.
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'root'
 LOGOUT_REDIRECT_URL = 'login'
 AUTHENTICATION_BACKENDS = [
+    # LDAP institucional primeiro; backend nativo mantém acesso administrativo/local.
     'usuarios.backends.LDAPBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]

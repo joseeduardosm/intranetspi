@@ -1,9 +1,12 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Confirma a exclusão de um setor antes de remover o grupo Django vinculado. -->
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Excluir setor{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'setores/css/setores.css' %}">{% endblock %}
 {% block content %}
   <div class="setores-shell">
+    <!-- A view bloqueia exclusões inseguras; este template apenas confirma a ação permitida. -->
     <div class="card shadow-sm border-0 setores-form-card">
       <div class="card-body p-4">
         <h1 class="h4 mb-3">Excluir setor</h1>

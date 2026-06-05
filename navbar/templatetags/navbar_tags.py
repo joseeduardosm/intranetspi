@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Disponibilizar tags de template para renderizar navbar e módulos por ACL.
+
 from django import template
 from acls.models import Recurso
 from acls.utils import obter_nivel_acesso
@@ -8,11 +11,15 @@ register = template.Library()
 
 @register.simple_tag
 def navbar_items():
+    """Retorna a árvore ativa de itens para renderização da barra de navegação."""
+
     return active_navbar_tree()
 
 
 @register.simple_tag
 def user_modules(user):
+    """Lista módulos acessíveis ao usuário conforme regras de ACL."""
+
     if not user or user.is_anonymous:
         return []
     recursos = Recurso.objects.all().order_by('nome')
@@ -26,4 +33,3 @@ def user_modules(user):
                 'slug': r.slug
             })
     return acessos
-

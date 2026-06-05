@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Listar fornecedores disponíveis para pesquisas de preço. -->
 {% block extra_css %}<link rel="stylesheet" href="{% static 'licitacoes/css/licitacoes.css' %}">{% endblock %}
 {% load licitacoes_extras %}
 
 {% block content %}
+  <!-- Lista fornecedores globais reutilizados nas pesquisas de preço. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
     <div>
       <h1>Fornecedores</h1>

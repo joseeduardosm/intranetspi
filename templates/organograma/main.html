@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Exibir o organograma institucional, busca, modais de setor e contato. -->
 {% block title %}Organograma{% endblock %}
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'organograma/css/organograma.css' %}">
@@ -7,7 +9,7 @@
 {% endblock %}
 {% block content %}
   <div class="organograma-page-wrapper">
-    <!-- Header Section -->
+    <!-- Cabeçalho da página com ações para gerenciar setores e voltar. -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
       <div class="spi-page-title mb-0">
         <h1>Organograma</h1>
@@ -19,7 +21,7 @@
       </div>
     </div>
 
-    <!-- Tree View & Actions -->
+    <!-- Cartão principal com busca, controles de expansão e árvore de setores. -->
     <section class="organograma-main-card card shadow-sm border-0">
       <div class="card-header bg-white border-bottom-0 py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
         <div class="org-search-wrapper">
@@ -38,6 +40,7 @@
         {% if org_tree %}
           <div class="org-tree-root-container">
             {% for node in org_tree %}
+              <!-- Cada nó é renderizado recursivamente pelo partial tree_node.html. -->
               {% include "organograma/partials/tree_node.html" with node=node %}
             {% endfor %}
           </div>
@@ -50,7 +53,7 @@
     </section>
   </div>
 
-  <!-- Sector Members Modal -->
+  <!-- Modal de membros do setor selecionado na árvore. -->
   <div class="modal fade" id="sectorMembersModal" tabindex="-1" aria-labelledby="sectorMembersModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
@@ -72,7 +75,7 @@
     </div>
   </div>
 
-  <!-- Ramal Contact Modal -->
+  <!-- Modal de contato detalhado reaproveitando estilos do módulo de ramais. -->
   <div class="modal fade" id="ramalContactModal" tabindex="-1" aria-labelledby="ramalContactModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered ramal-contact-dialog">
       <div class="modal-content ramal-contact-modal border-0 shadow-lg" style="border-radius: 16px;">
@@ -128,7 +131,7 @@
     </div>
   </div>
 
-  <!-- Email Popover Actions -->
+  <!-- Popover com ações rápidas para e-mail do contato. -->
   <div class="ramal-email-popover" id="ramalEmailPopover" role="tooltip" hidden>
     <div class="ramal-email-popover-address" id="ramalEmailPopoverAddress"></div>
     <div class="ramal-email-popover-actions">
@@ -167,7 +170,7 @@
 
 {% block extra_js %}
   <script>
-    // Handle opening sectors and retrieving member metadata
+    // Abre o setor selecionado e carrega metadados dos membros a partir do JSON embutido.
     document.addEventListener('click', (event) => {
       const sectorNode = event.target.closest('.sector-card-trigger');
       if (sectorNode) {

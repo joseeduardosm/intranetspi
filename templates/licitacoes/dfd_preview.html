@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Exibir a prévia do DFD renderizado antes da exportação em DOCX. -->
 {% block extra_css %}<link rel="stylesheet" href="{% static 'licitacoes/css/licitacoes.css' %}">{% endblock %}
 {% load licitacoes_extras %}
 
 {% block content %}
+  <!-- Apresenta o DFD renderizado conforme a estrutura usada na exportação. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start">
     <div>
       <h1>Preview DFD</h1>

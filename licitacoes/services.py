@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Reunir regras de montagem, numeração, duplicação e exportação dos documentos.
+
 from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
@@ -24,6 +27,7 @@ from .models import (
 )
 
 
+# Definições das etapas do ETP TIC legado usadas pelo stepper e pela renderização.
 ETP_TIC_SECOES = [
     {'numero': 1, 'titulo': 'Informacoes Basicas', 'descricao': '', 'campos': ['numero_processo', 'nome', 'link']},
     {'numero': 2, 'titulo': 'Descricao da Necessidade', 'descricao': 'Descricao da necessidade que a contratacao pretende atender.', 'campos': ['descricao_necessidade']},
@@ -104,17 +108,23 @@ DFD_SECOES_MAP = {secao['numero']: secao for secao in DFD_SECOES}
 
 
 def split_paragraphs(texto):
+    """Divide textos longos em blocos de parágrafo preservando apenas conteúdo útil."""
+
     blocos = re.split(r'\n\s*\n', (texto or '').strip())
     return [bloco.strip() for bloco in blocos if bloco.strip()]
 
 
 def format_dfd_item_1_2(texto):
+    """Garante o prefixo padronizado do item 1.2 do DFD."""
+
     texto = (texto or Dfd.OBJETO_NAO_LUXO_PADRAO).strip()
     texto = re.sub(r'^\s*(?:item\s*)?1\.2\.?\s*[:.-]?\s*', '', texto, flags=re.IGNORECASE)
     return f'1.2. {texto}' if texto else ''
 
 
 def etp_secao_preenchida(etp, numero):
+    """Verifica se uma seção do ETP TIC possui algum campo preenchido."""
+
     for campo in ETP_TIC_SECOES_MAP[numero]['campos']:
         valor = getattr(etp, campo, None)
         if isinstance(valor, str) and valor.strip():
@@ -125,6 +135,8 @@ def etp_secao_preenchida(etp, numero):
 
 
 def etp_status_por_secao(etp):
+    """Calcula o estado visual de cada etapa do ETP TIC no stepper."""
+
     status = {}
     for secao in ETP_TIC_SECOES:
         numero = secao['numero']
@@ -139,6 +151,8 @@ def etp_status_por_secao(etp):
 
 
 def dfd_secao_preenchida(dfd, numero):
+    """Verifica se uma seção do DFD possui texto ou tabela preenchida."""
+
     secao = DFD_SECOES_MAP[numero]
     for campo in secao['campos']:
         valor = getattr(dfd, campo, None)
@@ -152,6 +166,8 @@ def dfd_secao_preenchida(dfd, numero):
 
 
 def dfd_status_por_secao(dfd):
+    """Calcula o estado visual de cada etapa do DFD no stepper."""
+
     status = {}
     for secao in DFD_SECOES:
         numero = secao['numero']
@@ -166,6 +182,8 @@ def dfd_status_por_secao(dfd):
 
 
 def render_etp_sections(etp):
+    """Converte o ETP TIC legado em seções numeradas para prévia/exportação."""
+
     secoes = []
     for secao in ETP_TIC_SECOES:
         numero = secao['numero']
@@ -204,6 +222,8 @@ def render_etp_sections(etp):
 
 
 def render_dfd_sections(dfd):
+    """Converte o DFD em seções numeradas, incluindo tabela de itens quando existir."""
+
     secoes = []
     tabela = list(DfdItemTabela.objects.filter(dfd=dfd).order_by('ordem', 'id')) if dfd.pk else []
     for secao in DFD_SECOES:
@@ -235,10 +255,14 @@ def render_dfd_sections(dfd):
 
 
 def next_ordem_sessao(termo):
+    """Retorna a próxima posição disponível para uma seção do TR."""
+
     return (termo.sessoes.aggregate(max_ordem=Max('ordem'))['max_ordem'] or 0) + 1
 
 
 def next_ordem_etp_sessao(etp):
+    """Retorna a próxima posição disponível para uma seção do ETP TIC."""
+
     return (etp.sessoes.aggregate(max_ordem=Max('ordem'))['max_ordem'] or 0) + 1
 
 
@@ -253,6 +277,8 @@ def next_ordem_etp_item(sessao, parent):
 
 
 def normalize_sessoes(termo):
+    """Reordena seções do TR em sequência contínua."""
+
     for idx, sessao in enumerate(termo.sessoes.order_by('ordem', 'id'), start=1):
         if sessao.ordem != idx:
             sessao.ordem = idx
@@ -260,6 +286,8 @@ def normalize_sessoes(termo):
 
 
 def normalize_etp_sessoes(etp):
+    """Reordena seções do ETP TIC em sequência contínua."""
+
     for idx, sessao in enumerate(etp.sessoes.order_by('ordem', 'id'), start=1):
         if sessao.ordem != idx:
             sessao.ordem = idx
@@ -281,6 +309,8 @@ def normalize_etp_items(sessao, parent_id):
 
 
 def int_to_roman(num):
+    """Converte índices de incisos para algarismos romanos."""
+
     pairs = [(1000, 'M'), (900, 'CM'), (500, 'D'), (400, 'CD'), (100, 'C'), (90, 'XC'), (50, 'L'), (40, 'XL'), (10, 'X'), (9, 'IX'), (5, 'V'), (4, 'IV'), (1, 'I')]
     out = []
     for val, sym in pairs:
@@ -338,6 +368,8 @@ def etp_enum_prefix(item, siblings):
 
 
 def parse_bulk_item_markers(texto, max_hash_level=4):
+    """Interpreta marcadores de texto colado e monta nós hierárquicos de itens."""
+
     roots = []
     stack = {}
     current = None
@@ -416,6 +448,8 @@ def parse_bulk_item_markers(texto, max_hash_level=4):
 
 
 def replace_item_with_marker_nodes(item, nodes, tipo_enum):
+    """Substitui um item por uma árvore criada a partir de marcadores colados."""
+
     if not nodes:
         return item, 0
 
@@ -474,6 +508,8 @@ def replace_item_with_marker_nodes(item, nodes, tipo_enum):
 
 
 def quantidade_text(value):
+    """Formata quantidades removendo casas decimais desnecessárias."""
+
     if value is None:
         return ''
     text = f'{value}'.replace('.', ',')
@@ -481,6 +517,8 @@ def quantidade_text(value):
 
 
 def red_mark_segments(text):
+    """Separa trechos marcados com asterisco para destaque em vermelho."""
+
     text = text or ''
     segments = []
     buffer = []
@@ -526,6 +564,8 @@ def red_mark_segments(text):
 
 
 def red_marked_html(text):
+    """Transforma segmentos marcados em HTML seguro para templates."""
+
     parts = []
     for segment, is_red in red_mark_segments(text):
         value = escape(segment).replace('\n', '<br>')
@@ -537,6 +577,8 @@ def red_marked_html(text):
 
 
 def build_item_rows(sessao):
+    """Monta linhas hierárquicas do TR com índices, prefixos e permissões de tabela."""
+
     itens = list(sessao.itens.select_related('parent').order_by('parent_id', 'ordem', 'id'))
     by_parent = defaultdict(list)
     for item in itens:
@@ -566,6 +608,8 @@ def build_item_rows(sessao):
 
 
 def build_termo_tree(termo):
+    """Agrupa seções do TR com suas linhas e tabelas associadas para tela/exportação."""
+
     tabela_linhas = (
         TabelaItemLinha.objects.filter(item__sessao__termo=termo)
         .select_related('item')
@@ -585,6 +629,8 @@ def build_termo_tree(termo):
 
 
 def termo_tabela_item_1_1(termo):
+    """Localiza o item 1.1 do TR, usado como base da tabela de pesquisa de preço."""
+
     for sessao in termo.sessoes.all():
         for row in build_item_rows(sessao):
             if row['indice'] == '1.1':
@@ -593,6 +639,8 @@ def termo_tabela_item_1_1(termo):
 
 
 def pesquisa_preco_itens(pesquisa):
+    """Retorna os itens pesquisáveis da tabela vinculada ao item 1.1 do TR."""
+
     item = termo_tabela_item_1_1(pesquisa.termo)
     if not item:
         return TabelaItemLinha.objects.none()
@@ -600,6 +648,8 @@ def pesquisa_preco_itens(pesquisa):
 
 
 def pesquisa_preco_row_class(dias_sem_resposta):
+    """Define a classe visual da linha conforme dias sem resposta do fornecedor."""
+
     if dias_sem_resposta is None:
         return ''
     if dias_sem_resposta <= 3:
@@ -616,10 +666,14 @@ def pesquisa_preco_row_class(dias_sem_resposta):
 
 
 def pesquisa_fornecedor_tem_resposta(pesquisa_fornecedor):
+    """Indica se o fornecedor já respondeu com data e valores registrados."""
+
     return bool(pesquisa_fornecedor.data_resposta and pesquisa_fornecedor.valores.exists())
 
 
 def pesquisa_preco_context(pesquisa):
+    """Calcula totais, médias, vencimentos e estados visuais da pesquisa de preço."""
+
     hoje = timezone.localdate()
     itens = list(pesquisa_preco_itens(pesquisa))
     fornecedores = list(
@@ -719,6 +773,8 @@ def pesquisa_preco_context(pesquisa):
 
 
 def build_etp_item_rows(sessao):
+    """Monta linhas hierárquicas do ETP TIC com índices e prefixos de exibição."""
+
     itens = list(sessao.itens.select_related('parent').order_by('parent_id', 'ordem', 'id'))
     by_parent = defaultdict(list)
     for item in itens:
@@ -747,10 +803,14 @@ def build_etp_item_rows(sessao):
 
 
 def build_etp_tree(etp):
+    """Agrupa seções do ETP TIC com suas linhas hierárquicas."""
+
     return [{'sessao': sessao, 'rows': build_etp_item_rows(sessao)} for sessao in etp.sessoes.all()]
 
 
 def item_descendant_ids(item):
+    """Coleta IDs de todos os descendentes de um item do TR."""
+
     ids = set()
     stack = list(item.filhos.all())
     while stack:
@@ -761,6 +821,8 @@ def item_descendant_ids(item):
 
 
 def etp_item_descendant_ids(item):
+    """Coleta IDs de todos os descendentes de um item do ETP TIC."""
+
     ids = set()
     stack = list(item.filhos.all())
     while stack:
@@ -771,12 +833,16 @@ def etp_item_descendant_ids(item):
 
 
 def clear_item_children(item):
+    """Remove todos os descendentes de um item do TR e retorna a quantidade removida."""
+
     child_count = len(item_descendant_ids(item))
     item.filhos.all().delete()
     return child_count
 
 
 def clear_etp_item_children(item):
+    """Remove todos os descendentes de um item do ETP TIC e retorna a quantidade removida."""
+
     child_count = len(etp_item_descendant_ids(item))
     item.filhos.all().delete()
     return child_count
@@ -793,6 +859,8 @@ def _insert_at_position(siblings, item, position):
 
 
 def move_item(item, target, action, target_sessao=None, child_position=None):
+    """Move um item do TR dentro da árvore sem permitir ciclos."""
+
     if action not in {'after', 'child'}:
         raise ValueError('Acao de movimentacao invalida.')
     if target and target.id == item.id:
@@ -846,6 +914,8 @@ def move_item(item, target, action, target_sessao=None, child_position=None):
 
 
 def duplicate_item(item, target, action, target_sessao=None, child_position=None):
+    """Duplica um item do TR com seus descendentes e tabelas vinculadas."""
+
     if action not in {'after', 'child'}:
         raise ValueError('Acao de duplicacao invalida.')
     if target and target.id == item.id:
@@ -896,6 +966,8 @@ def duplicate_item(item, target, action, target_sessao=None, child_position=None
 
 
 def move_etp_item(item, target, action, target_sessao=None, child_position=None):
+    """Move um item do ETP TIC dentro da árvore sem permitir ciclos."""
+
     if action not in {'after', 'child'}:
         raise ValueError('Acao de movimentacao invalida.')
     if target and target.id == item.id:
@@ -946,6 +1018,8 @@ def move_etp_item(item, target, action, target_sessao=None, child_position=None)
 
 
 def duplicate_etp_item(item, target, action, target_sessao=None, child_position=None):
+    """Duplica um item do ETP TIC com seus descendentes."""
+
     if action not in {'after', 'child'}:
         raise ValueError('Acao de duplicacao invalida.')
     if target and target.id == item.id:
@@ -993,6 +1067,8 @@ def duplicate_etp_item(item, target, action, target_sessao=None, child_position=
 
 
 def duplicate_termo(termo):
+    """Duplica um TR completo com seções, itens e tabelas de itens."""
+
     with transaction.atomic():
         termo = TermoReferencia.objects.get(pk=termo.pk)
         duplicate = TermoReferencia.objects.create(
@@ -1012,6 +1088,8 @@ def duplicate_termo(termo):
 
 
 def duplicate_etp(etp):
+    """Duplica um ETP TIC completo, incluindo seções e itens do editor dinâmico."""
+
     with transaction.atomic():
         etp = EtpTic.objects.get(pk=etp.pk)
         duplicate = EtpTic.objects.create(
@@ -1054,6 +1132,8 @@ def duplicate_etp(etp):
 
 
 def duplicate_dfd(dfd):
+    """Duplica um DFD e suas linhas de tabela."""
+
     with transaction.atomic():
         dfd = Dfd.objects.get(pk=dfd.pk)
         duplicate = Dfd.objects.create(
@@ -1085,6 +1165,8 @@ def duplicate_dfd(dfd):
 
 
 def _copy_item_tree(item, sessao, parent, ordem):
+    """Copia recursivamente um item do TR, seus filhos e linhas de tabela."""
+
     duplicate = ItemTR.objects.create(
         sessao=sessao,
         parent=parent,
@@ -1108,6 +1190,8 @@ def _copy_item_tree(item, sessao, parent, ordem):
 
 
 def _copy_etp_item_tree(item, sessao, parent, ordem):
+    """Copia recursivamente um item do ETP TIC e seus filhos."""
+
     duplicate = ItemEtpTic.objects.create(
         sessao=sessao,
         parent=parent,
@@ -1121,6 +1205,8 @@ def _copy_etp_item_tree(item, sessao, parent, ordem):
 
 
 def _cascade_sessao(item, sessao):
+    """Atualiza a seção de todos os descendentes quando um item do TR muda de seção."""
+
     for child in item.filhos.all():
         if child.sessao_id != sessao.id:
             child.sessao = sessao
@@ -1129,6 +1215,8 @@ def _cascade_sessao(item, sessao):
 
 
 def _cascade_etp_sessao(item, sessao):
+    """Atualiza a seção de todos os descendentes quando um item do ETP TIC muda de seção."""
+
     for child in item.filhos.all():
         if child.sessao_id != sessao.id:
             child.sessao = sessao

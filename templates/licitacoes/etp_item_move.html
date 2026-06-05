@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Escolher destino para mover ou duplicar itens na árvore do ETP TIC. -->
 {% block extra_css %}<link rel="stylesheet" href="{% static 'licitacoes/css/licitacoes.css' %}">{% endblock %}
 
 {% block content %}
+  <!-- Formulário de destino usado para reorganizar itens do ETP TIC. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start">
     <div>
       <h1>{% if modo == 'duplicar' %}Duplicar item{% else %}Mover item{% endif %}</h1>

@@ -1,8 +1,13 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+
 from django.db import models
 from django.contrib.auth.models import Group
 from django.conf import settings
 
+
 class Recurso(models.Model):
+    """Representa cada app ou área funcional que pode ser protegida por ACL."""
+
     nome = models.CharField("Nome do App/Recurso", max_length=100, unique=True)
     slug = models.SlugField("Slug identificador", max_length=100, unique=True, help_text="Nome da pasta do app (ex: 'licitacoes')")
     descricao = models.TextField("Descrição", blank=True)
@@ -17,6 +22,8 @@ class Recurso(models.Model):
 
 
 class RegraAcesso(models.Model):
+    """Define o nível de permissão aplicado a um usuário, grupo ou ambos em um recurso."""
+
     NIVEL_LEITURA = 'LEITURA'
     NIVEL_MODIFICACAO = 'MODIFICACAO'
     NIVEL_CONTROLE_TOTAL = 'CONTROLE_TOTAL'
@@ -58,6 +65,7 @@ class RegraAcesso(models.Model):
         ordering = ["-id"]
 
     def __str__(self):
+        # Monta uma descrição legível combinando o nível, o recurso e os alvos da regra.
         alvos = []
         if self.usuario:
             alvos.append(f"Usuário: {self.usuario}")
@@ -67,5 +75,6 @@ class RegraAcesso(models.Model):
 
     def clean(self):
         from django.core.exceptions import ValidationError
+        # Uma regra sem usuário e sem grupo não teria alvo para aplicar a permissão.
         if not self.usuario and not self.grupo:
             raise ValidationError("Você deve selecionar pelo menos um Usuário ou um Grupo/Setor.")

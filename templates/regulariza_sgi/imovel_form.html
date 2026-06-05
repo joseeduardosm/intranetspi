@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Exibir o formulário de cadastro e edição de imóveis. -->
 {% block title %}{{ form_title }} | RegulaSGI{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'regulariza_sgi/css/regulariza_sgi.css' %}">{% endblock %}
 {% block content %}
+  <!-- Formulário principal com dados cadastrais, endereço e bloco CADIN. -->
   <div class="regulariza-shell">
     <div class="d-flex justify-content-between align-items-center gap-3 mb-4">
       <div class="spi-page-title mb-0">
@@ -48,6 +51,7 @@
 {% block extra_js %}
   <script>
     (function () {
+      // Atualiza municípios por UF e exibe campos CADIN somente quando necessário.
       var municipios = JSON.parse(document.getElementById('regulariza-sgi-municipios').textContent);
       var ufSelect = document.getElementById('id_uf');
       var municipioSelect = document.getElementById('id_municipio');

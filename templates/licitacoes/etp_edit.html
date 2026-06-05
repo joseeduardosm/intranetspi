@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Editar o ETP TIC legado por etapas quando não usa o editor dinâmico. -->
 {% block extra_css %}<link rel="stylesheet" href="{% static 'licitacoes/css/licitacoes.css' %}">{% endblock %}
 
 {% block content %}
+  <!-- Mantém a edição por etapas do ETP TIC legado. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
     <div>
       <h1>ETP TIC - {{ etp.nome }}</h1>

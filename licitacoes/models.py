@@ -1,8 +1,13 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Definir os modelos de ETP TIC, DFD, TR, fornecedores e pesquisa de preço.
+
 from django.conf import settings
 from django.db import models
 
 
 class EtpTic(models.Model):
+    """Estudo Técnico Preliminar de TIC com seções legadas e editor dinâmico."""
+
     class Status(models.TextChoices):
         RASCUNHO = 'RASCUNHO', 'Rascunho'
         CONCLUIDO = 'CONCLUIDO', 'Concluido'
@@ -67,6 +72,8 @@ class EtpTic(models.Model):
 
 
 class SessaoEtpTic(models.Model):
+    """Seção customizada do editor dinâmico de um ETP TIC."""
+
     etp = models.ForeignKey(EtpTic, on_delete=models.CASCADE, related_name='sessoes')
     titulo = models.CharField(max_length=300)
     ordem = models.PositiveIntegerField(default=1)
@@ -81,6 +88,8 @@ class SessaoEtpTic(models.Model):
 
 
 class ItemEtpTic(models.Model):
+    """Item hierárquico de uma seção do ETP TIC."""
+
     class Tipo(models.TextChoices):
         NUMERICO = 'NUMERICO', 'Item/Subitem'
         SUBSECAO = 'SUBSECAO', 'Subsecao'
@@ -109,6 +118,8 @@ class ItemEtpTic(models.Model):
 
 
 class Dfd(models.Model):
+    """Documento de Formalização de Demanda usado antes do TR."""
+
     class Status(models.TextChoices):
         RASCUNHO = 'RASCUNHO', 'Rascunho'
         CONCLUIDO = 'CONCLUIDO', 'Concluido'
@@ -154,6 +165,8 @@ class Dfd(models.Model):
 
 
 class DfdItemTabela(models.Model):
+    """Linha da tabela de itens vinculada ao DFD."""
+
     dfd = models.ForeignKey(Dfd, on_delete=models.CASCADE, related_name='itens_tabela')
     ordem = models.PositiveIntegerField(default=1)
     especificacao = models.TextField('Especificacao')
@@ -174,6 +187,8 @@ class DfdItemTabela(models.Model):
 
 
 class TermoReferencia(models.Model):
+    """Termo de Referência com seções e itens editáveis em árvore."""
+
     nome = models.CharField(max_length=180)
     numero_processo = models.CharField('Numero do processo', max_length=120)
     link = models.URLField('Link do processo', max_length=500, blank=True)
@@ -207,6 +222,8 @@ class TermoReferencia(models.Model):
 
 
 class SessaoTR(models.Model):
+    """Seção do Termo de Referência."""
+
     termo = models.ForeignKey(TermoReferencia, on_delete=models.CASCADE, related_name='sessoes')
     titulo = models.CharField(max_length=300)
     ordem = models.PositiveIntegerField(default=1)
@@ -221,6 +238,8 @@ class SessaoTR(models.Model):
 
 
 class ItemTR(models.Model):
+    """Item hierárquico de uma seção do Termo de Referência."""
+
     class Tipo(models.TextChoices):
         NUMERICO = 'NUMERICO', 'Item/Subitem'
         INCISO = 'INCISO', 'Inciso'
@@ -249,6 +268,8 @@ class ItemTR(models.Model):
 
 
 class TabelaItemLinha(models.Model):
+    """Linha de especificação e quantidade associada a um item do TR."""
+
     item = models.ForeignKey(ItemTR, on_delete=models.CASCADE, related_name='tabela_linhas')
     ordem = models.PositiveIntegerField(default=1)
     descricao = models.TextField('Descricao')
@@ -267,6 +288,8 @@ class TabelaItemLinha(models.Model):
 
 
 class Fornecedor(models.Model):
+    """Fornecedor cadastrado para cotações e pesquisas de preço."""
+
     razao_social = models.CharField('Razão Social', max_length=220)
     cnpj = models.CharField('CNPJ', max_length=20, unique=True)
     telefone = models.CharField('Telefone', max_length=60)
@@ -283,6 +306,8 @@ class Fornecedor(models.Model):
 
 
 class PesquisaPreco(models.Model):
+    """Pesquisa de preço vinculada a um Termo de Referência."""
+
     class Tipo(models.TextChoices):
         AQUISICAO = 'AQUISICAO', 'Aquisição'
         SERVICO = 'SERVICO', 'Serviço'
@@ -304,6 +329,8 @@ class PesquisaPreco(models.Model):
 
 
 class PesquisaPrecoFornecedor(models.Model):
+    """Participação de um fornecedor em uma pesquisa de preço."""
+
     pesquisa = models.ForeignKey(PesquisaPreco, on_delete=models.CASCADE, related_name='fornecedores_pesquisa')
     fornecedor = models.ForeignKey(Fornecedor, on_delete=models.CASCADE, related_name='pesquisas_preco')
     data_resposta = models.DateField('Data da resposta', null=True, blank=True)
@@ -323,6 +350,8 @@ class PesquisaPrecoFornecedor(models.Model):
 
 
 class PesquisaPrecoContato(models.Model):
+    """Registro de contato realizado com um fornecedor da pesquisa."""
+
     pesquisa_fornecedor = models.ForeignKey(PesquisaPrecoFornecedor, on_delete=models.CASCADE, related_name='contatos')
     data_contato = models.DateField('Data do contato')
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -335,6 +364,8 @@ class PesquisaPrecoContato(models.Model):
 
 
 class PesquisaPrecoFornecedorNota(models.Model):
+    """Anotação histórica sobre um fornecedor dentro da pesquisa."""
+
     pesquisa_fornecedor = models.ForeignKey(PesquisaPrecoFornecedor, on_delete=models.CASCADE, related_name='notas')
     texto = models.TextField('Nota')
     criado_por = models.ForeignKey(
@@ -354,6 +385,8 @@ class PesquisaPrecoFornecedorNota(models.Model):
 
 
 class PesquisaPrecoItemValor(models.Model):
+    """Valor unitário informado por fornecedor para um item do TR."""
+
     pesquisa_fornecedor = models.ForeignKey(PesquisaPrecoFornecedor, on_delete=models.CASCADE, related_name='valores')
     item = models.ForeignKey(TabelaItemLinha, on_delete=models.CASCADE, related_name='valores_pesquisa_preco')
     preco_unitario = models.DecimalField('Preço unitário', max_digits=14, decimal_places=2)
@@ -368,5 +401,3 @@ class PesquisaPrecoItemValor(models.Model):
 
     def __str__(self):
         return f'{self.pesquisa_fornecedor.fornecedor} - item {self.item.ordem}'
-
-# Create your models here.

@@ -1,3 +1,5 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Exibe o diretório de ramais em cartões com busca, paginação e modal de contato. -->
 {% extends "base.html" %}
 {% load static %}
 {% block extra_css %}
@@ -18,6 +20,7 @@
   </div>
 
   <section class="ramais-directory">
+    <!-- Busca por dados visíveis do cartão de ramal. -->
     <form method="get" class="ramais-search">
       <input class="form-control form-control-lg" type="search" name="q" value="{{ q }}" placeholder="Pesquisar por nome, cargo, setor, ramal ou e-mail">
       <button class="btn btn-primary" type="submit">Pesquisar</button>
@@ -25,6 +28,7 @@
     </form>
 
     {% if perfis %}
+      <!-- Cada perfil vira um cartão de contato com ações condicionais de edição. -->
       <div class="ramais-card-grid">
         {% for perfil in perfis %}
           <article class="ramal-credit-card">
@@ -43,6 +47,7 @@
             {% endif %}
             <div class="ramal-card-photo">
               {% if perfil.foto %}
+                <!-- A foto funciona como acionador do modal detalhado do contato. -->
                 <button
                   class="ramal-photo-trigger"
                   type="button"
@@ -91,6 +96,7 @@
       </div>
 
       {% if is_paginated %}
+        <!-- Paginação preserva o termo pesquisado no diretório de ramais. -->
         <nav class="ramais-pagination" aria-label="Paginacao de ramais">
           <div class="text-muted small">
             Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} - {{ page_obj.paginator.count }} ramais
@@ -129,6 +135,7 @@
     {% endif %}
   </section>
 
+  <!-- Modal preenchido pelos data attributes do cartão selecionado. -->
   <div class="modal fade" id="ramalContactModal" tabindex="-1" aria-labelledby="ramalContactModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered ramal-contact-dialog">
       <div class="modal-content ramal-contact-modal">
@@ -184,6 +191,7 @@
     </div>
   </div>
 
+  <!-- Popover com ações rápidas para o endereço de e-mail selecionado. -->
   <div class="ramal-email-popover" id="ramalEmailPopover" role="tooltip" hidden>
     <div class="ramal-email-popover-address" id="ramalEmailPopoverAddress"></div>
     <div class="ramal-email-popover-actions">
@@ -222,6 +230,7 @@
 
 {% block extra_js %}
   <script>
+    // Preenche o modal de contato usando os dados do cartão que abriu a janela.
     const ramalContactModal = document.getElementById('ramalContactModal');
     if (ramalContactModal) {
       ramalContactModal.addEventListener('show.bs.modal', (event) => {
@@ -301,6 +310,7 @@
       const email = (trigger.dataset.email || trigger.textContent || '').trim();
       if (!email || email === '-') return;
 
+      // Links externos são montados apenas quando o usuário solicita ações do e-mail.
       ramalActiveEmail = email;
       ramalEmailPopoverAddress.textContent = email;
       ramalEmailTeams.href = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`;
@@ -315,6 +325,7 @@
       try {
         await navigator.clipboard.writeText(ramalActiveEmail);
       } catch (error) {
+        // Fallback para navegadores sem Clipboard API disponível no contexto atual.
         const input = document.createElement('input');
         input.value = ramalActiveEmail;
         document.body.appendChild(input);

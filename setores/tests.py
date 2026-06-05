@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Cobre regras principais de setores: árvore, permissões, vínculos e organograma.
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase
@@ -14,12 +16,16 @@ User = get_user_model()
 
 
 class SetoresTests(TestCase):
+    """Valida os fluxos críticos do módulo de setores."""
+
     def setUp(self):
         self.admin = User.objects.create_superuser(username='admin_setor', password='123', email='admin@example.com')
         self.user = User.objects.create_user(username='joao_setor', password='123', email='joao@example.com')
         self.other = User.objects.create_user(username='maria_setor', password='123', email='maria@example.com')
 
     def create_setor(self, name='Financeiro', **kwargs):
+        """Cria um setor com grupo vinculado para reduzir repetição nos testes."""
+
         return SetorNode.objects.create(group=Group.objects.create(name=name), **kwargs)
 
     def test_criacao_de_setor_sem_pai(self):

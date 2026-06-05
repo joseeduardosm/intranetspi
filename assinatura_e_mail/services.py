@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Renderizar a assinatura de e-mail em PNG e preparar a prévia em base64.
+
 import base64
 import io
 from functools import lru_cache
@@ -18,6 +21,8 @@ TEXT = '#1f2937'
 
 @lru_cache(maxsize=1)
 def _font_paths():
+    """Retorna fontes locais usadas para texto regular e em negrito."""
+
     return {
         'regular': '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
         'bold': '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
@@ -26,15 +31,21 @@ def _font_paths():
 
 @lru_cache(maxsize=1)
 def _template():
+    """Carrega o modelo visual da assinatura uma única vez por processo."""
+
     path = Path(settings.BASE_DIR) / 'static' / 'assinatura_e_mail' / 'assets' / 'modelo_2026.png'
     return Image.open(path).convert('RGBA')
 
 
 def _font(style, size):
+    """Instancia a fonte no tamanho solicitado para desenho com Pillow."""
+
     return ImageFont.truetype(_font_paths()[style], size=size)
 
 
 def _fit_font(draw, text, max_width, max_height, style='regular', max_size=56, min_size=14, spacing=4):
+    """Escolhe o maior tamanho de fonte que cabe dentro da área reservada."""
+
     chosen = _font(style, min_size)
     for size in range(max_size, min_size - 1, -1):
         candidate = _font(style, size)
@@ -48,6 +59,8 @@ def _fit_font(draw, text, max_width, max_height, style='regular', max_size=56, m
 
 
 def _draw_wrapped(draw, text, box, style='regular', max_size=56, min_size=14, fill=TEXT, align='left', spacing=4):
+    """Desenha texto com quebra de linha e ajuste de fonte dentro de uma caixa."""
+
     x1, y1, x2, y2 = box
     max_width = x2 - x1
     max_height = y2 - y1
@@ -80,6 +93,8 @@ def _draw_wrapped(draw, text, box, style='regular', max_size=56, min_size=14, fi
 
 
 def _draw_single_line(draw, text, box, style='regular', max_size=24, min_size=10, fill=TEXT):
+    """Desenha uma linha ajustando a fonte para caber no espaço disponível."""
+
     x1, y1, x2, y2 = box
     max_width = x2 - x1
     max_height = y2 - y1
@@ -90,6 +105,8 @@ def _draw_single_line(draw, text, box, style='regular', max_size=24, min_size=10
 
 
 def render_signature_png(data):
+    """Gera a imagem PNG final combinando o modelo fixo e os dados informados."""
+
     image = _template().copy()
     draw = ImageDraw.Draw(image)
 
@@ -114,5 +131,7 @@ def render_signature_png(data):
 
 
 def png_data_uri(png_bytes):
+    """Converte bytes PNG em data URI para exibição imediata no template."""
+
     encoded = base64.b64encode(png_bytes).decode('ascii')
     return f'data:image/png;base64,{encoded}'

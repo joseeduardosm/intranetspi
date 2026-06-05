@@ -1,3 +1,5 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Confirma a exclusão de um usuário ou recurso relacionado ao módulo de usuários. -->
 {% extends "base.html" %}
 {% load static %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'usuarios/css/usuarios.css' %}">{% endblock %}
@@ -8,6 +10,7 @@
     <p>{{ descricao }}</p>
   </div>
 
+  <!-- A confirmação mantém a ação destrutiva separada do botão de cancelamento. -->
   <form method="post" class="card border-0 shadow-sm">
     {% csrf_token %}
     <div class="card-body p-4">
@@ -19,4 +22,3 @@
     </div>
   </form>
 {% endblock %}
-

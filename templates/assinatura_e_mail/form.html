@@ -1,10 +1,13 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Exibir o formulário, a prévia e o download da assinatura de e-mail. -->
 
 {% block title %}Assinatura de e-mail - Aplicações SPI{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'assinatura_e_mail/css/assinatura_e_mail.css' %}">{% endblock %}
 
 {% block content %}
+  <!-- Cabeçalho da página com orientação direta sobre a geração do PNG institucional. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
     <div>
       <h1>Assinatura de e-mail</h1>
@@ -13,9 +16,11 @@
   </div>
 
   <section class="assinatura-email-layout">
+    <!-- Formulário principal: os campos podem vir pré-preenchidos pelo perfil do usuário. -->
     <form method="post" class="card border-0 shadow-sm assinatura-email-form">
       <div class="card-body p-4">
         {% csrf_token %}
+        <!-- Erros globais aparecem acima dos campos para validações do formulário inteiro. -->
         {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
         <div class="row g-3">
           {% for field in form %}
@@ -32,6 +37,7 @@
       </div>
     </form>
 
+    <!-- Área de prévia mostra a assinatura gerada e libera o download quando houver token. -->
     <section class="card border-0 shadow-sm assinatura-email-preview">
       <div class="card-body p-4">
         <div class="assinatura-email-preview-header">
@@ -46,6 +52,7 @@
             <img src="{{ preview_src }}" alt="Prévia da assinatura de e-mail gerada">
           </div>
         {% else %}
+          <!-- Estado vazio mantém a tela orientada antes da primeira geração. -->
           <div class="assinatura-email-preview-empty">A prévia aparecerá aqui após clicar em Gerar.</div>
         {% endif %}
       </div>

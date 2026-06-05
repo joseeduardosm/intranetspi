@@ -1,3 +1,7 @@
+/* Criado por José Eduardo Santana Martins em 04/06/2026
+   Ajusta campos auxiliares usados nos formulários do módulo de usuários. */
+
+/* Grupo de radio buttons renderizado como opções compactas e alinhadas. */
 .spi-radio-group {
   display: flex;
   flex-wrap: wrap;

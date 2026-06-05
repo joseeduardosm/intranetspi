@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Define as rotas de ramais, usuários e diretórios LDAP do módulo.
 from django.urls import path
 
 from . import views
@@ -6,6 +8,7 @@ from . import views
 app_name = "usuarios"
 
 urlpatterns = [
+    # Rotas públicas para usuários autenticados e rotas administrativas ficam no mesmo namespace.
     path("ramais/", views.RamaisListView.as_view(), name="ramais"),
     path("usuarios/", views.UsuariosListView.as_view(), name="list"),
     path("usuarios/novo/", views.UsuarioPerfilCreateView.as_view(), name="create"),

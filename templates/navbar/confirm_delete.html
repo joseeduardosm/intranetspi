@@ -1,10 +1,14 @@
 {% extends "base.html" %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Confirmar exclusão de item da navbar e seus submenus vinculados. -->
 
 {% block content %}
+  <!-- Cabeçalho alerta que submenus dependentes também serão removidos. -->
   <div class="spi-page-title">
     <h1>Excluir item da navbar</h1>
     <p>Confirme a exclusao de "{{ object }}". Submenus vinculados tambem serao excluidos.</p>
   </div>
+  <!-- O POST confirma a exclusão; cancelar volta para a listagem sem alterar dados. -->
   <form method="post" class="card border-0 shadow-sm">
     <div class="card-body p-4">
       {% csrf_token %}

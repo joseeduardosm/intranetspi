@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -6,7 +8,10 @@ from usuarios.services import SYSTEM_USERNAMES
 
 User = get_user_model()
 
+
 class RegraAcessoForm(forms.ModelForm):
+    """Formulário usado para criar e editar regras de acesso no painel de ACL."""
+
     class Meta:
         model = RegraAcesso
         fields = ['recurso', 'nivel', 'usuario', 'grupo']
@@ -19,7 +24,7 @@ class RegraAcessoForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Filtra usuários humanos ativos
+        # Limita a seleção a usuários humanos ativos e grupos cadastrados no sistema.
         self.fields['usuario'].queryset = User.objects.filter(is_active=True).exclude(
             username__in=SYSTEM_USERNAMES
         ).order_by('first_name', 'username')
@@ -30,6 +35,7 @@ class RegraAcessoForm(forms.ModelForm):
         usuario = cleaned_data.get('usuario')
         grupo = cleaned_data.get('grupo')
 
+        # A regra precisa apontar para pelo menos um alvo para ter efeito no controle de acesso.
         if not usuario and not grupo:
             raise forms.ValidationError("Você deve selecionar pelo menos um Usuário ou um Grupo/Setor.")
 

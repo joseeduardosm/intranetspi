@@ -1,3 +1,7 @@
+/* Criado por José Eduardo Santana Martins em 04/06/2026
+   Estiliza listagem, formulários, seletor de usuários e organograma do módulo setores. */
+
+/* Estrutura base das telas administrativas do módulo. */
 .setores-shell {
   max-width: 1180px;
   margin: 0 auto;
@@ -19,6 +23,7 @@
   display: none;
 }
 
+/* Seletor visual de usuários vinculado ao select múltiplo do formulário Django. */
 .setores-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -61,6 +66,7 @@
   border-color: rgba(13, 110, 253, .28);
 }
 
+/* Quadro do organograma com área de pan, zoom e fundo quadriculado discreto. */
 .setores-org-page {
   margin-inline: -.75rem;
 }
@@ -148,6 +154,7 @@
   cursor: grabbing;
 }
 
+/* Árvore institucional: conectores desenhados com pseudo-elementos entre os nós. */
 .setores-org-chart-institutional {
   width: max-content;
   padding: 1.1rem 1.25rem 2rem;
@@ -270,6 +277,7 @@
   transform: translateX(-50%);
 }
 
+/* Cartões de setor e variação visual por profundidade da hierarquia. */
 .setores-org-card-kicker {
   font-size: .72rem;
   font-weight: 700;
@@ -344,6 +352,7 @@
   font-size: .88rem;
 }
 
+/* Lista de usuários e estados de foco para acionadores de contato. */
 .setores-org-users strong,
 .setores-org-lider strong {
   display: block;
@@ -453,6 +462,7 @@
   border-radius: 4px;
 }
 
+/* Ajustes para telas menores, mantendo formulário e organograma utilizáveis. */
 @media (max-width: 991.98px) {
   .setores-picker {
     grid-template-columns: 1fr;

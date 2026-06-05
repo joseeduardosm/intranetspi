@@ -1,3 +1,5 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Lista diretórios LDAP configurados para autenticação e permite manutenção administrativa. -->
 {% extends "base.html" %}
 {% load static %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'usuarios/css/usuarios.css' %}">{% endblock %}
@@ -15,6 +17,7 @@
   </div>
 
   <div class="card border-0 shadow-sm">
+    <!-- Tabela administrativa com estado vazio quando não há diretórios cadastrados. -->
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0 spi-table-wide">
         <thead>
@@ -48,4 +51,3 @@
     </div>
   </div>
 {% endblock %}
-

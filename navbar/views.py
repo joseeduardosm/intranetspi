@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Controlar o CRUD administrativo e a reordenação dos itens da navbar.
+
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.http import HttpResponseRedirect
@@ -12,16 +15,21 @@ from .services import move_navbar_item, navbar_move_state, normalize_navbar_bran
 
 
 class SuperuserRequiredMixin(UserPassesTestMixin):
+    """Restringe a gestão da navbar aos superusuários autenticados."""
+
     def test_func(self):
         return self.request.user.is_authenticated and self.request.user.is_superuser
 
 
 class NavbarItemListView(SuperuserRequiredMixin, ListView):
+    """Lista itens da navbar com filtros e estado de movimentação."""
+
     model = NavbarItem
     template_name = 'navbar/manage_list.html'
     context_object_name = 'items'
 
     def get_queryset(self):
+        # Filtros opcionais ajudam a gerenciar menus ativos, inativos, raiz e submenus.
         queryset = NavbarItem.objects.select_related('parent').order_by('parent__ordem', 'parent__titulo', 'ordem', 'titulo')
         ativo = self.request.GET.get('ativo')
         parent = self.request.GET.get('parent')
@@ -35,6 +43,7 @@ class NavbarItemListView(SuperuserRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Calcula botões de subir/descer sem repetir consultas por linha no template.
         context['ativo_atual'] = self.request.GET.get('ativo', '')
         context['parent_atual'] = self.request.GET.get('parent', '')
         context['parents'] = NavbarItem.objects.filter(parent__isnull=True).order_by('ordem', 'titulo')
@@ -46,6 +55,8 @@ class NavbarItemListView(SuperuserRequiredMixin, ListView):
 
 
 class NavbarItemCreateView(SuperuserRequiredMixin, CreateView):
+    """Cria um novo item de navbar e normaliza a ordem da ramificação."""
+
     model = NavbarItem
     form_class = NavbarItemForm
     template_name = 'navbar/form.html'
@@ -61,6 +72,8 @@ class NavbarItemCreateView(SuperuserRequiredMixin, CreateView):
 
 
 class NavbarItemUpdateView(SuperuserRequiredMixin, UpdateView):
+    """Atualiza um item e normaliza a ordem do pai antigo e do novo pai."""
+
     model = NavbarItem
     form_class = NavbarItemForm
     template_name = 'navbar/form.html'
@@ -78,6 +91,8 @@ class NavbarItemUpdateView(SuperuserRequiredMixin, UpdateView):
 
 
 class NavbarItemDeleteView(SuperuserRequiredMixin, DeleteView):
+    """Remove um item e renumera os irmãos restantes."""
+
     model = NavbarItem
     template_name = 'navbar/confirm_delete.html'
     success_url = reverse_lazy('navbar:manage_list')
@@ -91,6 +106,8 @@ class NavbarItemDeleteView(SuperuserRequiredMixin, DeleteView):
 
 
 class NavbarItemMoveView(SuperuserRequiredMixin, View):
+    """Processa a movimentação de itens na listagem administrativa."""
+
     def post(self, request, pk):
         item = get_object_or_404(NavbarItem, pk=pk)
         direction = request.POST.get('direction')

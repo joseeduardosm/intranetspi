@@ -1,10 +1,13 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Exibir a página pública inicial de notícias, destaques e atalhos. -->
 
 {% block title %}Noticias - Aplicações SPI{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'noticias/css/noticias.css' %}">{% endblock %}
 
 {% block content %}
+  <!-- Página inicial pública com destaque, cards secundários e atalhos ativos. -->
   <div class="noticias-page">
     <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
       <div>
@@ -22,6 +25,7 @@
     <section class="noticias-home-layout">
       <div class="noticias-home-main">
         {% if carousel_noticias %}
+          <!-- As primeiras notícias alimentam o carousel e os cards inferiores. -->
           <section class="noticias-feature-layout">
             <div class="noticias-feature-hero">
               <div id="noticiasCarousel" class="carousel slide noticias-hero" data-bs-ride="carousel" data-bs-interval="6500">

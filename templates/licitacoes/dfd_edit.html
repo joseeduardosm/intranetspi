@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% load static %}
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Objetivo: Editar o DFD por seções e gerenciar a tabela de itens do documento. -->
 {% block extra_css %}<link rel="stylesheet" href="{% static 'licitacoes/css/licitacoes.css' %}">{% endblock %}
 {% load licitacoes_extras %}
 
 {% block content %}
+  <!-- Divide a edição entre navegação por seções e formulário da etapa atual. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
     <div>
       <h1>DFD - {{ dfd.nome }}</h1>

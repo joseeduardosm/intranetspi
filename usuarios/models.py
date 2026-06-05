@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Define diretórios LDAP e perfis complementares dos usuários, incluindo
+# dados obrigatórios para ramais e recadastro periódico.
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -9,6 +12,8 @@ BLOCO_CHOICES = [("A", "A"), ("B", "B")]
 
 
 class LDAPDirectory(models.Model):
+    """Configuração de diretório LDAP usada pelo backend de autenticação."""
+
     nome = models.CharField("Nome", max_length=120)
     host = models.CharField("Servidor", max_length=255)
     port = models.PositiveIntegerField("Porta", default=389)
@@ -31,6 +36,7 @@ class LDAPDirectory(models.Model):
     def clean(self):
         super().clean()
         if self.ativo:
+            # Apenas um diretório ativo evita ambiguidade na autenticação corporativa.
             queryset = LDAPDirectory.objects.filter(ativo=True)
             if self.pk:
                 queryset = queryset.exclude(pk=self.pk)
@@ -39,6 +45,8 @@ class LDAPDirectory(models.Model):
 
 
 class UsuarioPerfil(models.Model):
+    """Dados cadastrais e de contato associados a um usuário do Django."""
+
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="perfil")
     nome_completo = models.CharField("Nome completo", max_length=220, blank=True)
     foto = models.ImageField("Foto", upload_to="usuarios/fotos/", blank=True, null=True)
@@ -63,6 +71,8 @@ class UsuarioPerfil(models.Model):
 
     @property
     def whatsapp_url(self):
+        """Normaliza o celular para link direto do WhatsApp quando possível."""
+
         if not self.celular:
             return ""
         digits = "".join(c for c in self.celular if c.isdigit())
@@ -72,6 +82,8 @@ class UsuarioPerfil(models.Model):
 
     @property
     def possui_campos_obrigatorios(self):
+        """Indica se o perfil atende ao mínimo exigido para liberar navegação."""
+
         return bool((self.user.email or "").strip()) and bool(self.foto) and all(
             (getattr(self, field) or "").strip()
             for field in ("nome_completo", "ramal", "cargo", "setor", "andar", "bloco")
@@ -79,6 +91,8 @@ class UsuarioPerfil(models.Model):
 
     @property
     def precisa_recadastro(self):
+        """Exige primeiro cadastro completo e revalidação a cada 30 dias."""
+
         if not self.possui_campos_obrigatorios:
             return True
         if not self.ultimo_recadastro_em:
@@ -87,6 +101,8 @@ class UsuarioPerfil(models.Model):
 
     @property
     def andar_bloco_display(self):
+        """Formata localização física para cartões de ramais e modais de contato."""
+
         andar_value = (self.andar or "").strip()
         bloco_value = (self.bloco or "").strip()
         if andar_value == "Terreo":

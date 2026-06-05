@@ -1,9 +1,13 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Mapear rotas públicas e administrativas do app de notícias.
+
 from django.urls import path
 
 from . import views
 
 app_name = 'noticias'
 
+# Rotas públicas aparecem primeiro; rotas de gestão ficam sob o prefixo gerenciar.
 urlpatterns = [
     path('', views.NoticiaPublicListView.as_view(), name='public_list'),
     path('todas/', views.NoticiaArchiveView.as_view(), name='archive'),

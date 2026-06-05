@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Validar permissões, documentos, editor hierárquico e pesquisa de preço.
+
 from io import BytesIO
 
 from django.contrib.auth import get_user_model
@@ -46,6 +49,8 @@ from .services import (
 
 
 class LoginTests(TestCase):
+    """Cobre autenticação básica usada pelos fluxos protegidos."""
+
     def test_login_autentica_usuario_comum(self):
         User = get_user_model()
         User.objects.create_user(username='comum', password='123')
@@ -55,6 +60,8 @@ class LoginTests(TestCase):
 
 
 class LicitacoesOwnershipTests(TestCase):
+    """Cobre regras de autoria, compartilhamento e visibilidade entre usuários."""
+
     def setUp(self):
         User = get_user_model()
         self.joao = User.objects.create_user(username='joao', password='123')
@@ -178,6 +185,8 @@ class LicitacoesOwnershipTests(TestCase):
 
 
 class EtpTicTests(TestCase):
+    """Cobre criação, edição, itens, duplicação, exportação e compartilhamento de ETP TIC."""
+
     def test_render_numera_paragrafos_por_secao(self):
         etp = EtpTic.objects.create(
             nome='Contratacao',
@@ -660,6 +669,8 @@ class EtpTicTests(TestCase):
 
 
 class DfdTests(TestCase):
+    """Cobre preenchimento por seções, tabela de itens, duplicação e exportação de DFD."""
+
     def test_render_numera_apenas_secoes_aplicaveis(self):
         dfd = Dfd.objects.create(
             nome='DFD',
@@ -1017,6 +1028,8 @@ class DfdTests(TestCase):
 
 
 class RedMarkTests(TestCase):
+    """Cobre marcações de texto em vermelho usadas no editor e nas exportações."""
+
     def test_renderiza_marcacao_vermelha_com_asteriscos_pareados_e_palavra_solteira(self):
         html = red_marked_html('Texto *vermelho* e *alerta')
 
@@ -1038,6 +1051,8 @@ class RedMarkTests(TestCase):
 
 
 class TrTests(TestCase):
+    """Cobre TR, seções, itens hierárquicos, tabelas e movimentações."""
+
     def setUp(self):
         self.termo = TermoReferencia.objects.create(nome='TR', numero_processo='002/2026')
         self.sessao = SessaoTR.objects.create(termo=self.termo, titulo='Objeto', ordem=1)
@@ -1543,6 +1558,8 @@ class TrTests(TestCase):
 
 
 class PesquisaPrecoTests(TestCase):
+    """Cobre pesquisa de preço, fornecedores, orçamentos, notas e exportação XLSX."""
+
     def setUp(self):
         User = get_user_model()
         User.objects.create_superuser(username='admin', password='123')

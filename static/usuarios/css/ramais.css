@@ -1,3 +1,7 @@
+/* Criado por José Eduardo Santana Martins em 04/06/2026
+   Estiliza a lista de ramais, cartões de contato, modal de perfil e atalhos de e-mail. */
+
+/* Grade principal, busca e paginação do diretório de ramais. */
 .ramais-directory {
   display: grid;
   gap: 1.25rem;
@@ -33,6 +37,7 @@
   border-radius: 8px;
 }
 
+/* Cartão de contato em formato compacto, com foto à esquerda e dados à direita. */
 .ramal-credit-card {
   position: relative;
   aspect-ratio: 1.586 / 1;
@@ -81,6 +86,7 @@
   outline-offset: 1px;
 }
 
+/* Área de foto do cartão, preparada para abrir o modal de contato. */
 .ramal-card-photo {
   grid-area: photo;
   box-sizing: border-box;
@@ -139,6 +145,7 @@
   background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%);
 }
 
+/* Campos do cartão usam áreas nomeadas para manter alinhamento previsível. */
 .ramal-card-data h2 {
   margin: 0;
   color: #111827;
@@ -260,6 +267,7 @@
   min-height: 0;
 }
 
+/* Modal detalhado de contato, reutilizado por ramais e organogramas. */
 .ramal-contact-dialog {
   max-width: min(980px, calc(100vw - 2rem));
 }
@@ -323,6 +331,7 @@
   background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%);
 }
 
+/* Campos do modal preservam legibilidade mesmo com textos longos. */
 .ramal-contact-field {
   min-width: 0;
   min-height: 0;
@@ -425,6 +434,7 @@
   color: #0b5ed7;
 }
 
+/* Popover de e-mail com ações rápidas para Teams, Outlook e cópia. */
 .ramal-email-popover {
   position: fixed;
   z-index: 2000;
@@ -517,6 +527,7 @@
   background: #344054;
 }
 
+/* Ajustes mobile para busca, cartões e modal em coluna única. */
 @media (max-width: 575.98px) {
   .ramais-search {
     grid-template-columns: 1fr;

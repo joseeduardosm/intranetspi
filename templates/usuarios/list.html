@@ -1,8 +1,11 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Lista perfis de usuários com busca, ordenação, paginação e ações permitidas. -->
 {% extends "base.html" %}
 {% load static %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'usuarios/css/usuarios.css' %}">{% endblock %}
 
 {% block content %}
+  <!-- Cabeçalho adapta botões conforme permissão e modo de listagem. -->
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
     <div>
       <h1>{{ titulo }}</h1>
@@ -21,12 +24,14 @@
 
   <div class="card border-0 shadow-sm">
     <div class="card-body p-4">
+      <!-- Filtro textual reaproveita os parâmetros atuais de listagem. -->
       <form method="get" class="d-flex flex-wrap gap-2 mb-4">
         <input class="form-control form-control-lg flex-grow-1" type="search" name="q" value="{{ q }}" placeholder="Pesquisar em todas as colunas">
         <button class="btn btn-primary" type="submit">Pesquisar</button>
         {% if q %}<a class="btn btn-light" href="{{ request.path }}">Limpar</a>{% endif %}
       </form>
 
+      <!-- Tabela com links de ordenação em cada coluna relevante. -->
       <div class="table-responsive">
         <table class="table table-hover align-middle mb-0 spi-table-wide">
           <thead>
@@ -56,6 +61,7 @@
                 <td>{{ perfil.data_nascimento|date:"d/m/Y"|default:"-" }}</td>
                 <td>{{ perfil.celular|default:"-" }}</td>
                 <td class="text-end">
+                  <!-- Edição é liberada para o próprio usuário ou para superusuários. -->
                   {% if request.user.is_superuser or request.user.id == perfil.user_id %}
                     <a class="btn btn-sm btn-outline-secondary" href="{% url 'usuarios:update' perfil.pk %}">Editar</a>
                   {% endif %}
@@ -72,6 +78,7 @@
       </div>
 
       {% if is_paginated %}
+        <!-- Paginação preserva busca e ordenação recebidas pela view. -->
         <nav class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-4" aria-label="Paginação de usuários">
           <div class="text-muted small">
             Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} - {{ page_obj.paginator.count }} usuários

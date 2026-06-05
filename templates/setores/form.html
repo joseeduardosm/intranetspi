@@ -1,3 +1,5 @@
+<!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
+<!-- Renderiza o formulário de criação/edição de setores e vínculos de usuários. -->
 {% extends "base.html" %}
 {% load static %}
 {% block title %}{{ titulo }}{% endblock %}
@@ -12,6 +14,7 @@
       <a class="btn btn-outline-secondary" href="{{ voltar_url }}">Voltar</a>
     </div>
 
+    <!-- Formulário central: dados do grupo, posição na árvore, líder e participantes. -->
     <form method="post" class="card shadow-sm border-0 setores-form-card">
       <div class="card-body p-4">
         {% csrf_token %}
@@ -40,6 +43,7 @@
             {% for error in form.ativo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
           </div>
           <div class="col-12">
+            <!-- O select múltiplo original é preservado e controlado pelo seletor visual abaixo. -->
             <label class="form-label fw-semibold" for="setor-usuarios-search">Usuários pertencentes ao setor</label>
             <input type="text" class="form-control form-control-lg mb-3" id="setor-usuarios-search" placeholder="Buscar usuário...">
             {{ form.usuarios }}
@@ -66,6 +70,7 @@
 {% endblock %}
 {% block extra_js %}
   <script>
+    // Controla o seletor de usuários mantendo o campo Django original como fonte de dados.
     const setorUsersSelect = document.getElementById('{{ form.usuarios.id_for_label }}');
     const setorUsersSearch = document.getElementById('setor-usuarios-search');
     const setorUsersAvailable = document.getElementById('setores-users-available');
@@ -74,6 +79,7 @@
     if (setorUsersSelect && setorUsersSearch && setorUsersAvailable && setorUsersSelected) {
       setorUsersSelect.classList.add('setores-select-hidden');
 
+      // Recria as colunas "Disponíveis" e "Incluídos" conforme filtro e seleção atual.
       const renderUsers = (filterText = '') => {
         const filter = filterText.trim().toLowerCase();
         setorUsersAvailable.innerHTML = '';

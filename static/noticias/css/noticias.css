@@ -1,3 +1,7 @@
+/* Criado por José Eduardo Santana Martins em 04/06/2026 */
+/* Objetivo: Definir layout público de notícias, atalhos, detalhe e anexos. */
+
+/* Container principal da home e arquivo de notícias. */
 .noticias-page {
   --noticias-feature-height: clamp(420px, calc(100vh - 230px), 680px);
   --noticias-navbar-blue: #1f2d4a;
@@ -5,6 +9,7 @@
   margin: 0 auto;
 }
 
+/* Layout da home: área de notícias à esquerda e atalhos à direita no desktop. */
 .noticias-home-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) max-content;
@@ -16,6 +21,7 @@
   min-width: 0;
 }
 
+/* Painel lateral de atalhos exibido junto às notícias. */
 .noticias-shortcuts-panel {
   min-width: 0;
   width: fit-content;
@@ -102,6 +108,7 @@ body:has(.noticias-page) .spi-container {
   margin-bottom: .9rem;
 }
 
+/* Grid de destaques da home pública. */
 .noticias-feature-layout {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -129,6 +136,7 @@ body:has(.noticias-page) .spi-container {
   min-height: 180px;
 }
 
+/* Carousel principal de notícias em destaque. */
 .noticias-hero {
   height: var(--noticias-feature-height);
   overflow: hidden;
@@ -178,6 +186,7 @@ body:has(.noticias-page) .spi-container {
   display: none;
 }
 
+/* Rodapé visual do destaque com título responsivo. */
 .noticias-hero-caption {
   display: flex;
   align-items: center;
@@ -214,6 +223,7 @@ body:has(.noticias-page) .spi-container {
   text-transform: uppercase;
 }
 
+/* Cards de notícia e link para arquivo completo. */
 .noticias-card {
   width: 100%;
   height: 100%;
@@ -300,6 +310,7 @@ body:has(.noticias-page) .spi-container {
   line-height: 1.35;
 }
 
+/* Listagens públicas em cards compactos. */
 .noticias-list-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -336,6 +347,7 @@ body:has(.noticias-page) .spi-container {
   color: #667085;
 }
 
+/* Paginação do arquivo de notícias. */
 .noticias-pagination {
   display: flex;
   align-items: center;
@@ -349,6 +361,7 @@ body:has(.noticias-page) .spi-container {
   font-weight: 600;
 }
 
+/* Página de detalhe da notícia. */
 .noticia-detail {
   max-width: 1180px;
   margin: 0 auto;
@@ -385,6 +398,7 @@ body:has(.noticias-page) .spi-container {
   }
 }
 
+/* Anexos PDF incorporados ao corpo da notícia. */
 .noticia-pdf-anexo {
   margin-top: 1.5rem;
 }
@@ -404,6 +418,7 @@ body:has(.noticias-page) .spi-container {
   font-size: .95rem;
 }
 
+/* Slots planejados para expansões futuras de layout. */
 .noticia-future-slots {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -420,6 +435,7 @@ body:has(.noticias-page) .spi-container {
   text-align: center;
 }
 
+/* Responsividade da home, arquivo e detalhe em telas menores. */
 @media (max-width: 1199px) {
   .noticias-feature-layout {
     grid-template-columns: 1fr;

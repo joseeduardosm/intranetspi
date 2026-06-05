@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Validar publicação, anexos, listagens públicas e gestão editorial.
+
 import shutil
 import tempfile
 from datetime import timedelta
@@ -17,6 +20,8 @@ from .models import Noticia
 
 
 def imagem_teste():
+    """Cria uma imagem mínima para simular upload nos testes."""
+
     return SimpleUploadedFile(
         'destaque.gif',
         b'GIF87a\x01\x00\x01\x00\x80\x01\x00\x00\x00\x00\xff\xff\xff,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02L\x01\x00;',
@@ -25,6 +30,8 @@ def imagem_teste():
 
 
 def pdf_teste(nome='orientacoes.pdf'):
+    """Cria um PDF mínimo para validar anexo incorporado."""
+
     return SimpleUploadedFile(
         nome,
         b'%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF',
@@ -33,6 +40,8 @@ def pdf_teste(nome='orientacoes.pdf'):
 
 
 def arquivo_teste(nome='planilha.xlsx'):
+    """Cria um anexo genérico que deve ser oferecido para download."""
+
     return SimpleUploadedFile(
         nome,
         b'arquivo teste',
@@ -41,16 +50,22 @@ def arquivo_teste(nome='planilha.xlsx'):
 
 
 class NoticiasTests(TestCase):
+    """Cobre regras editoriais, exibição pública, anexos e comandos de publicação."""
+
     def setUp(self):
+        # Isola arquivos enviados em diretório temporário durante os testes.
         self.media_root = tempfile.mkdtemp()
         self.override = override_settings(MEDIA_ROOT=self.media_root)
         self.override.enable()
 
     def tearDown(self):
+        # Remove os arquivos temporários mesmo se algum teste falhar.
         self.override.disable()
         shutil.rmtree(self.media_root, ignore_errors=True)
 
     def criar_noticia(self, **kwargs):
+        """Cria uma notícia publicada com valores padrão úteis para os testes."""
+
         defaults = {
             'imagem_destaque': 'noticias/destaques/teste.jpg',
             'titulo': 'Noticia publicada',

@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+# Objetivo: Validar cadastro, CADIN, timeline, ciclos, anexos e busca do Regulariza SGI.
+
 import shutil
 import tempfile
 from datetime import date
@@ -18,11 +21,16 @@ User = get_user_model()
 
 
 def arquivo_teste():
+    """Cria arquivo simples para simular upload de anexo."""
+
     return SimpleUploadedFile('anexo.txt', b'conteudo de teste', content_type='text/plain')
 
 
 class RegularizaSgiTests(TestCase):
+    """Cobre regras cadastrais, cálculos processuais e telas principais do módulo."""
+
     def setUp(self):
+        # Isola uploads em diretório temporário e autentica usuário administrativo.
         self.media_root = tempfile.mkdtemp()
         self.override = override_settings(MEDIA_ROOT=self.media_root)
         self.override.enable()
@@ -30,10 +38,13 @@ class RegularizaSgiTests(TestCase):
         self.client.login(username='admin_regulariza', password='123')
 
     def tearDown(self):
+        # Remove arquivos temporários mesmo quando algum teste falha.
         self.override.disable()
         shutil.rmtree(self.media_root, ignore_errors=True)
 
     def criar_imovel(self, **kwargs):
+        """Cria imóvel válido com valores padrão para os testes."""
+
         defaults = {
             'inscricao_imobiliaria': '123.456.789',
             'matricula': 'MAT-001',

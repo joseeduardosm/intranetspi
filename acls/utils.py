@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins em 04/06/2026
+
 from .models import Recurso, RegraAcesso
 
 # Hierarquia de permissões: Controle Total > Modificação > Leitura
@@ -9,7 +11,7 @@ RANK_PERMISSAO = {
 
 def obter_nivel_acesso(user, app_slug):
     """
-    Verifica o nível de acesso de um usuário para um determinado app.
+    Verifica o nível de acesso de um usuário para um determinado app/recurso.
     Retorna 'LEITURA', 'MODIFICACAO', 'CONTROLE_TOTAL' ou None (Sem Acesso).
     """
     if user.is_anonymous:
@@ -27,12 +29,11 @@ def obter_nivel_acesso(user, app_slug):
 
     regras = RegraAcesso.objects.filter(recurso=recurso)
 
-    # Se o recurso existe no banco de dados mas NÃO tem nenhuma regra cadastrada,
-    # ele é considerado aberto e qualquer usuário tem Controle Total.
+    # Sem regras cadastradas, o recurso permanece aberto para não bloquear módulos por acidente.
     if not regras.exists():
         return RegraAcesso.NIVEL_CONTROLE_TOTAL
 
-    # 1. Verificar regras individuais do usuário (Pessoas)
+    # Regras individuais têm prioridade sobre regras herdadas por grupo/setor.
     regras_usuario = regras.filter(usuario=user)
     if regras_usuario.exists():
         # Retorna o nível da regra individual (se houver mais de uma, pega a maior)
@@ -40,7 +41,7 @@ def obter_nivel_acesso(user, app_slug):
         maior_nivel = max(niveis, key=lambda n: RANK_PERMISSAO.get(n, 0))
         return maior_nivel
 
-    # 2. Verificar regras de grupo/setor do usuário
+    # Na ausência de regra individual, usa o maior nível disponível nos grupos do usuário.
     user_groups = user.groups.all()
     if user_groups.exists():
         regras_grupo = regras.filter(grupo__in=user_groups)
