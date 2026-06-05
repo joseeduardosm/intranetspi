@@ -160,8 +160,9 @@ class NoticiasTests(TestCase):
         self.assertEqual(response.context['carousel_noticias'][0], noticias[0])
         self.assertEqual([slot['noticia'] for slot in bottom_slots], noticias[1:3])
         self.assertContains(response, reverse('noticias:archive'))
-        self.assertContains(response, 'Ver mais')
+        self.assertContains(response, 'Ver todas as notícias publicadas')
         self.assertContains(response, 'noticias-home-list-card')
+
         self.assertContains(response, 'noticias-feature-bottom-left')
 
     def test_archive_lista_todas_as_noticias_publicadas(self):

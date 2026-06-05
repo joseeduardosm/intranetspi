@@ -98,4 +98,5 @@ class AssinaturaEmailTests(TestCase):
         self.assertEqual(image.size, (PNG_WIDTH, PNG_HEIGHT))
 
     def test_secretaria_fixa_esta_disponivel_no_servico(self):
-        self.assertEqual(SECRETARIA_FIXA, 'Secretaria de Parceria em Investimentos')
+        self.assertEqual(SECRETARIA_FIXA, 'Secretaria de Parcerias em Investimentos')
+

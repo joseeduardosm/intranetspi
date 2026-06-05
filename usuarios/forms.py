@@ -52,11 +52,16 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = UsuarioPerfil
         fields = ["nome_completo", "foto", "email", "ramal", "celular", "cargo", "setor", "andar", "bloco", "data_nascimento"]
+        labels = {
+            "celular": "Celular (Opcional)",
+            "data_nascimento": "Data de nascimento (Opcional)",
+        }
         widgets = {
             "andar": forms.Select(choices=[("", "Selecione")] + ANDAR_CHOICES),
             "bloco": forms.RadioSelect(choices=BLOCO_CHOICES),
             "data_nascimento": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
+
 
     def __init__(self, *args, current_user=None, **kwargs):
         self.current_user = current_user
@@ -128,11 +133,16 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = UsuarioPerfil
         fields = ["nome_completo", "foto", "email", "ramal", "celular", "cargo", "setor", "andar", "bloco", "data_nascimento"]
+        labels = {
+            "celular": "Celular (Opcional)",
+            "data_nascimento": "Data de nascimento (Opcional)",
+        }
         widgets = {
             "andar": forms.Select(choices=[("", "Selecione")] + ANDAR_CHOICES),
             "bloco": forms.RadioSelect(choices=BLOCO_CHOICES),
             "data_nascimento": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
+
 
     def __init__(self, *args, current_user=None, **kwargs):
         self.current_user = current_user
