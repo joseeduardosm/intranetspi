@@ -2,7 +2,7 @@
 
 Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
-## [Unreleased]
+## [0.2.0] - 2026-06-06
 - Reformulada a navegação global:
   - Substituída a navbar horizontal por uma sidebar vertical dentro e fora da área autenticada.
   - A sidebar inicia recolhida, expande ao passar o mouse ou receber foco e diferencia visualmente os itens de primeiro e segundo nível.
