@@ -41,6 +41,7 @@
               <th>Inscrição imobiliária (SQL)</th>
               <th>Endereço</th>
               <th>Número SGI</th>
+              <th>Prazo</th>
               <th class="text-end">Ações</th>
             </tr>
           </thead>
@@ -68,9 +69,41 @@
                 </td>
                 <td>{{ imovel.endereco_completo }}</td>
                 <td>{{ imovel.numero_sgi }}</td>
+                <td class="regulariza-deadline-cell">
+                  {% if imovel.timeline.proximo_marco and imovel.timeline.proximo_marco.data %}
+                    <strong>Prazo para {{ imovel.timeline.proximo_marco.titulo|lower }}</strong>
+                    <span>
+                      {{ imovel.timeline.proximo_marco.data|date:"d/m/Y" }}
+                      {% if imovel.timeline.dias_restantes == 0 %}
+                        - encerra hoje ou encerrado
+                      {% else %}
+                        - {{ imovel.timeline.dias_restantes }} dia{{ imovel.timeline.dias_restantes|pluralize }} restante{{ imovel.timeline.dias_restantes|pluralize }}
+                      {% endif %}
+                    </span>
+                    <div
+                      class="regulariza-deadline-progress regulariza-deadline-progress-{{ imovel.timeline.color }}"
+                      role="progressbar"
+                      aria-label="Prazo consumido para {{ imovel.timeline.proximo_marco.titulo|lower }}"
+                      aria-valuenow="{{ imovel.timeline.marker_percent|floatformat:0 }}"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                    >
+                      <span style="width: {{ imovel.timeline.marker_percent|floatformat:0 }}%;"></span>
+                    </div>
+                  {% else %}
+                    <span class="text-muted">Sem prazo ativo</span>
+                  {% endif %}
+                </td>
                 <td class="text-end">
                   <div class="dropdown">
-                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" data-bs-placement="left" title="Ações">...</button>
+                    <button
+                      class="btn btn-sm btn-outline-secondary regulariza-actions-toggle"
+                      type="button"
+                      data-bs-toggle="dropdown"
+                      data-bs-boundary="viewport"
+                      data-bs-popper-config='{"strategy":"fixed"}'
+                      title="Ações"
+                    >...</button>
                     <ul class="dropdown-menu dropdown-menu-end">
                       <li><a class="dropdown-item" href="{% url 'regulariza_sgi:imovel_update' imovel.pk %}" data-bs-toggle="tooltip" title="Editar imóvel">Editar</a></li>
                       <li><a class="dropdown-item" href="{% url 'regulariza_sgi:imovel_delete' imovel.pk %}" data-bs-toggle="tooltip" title="Excluir imóvel">Excluir</a></li>
@@ -80,7 +113,7 @@
               </tr>
             {% empty %}
               <tr>
-                <td colspan="5" class="text-center text-muted py-5">Nenhum imóvel cadastrado.</td>
+                <td colspan="6" class="text-center text-muted py-5">Nenhum imóvel cadastrado.</td>
               </tr>
             {% endfor %}
           </tbody>

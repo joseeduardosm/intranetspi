@@ -33,7 +33,7 @@ class NavbarTests(TestCase):
         with self.assertRaises(ValidationError):
             grandchild.full_clean()
 
-    def test_navbar_renderiza_item_dropdown_e_link_externo(self):
+    def test_navbar_publica_renderiza_sidebar_com_submenu_e_link_externo(self):
         parent = NavbarItem.objects.create(titulo='SEF', ordem=1)
         NavbarItem.objects.create(titulo='Gestores', url='/gestores/', parent=parent, ordem=1)
         NavbarItem.objects.create(titulo='Portal SP', url='https://www.saopaulo.sp.gov.br/', ordem=2)
@@ -43,10 +43,12 @@ class NavbarTests(TestCase):
 
         self.assertContains(response, 'SEF')
         self.assertContains(response, 'Gestores')
-        self.assertContains(response, 'dropdown-toggle')
-        self.assertContains(response, 'href="#" role="button" data-bs-toggle="dropdown"')
+        self.assertContains(response, 'spi-sidebar-toggle')
+        self.assertContains(response, 'data-bs-toggle="collapse"')
+        self.assertContains(response, 'spiPublicSidebarNav1')
         self.assertContains(response, 'https://www.saopaulo.sp.gov.br/')
         self.assertContains(response, 'target="_blank" rel="noopener"')
+        self.assertContains(response, 'href="/login/" title="Entrar"')
         self.assertNotContains(response, 'Inativo')
 
     def test_form_aceita_url_em_branco_para_menu_dropdown(self):

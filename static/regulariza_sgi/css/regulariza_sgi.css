@@ -12,7 +12,7 @@
 }
 
 .regulariza-table {
-  min-width: 960px;
+  min-width: 1280px;
 }
 
 .regulariza-search-input {
@@ -23,6 +23,10 @@
 .regulariza-table-wrap {
   overflow-x: auto;
   overflow-y: visible;
+}
+
+.regulariza-table-wrap .dropdown-menu {
+  z-index: 2050;
 }
 
 .regulariza-row-verde {
@@ -89,21 +93,6 @@
   font-weight: 700;
 }
 
-/* Resumo do detalhe combina dados cadastrais e timeline atual. */
-.regulariza-summary-grid {
-  display: grid;
-  grid-template-columns: minmax(320px, 1fr) minmax(520px, 1.4fr);
-  gap: 1.5rem;
-}
-
-.regulariza-summary-list dt {
-  color: #475467;
-}
-
-.regulariza-summary-list dd {
-  font-weight: 600;
-}
-
 .regulariza-badge-verde {
   background: #d1e7dd;
   color: #0f5132;
@@ -124,73 +113,256 @@
   color: #495057;
 }
 
-/* Timeline processual com progresso, marco atual e próximo prazo. */
-.regulariza-timeline {
-  position: relative;
-  padding-top: .5rem;
+/* Detalhe do imóvel com linguagem visual mais limpa, espaçada e orientada a leitura. */
+.regulariza-detail-shell {
+  max-width: 1360px;
+  margin: 0 auto;
+  display: grid;
+  gap: 1rem;
 }
 
-.regulariza-timeline-header,
-.regulariza-timeline-footer {
+.regulariza-detail-header,
+.regulariza-panel-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.regulariza-detail-header {
+  padding: .4rem 0 1rem;
+  border-bottom: 1px solid rgba(15, 23, 42, .08);
+}
+
+.regulariza-detail-header h1 {
+  margin: 0;
+  color: #111827;
+  font-size: 2rem;
+  font-weight: 750;
+}
+
+.regulariza-detail-header p,
+.regulariza-metric-card p,
+.regulariza-timeline-meta,
+.regulariza-definition-grid dd {
+  color: #667085;
+}
+
+.regulariza-detail-header p {
+  margin: .35rem 0 0;
+}
+
+.regulariza-eyebrow {
+  margin: 0 0 .35rem;
+  color: #8a93a3;
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.regulariza-detail-actions {
+  display: flex;
+  gap: .55rem;
   flex-wrap: wrap;
 }
 
-.regulariza-timeline-header {
-  margin-bottom: 1rem;
+.regulariza-detail-actions .btn,
+.regulariza-panel .btn {
+  border-radius: 999px;
 }
 
-.regulariza-timeline-status {
-  display: inline-flex;
-  align-items: center;
-  padding: .3rem .65rem;
-  border-radius: 999px;
-  background: #e8eef9;
-  color: #1f2d4a;
-  font-size: .8rem;
+.regulariza-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.regulariza-metric-card,
+.regulariza-panel,
+.regulariza-content-card {
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .05);
+}
+
+.regulariza-metric-card {
+  min-height: 142px;
+  padding: 1.45rem 1.5rem;
+}
+
+.regulariza-metric-card span {
+  display: block;
+  margin-bottom: .75rem;
+  color: #8a93a3;
+  font-size: .86rem;
   font-weight: 700;
 }
 
-.regulariza-timeline-progress-text {
-  color: #475467;
-  font-size: .9rem;
-  font-weight: 600;
+.regulariza-metric-card strong {
+  display: block;
+  color: #030712;
+  font-size: 1.35rem;
+  line-height: 1.15;
+  word-break: break-word;
+}
+
+.regulariza-metric-card p {
+  margin: .9rem 0 0;
+  font-size: .85rem;
+}
+
+.regulariza-metric-card-alert {
+  border-color: rgba(220, 53, 69, .22);
+}
+
+.regulariza-metric-card-alert strong {
+  color: #b42318;
+}
+
+.regulariza-deadline-cell {
+  min-width: 310px;
+}
+
+.regulariza-deadline-cell strong,
+.regulariza-deadline-cell > span {
+  display: block;
+}
+
+.regulariza-deadline-cell strong {
+  color: #111827;
+  font-size: .88rem;
+}
+
+.regulariza-deadline-cell > span {
+  margin-top: .25rem;
+  color: #667085;
+  font-size: .78rem;
+}
+
+.regulariza-deadline-progress {
+  width: 100%;
+  height: 10px;
+  margin-top: .8rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e6e8ee;
+}
+
+.regulariza-deadline-progress span {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  border-radius: inherit;
+  background: #22c55e;
+}
+
+.regulariza-deadline-progress-amarelo span {
+  background: #f59e0b;
+}
+
+.regulariza-deadline-progress-vermelho span {
+  background: #ef4444;
+}
+
+.regulariza-deadline-progress-neutro span {
+  background: #98a2b3;
+}
+
+.regulariza-panel {
+  padding: 1.5rem;
+}
+
+.regulariza-panel-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 1.25rem;
+  font-weight: 750;
+}
+
+.regulariza-content-card {
+  overflow: hidden;
+}
+
+.regulariza-content-card > .card-body {
+  padding: 1.5rem;
+}
+
+.regulariza-definition-grid {
+  margin: 1rem 0 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.regulariza-definition-grid div {
+  min-width: 0;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(15, 23, 42, .08);
+}
+
+.regulariza-definition-grid dt {
+  margin-bottom: .35rem;
+  color: #8a93a3;
+  font-size: .82rem;
+}
+
+.regulariza-definition-grid dd {
+  margin: 0;
+  font-weight: 650;
+  word-break: break-word;
+}
+
+/* Timeline processual inspirada em painéis analíticos: barra limpa, sem percentual textual. */
+.regulariza-timeline-panel {
+  padding-bottom: 1.65rem;
+}
+
+.regulariza-timeline-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .75rem;
+  flex-wrap: wrap;
+  font-size: .86rem;
+}
+
+.regulariza-timeline {
+  position: relative;
+  margin-top: 1.35rem;
 }
 
 .regulariza-timeline-track {
   position: relative;
-  padding-top: 3.25rem;
-  margin-bottom: 1.35rem;
+  height: 76px;
 }
 
 .regulariza-timeline-line,
 .regulariza-timeline-progress {
   position: absolute;
-  top: 4.2rem;
+  top: 42px;
   left: 0;
-  right: 0;
-  height: 8px;
+  height: 10px;
   border-radius: 999px;
 }
 
 .regulariza-timeline-line {
-  background: #cbd5e1;
+  right: 0;
+  background: #e6e8ee;
 }
 
 .regulariza-timeline-progress {
-  right: auto;
-  background: #198754;
+  max-width: 100%;
+  background: #22c55e;
 }
 
 .regulariza-timeline-amarelo .regulariza-timeline-progress {
-  background: #ffc107;
+  background: #f59e0b;
 }
 
 .regulariza-timeline-vermelho .regulariza-timeline-progress {
-  background: #dc3545;
+  background: #ef4444;
 }
 
 .regulariza-timeline-marker {
@@ -203,10 +375,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 88px;
-  padding: .35rem .6rem;
+  min-width: 84px;
+  padding: .33rem .7rem;
+  border: 1px solid rgba(15, 23, 42, .08);
   border-radius: 999px;
-  background: #1f2d4a;
+  background: #111827;
   color: #fff;
   font-size: .82rem;
   font-weight: 700;
@@ -215,17 +388,17 @@
 .regulariza-timeline-marker::after {
   content: "";
   position: absolute;
-  top: 2rem;
+  top: 1.95rem;
   left: 50%;
   width: 2px;
-  height: 1.7rem;
-  background: rgba(31, 45, 74, .4);
+  height: 1.45rem;
+  background: rgba(17, 24, 39, .35);
   transform: translateX(-50%);
 }
 
 .regulariza-timeline-anchor {
   position: absolute;
-  top: 3.85rem;
+  top: 47px;
   transform: translateY(-50%);
 }
 
@@ -238,33 +411,34 @@
 }
 
 .regulariza-timeline-dot {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #198754;
+  width: 18px;
+  height: 18px;
   border: 3px solid #fff;
-  box-shadow: 0 0 0 3px #198754;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px #22c55e;
 }
 
 .regulariza-timeline-dot-future {
   background: #fff;
-  box-shadow: 0 0 0 3px #cbd5e1;
+  box-shadow: 0 0 0 3px #d5d9e2;
 }
 
 .regulariza-timeline-amarelo .regulariza-timeline-dot {
-  background: #ffc107;
-  box-shadow: 0 0 0 3px #ffc107;
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px #f59e0b;
 }
 
 .regulariza-timeline-vermelho .regulariza-timeline-dot {
-  background: #dc3545;
-  box-shadow: 0 0 0 3px #dc3545;
+  background: #ef4444;
+  box-shadow: 0 0 0 3px #ef4444;
 }
 
 .regulariza-timeline-ends {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.5rem;
+  margin-top: .4rem;
 }
 
 .regulariza-timeline-end {
@@ -277,12 +451,10 @@
 
 .regulariza-timeline-end-label {
   display: block;
-  color: #667085;
+  margin-bottom: .3rem;
+  color: #8a93a3;
   font-size: .76rem;
   font-weight: 700;
-  letter-spacing: .03em;
-  text-transform: uppercase;
-  margin-bottom: .3rem;
 }
 
 .regulariza-timeline-end strong,
@@ -290,14 +462,14 @@
   display: block;
 }
 
-.regulariza-timeline-end span:last-child {
-  color: #475467;
-  font-size: .92rem;
-  margin-top: .25rem;
+.regulariza-timeline-end strong {
+  color: #111827;
 }
 
-.regulariza-timeline-footer {
-  margin-top: 1.25rem;
+.regulariza-timeline-end span:last-child {
+  margin-top: .25rem;
+  color: #667085;
+  font-size: .9rem;
 }
 
 .regulariza-history-resume {
@@ -309,6 +481,28 @@
 
 .regulariza-history-resume strong {
   font-size: 1rem;
+}
+
+.regulariza-history-help {
+  margin: 0 0 1rem;
+  color: #667085;
+  font-size: .92rem;
+}
+
+.regulariza-history-table th {
+  color: #111827;
+  font-size: .86rem;
+}
+
+.regulariza-history-table td {
+  color: #344054;
+  font-size: .9rem;
+}
+
+.regulariza-history-table td:first-child span {
+  display: block;
+  color: #667085;
+  font-size: .78rem;
 }
 
 .regulariza-history-item {
@@ -351,15 +545,15 @@
 }
 
 @media (max-width: 991.98px) {
-  /* Em telas menores, resumo e timeline passam para uma coluna. */
-  .regulariza-summary-grid {
-    grid-template-columns: 1fr;
+  /* Em telas menores, cartões e timeline passam a priorizar leitura vertical. */
+  .regulariza-metric-grid,
+  .regulariza-definition-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .regulariza-timeline-line,
-  .regulariza-timeline-progress {
-    left: 0;
-    right: 0;
+  .regulariza-detail-header,
+  .regulariza-panel-header {
+    display: grid;
   }
 
   .regulariza-timeline-ends {
@@ -368,5 +562,22 @@
 
   .regulariza-timeline-end-next {
     text-align: left;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .regulariza-detail-header h1 {
+    font-size: 1.55rem;
+  }
+
+  .regulariza-metric-grid,
+  .regulariza-definition-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .regulariza-panel,
+  .regulariza-content-card > .card-body,
+  .regulariza-metric-card {
+    padding: 1rem;
   }
 }

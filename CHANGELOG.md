@@ -3,6 +3,21 @@
 Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
 ## [Unreleased]
+- Reformulada a navegação global:
+  - Substituída a navbar horizontal por uma sidebar vertical dentro e fora da área autenticada.
+  - A sidebar inicia recolhida, expande ao passar o mouse ou receber foco e diferencia visualmente os itens de primeiro e segundo nível.
+  - Removido o item redundante "Home", mantendo "Intranet SPI" como acesso à página inicial.
+  - Mantida a sidebar também na tela de login e atualizado o teste de renderização da navbar pública.
+- Reforçado o envio do formulário de logout para atualizar o token CSRF antes da requisição e evitar falhas causadas por páginas antigas no navegador.
+- Redesenhada a página de detalhe dos imóveis do RegulaSGI:
+  - Criados cartões de resumo e uma timeline processual mais clara, sem exibição de percentual.
+  - Renomeado o modal para "Histórico Completo do Imóvel" e simplificado o histórico para mostrar apenas eventos efetivamente registrados.
+  - Corrigido o cálculo de dias para considerar o fuso horário local e impedir valores negativos.
+- Aprimorada a listagem de imóveis do RegulaSGI:
+  - Adicionada a coluna "Prazo" antes das ações, com próxima etapa, data limite, dias restantes e barra de progresso.
+  - Definidas as faixas de progresso em verde até 50%, amarelo de 51% a 75% e vermelho acima de 75%.
+  - Corrigido o posicionamento do menu de ações para sobrepor a área rolável da tabela sem ser cortado.
+- Adicionadas as pastas locais de certificados ao `.gitignore`, evitando o versionamento de certificados e chaves privadas.
 - Documentados arquivos `.py`, `.html` e `.css` dos apps e templates principais com cabeçalhos de autoria, resumo do objetivo do arquivo e comentários explicativos em português brasileiro.
   - Incluídos comentários nos apps `acls`, `aplicacoesspi`, `assinatura_e_mail`, `atalhos`, `licitacoes`, `navbar`, `noticias`, `organograma`, `regulariza_sgi`, `setores` e `usuarios`.
   - Documentados templates globais, templates por app e CSS estáticos ainda sem cabeçalho.

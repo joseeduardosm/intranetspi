@@ -19,6 +19,10 @@ docs/
 staticfiles/
 media/
 
+# Certificados e chaves privadas permanecem somente no servidor.
+certificado/
+certificados_ad/
+
 .DS_Store
 .vscode/
 .idea/

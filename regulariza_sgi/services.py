@@ -110,6 +110,12 @@ def today_local():
     return timezone.localdate()
 
 
+def imovel_created_local_date(imovel):
+    """Converte o cadastro do imóvel para a data local antes de calcular prazos."""
+
+    return timezone.localtime(imovel.criado_em).date()
+
+
 def add_years_safe(base_date: date, years: int) -> date:
     """Soma anos tratando 29 de fevereiro em anos não bissextos."""
 
@@ -136,9 +142,9 @@ def timeline_color(progress_percent: float | None):
 
     if progress_percent is None:
         return TIMELINE_COLOR_NEUTRAL
-    if progress_percent < 75:
+    if progress_percent <= 50:
         return TIMELINE_COLOR_GREEN
-    if progress_percent < 90:
+    if progress_percent <= 75:
         return TIMELINE_COLOR_YELLOW
     return TIMELINE_COLOR_RED
 
@@ -217,6 +223,57 @@ def ciclo_badges(imovel, ciclo):
 
 def usuario_display(usuario):
     return usuario or 'Sistema'
+
+
+def historico_evento_display(marco):
+    """Traduz marcos técnicos em eventos legíveis para o histórico completo do imóvel."""
+
+    nomes = {
+        'CADASTRO': 'Cadastro do imóvel',
+        'PROTOCOLO_PREVISTO': 'Prazo para protocolar',
+        'PROTOCOLO': 'Protocolo registrado',
+        'PRORROGACAO': 'Prorrogação registrada',
+        'MANIFESTACAO_PREVISTA': 'Prazo para manifestação',
+        'DEFERIMENTO': 'Manifestação deferida',
+        'INDEFERIMENTO': 'Manifestação indeferida',
+        'CONTRARRAZAO': 'Prazo para contrarrazão',
+        'RENOVACAO': 'Renovação prevista',
+        'VENCIMENTO_IMUNIDADE': 'Vencimento da imunidade',
+    }
+    observacoes = {
+        'CADASTRO': 'Marco inicial criado junto com o cadastro do imóvel.',
+        'PROTOCOLO_PREVISTO': 'Data limite calculada automaticamente a partir do cadastro.',
+        'PROTOCOLO': 'Evento real informado pelo usuário no acompanhamento processual.',
+        'PRORROGACAO': 'Prorrogação somada ao prazo de manifestação.',
+        'MANIFESTACAO_PREVISTA': 'Prazo final calculado após protocolo e eventuais prorrogações.',
+        'DEFERIMENTO': 'Resultado registrado na manifestação.',
+        'INDEFERIMENTO': 'Resultado registrado na manifestação.',
+        'CONTRARRAZAO': 'Prazo automático aberto após indeferimento.',
+        'RENOVACAO': 'Data recomendada para iniciar renovação antes do vencimento.',
+        'VENCIMENTO_IMUNIDADE': 'Fim da vigência calculada após deferimento.',
+    }
+    return {
+        'etapa': nomes.get(marco.tipo, marco.titulo),
+        'natureza': 'Realizado' if marco.data_real else 'Previsto',
+        'data': marco.data_real or marco.data_prevista,
+        'usuario': usuario_display(marco.usuario_responsavel),
+        'observacao': observacoes.get(marco.tipo, 'Marco do ciclo processual.'),
+    }
+
+
+def historico_completo_eventos(ciclos):
+    """Monta linhas de histórico já explicadas para evitar ambiguidades entre prazo e evento real."""
+
+    eventos = []
+    for ciclo in ciclos:
+        for marco in ciclo.marcos.all():
+            if not marco.data_real:
+                continue
+            evento = historico_evento_display(marco)
+            evento['ciclo'] = ciclo.numero
+            evento['tipo_ciclo'] = ciclo.get_tipo_display()
+            eventos.append(evento)
+    return eventos
 
 
 def timeline_edges(ciclo):
@@ -317,25 +374,31 @@ def compute_timeline_context(imovel):
             next_edge.usuario = usuario_display(marco_map[next_edge.tipo].usuario_responsavel)
     prazo_total_dias = (segmento.fim - segmento.inicio).days if segmento else None
     dias_consumidos = max(0, (today_local() - segmento.inicio).days) if segmento else None
+    dias_restantes = None
+    if next_edge and next_edge.data:
+        dias_restantes = max(0, (next_edge.data - today_local()).days)
     historico_marcos = []
     if ciclo:
         historico_marcos = list(
             imovel.ciclos.order_by('-numero', 'id').prefetch_related('marcos')
         )
+    historico_eventos = historico_completo_eventos(historico_marcos)
     return {
         'ciclo_atual': ciclo,
         'historico': historico,
         'historico_marcos': historico_marcos,
+        'historico_eventos': historico_eventos,
         'status': ciclo_status(ciclo),
         'badges': ciclo_badges(imovel, ciclo),
         'color': color,
         'progress_percent': progress_percent,
         'marker_percent': marker_percent,
-        'dias_desde_cadastro': (today_local() - imovel.criado_em.date()).days,
+        'dias_desde_cadastro': max(0, (today_local() - imovel_created_local_date(imovel)).days),
         'marco_atual': current_edge,
         'proximo_marco': next_edge,
         'prazo_total_dias': prazo_total_dias,
         'dias_consumidos_trecho': dias_consumidos,
+        'dias_restantes': dias_restantes,
     }
 
 
@@ -484,10 +547,11 @@ def create_initial_cycle(imovel):
 
     if imovel.ciclos.exists():
         return current_cycle(imovel)
+    data_inicio = imovel_created_local_date(imovel)
     ciclo = imovel.ciclos.create(
         numero=1,
         tipo='inicial',
-        data_inicio=imovel.criado_em.date(),
+        data_inicio=data_inicio,
     )
     rebuild_marcos(ciclo)
     return ciclo

@@ -223,11 +223,13 @@ class RegularizaSgiTests(TestCase):
         verde = self.criar_imovel(inscricao_imobiliaria='111')
         amarelo = self.criar_imovel(inscricao_imobiliaria='222')
         vermelho = self.criar_imovel(inscricao_imobiliaria='333')
-        for imovel, days_ago in ((verde, 10), (amarelo, 24), (vermelho, 28)):
+        # Em um prazo de 30 dias: 50% permanece verde, 60% é amarelo e acima de 75% é vermelho.
+        for imovel, days_ago in ((verde, 15), (amarelo, 18), (vermelho, 23)):
             created_at = timezone.now() - timedelta(days=days_ago)
+            local_start_date = timezone.localdate() - timedelta(days=days_ago)
             Imovel.objects.filter(pk=imovel.pk).update(criado_em=created_at)
             ciclo = current_cycle(imovel)
-            CicloProcessual.objects.filter(pk=ciclo.pk).update(data_inicio=created_at.date())
+            CicloProcessual.objects.filter(pk=ciclo.pk).update(data_inicio=local_start_date)
         verde.refresh_from_db()
         amarelo.refresh_from_db()
         vermelho.refresh_from_db()
