@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
+<!-- Objetivo: Confirmar exclusões do módulo de contratos com o mesmo padrão visual do portal. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="card border-0 shadow-sm contratos-form-card">
+    <div class="card-body p-4">
+      <h1 class="h3 mb-3">Confirmar exclusão</h1>
+      <p>Tem certeza de que deseja excluir <strong>{{ object }}</strong>?</p>
+      <form method="post">
+        {% csrf_token %}
+        <div class="d-flex gap-2 justify-content-end">
+          <a class="btn btn-light" href="javascript:history.back()">Cancelar</a>
+          <button class="btn btn-danger" type="submit">Excluir</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+

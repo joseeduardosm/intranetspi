@@ -35,6 +35,7 @@ urlpatterns = [
     path('home/', views.HomeView.as_view(), name='home'),
     path('assinatura-e-mail/', include('assinatura_e_mail.urls')),
     path('atalhos/', include('atalhos.urls')),
+    path('contratos/', include('contratos.urls')),
     path('', include('usuarios.urls')),
     path('licitacoes/', include('licitacoes.urls')),
     path('navbar/', include('navbar.urls')),

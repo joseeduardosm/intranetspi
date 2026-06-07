@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
+<!-- Objetivo: Exibir a listagem principal de contratos com filtros e alertas visuais. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start">
+    <div>
+      <h1>Contratos</h1>
+      <p>Gestão integrada de vigência, execução e histórico contratual.</p>
+    </div>
+    <a class="btn btn-primary btn-lg" href="{% url 'contratos:contrato_create' %}">Novo contrato</a>
+  </div>
+
+  <form class="card border-0 shadow-sm contratos-filtros mb-4" method="get">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Busca</label>
+          <input class="form-control" type="text" name="q" value="{{ request.GET.q }}" placeholder="Número, apelido, objeto ou empresa">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Situação</label>
+          <select class="form-select" name="situacao">
+            <option value="">Todas</option>
+            {% for value, label in contratos.model.Situacao.choices %}
+              <option value="{{ value }}"{% if request.GET.situacao == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Regime</label>
+          <select class="form-select" name="regime">
+            <option value="">Todos</option>
+            {% for value, label in contratos.model.Regime.choices %}
+              <option value="{{ value }}"{% if request.GET.regime == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button class="btn btn-primary w-100" type="submit">Filtrar</button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0 contratos-table">
+        <thead>
+          <tr>
+            <th>Número</th>
+            <th>Apelido</th>
+            <th>Empresa</th>
+            <th>Situação</th>
+            <th>Prazo atual</th>
+            <th>Período acumulado</th>
+            <th>Data final</th>
+            <th>Regime</th>
+            <th>Valor global</th>
+            <th class="text-end">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for contrato in contratos %}
+            <tr class="alerta-{{ contrato.alerta_vigencia }}">
+              <td>{{ contrato.numero_contrato }}</td>
+              <td>{{ contrato.apelido }}</td>
+              <td>{{ contrato.empresa_contratada.razao_social }}</td>
+              <td><span class="contratos-badge situacao-{{ contrato.situacao_atual|lower }}">{{ contrato.situacao_atual_display }}</span></td>
+              <td>{{ contrato.prazo_atual_display }}</td>
+              <td>{{ contrato.periodo_acumulado_display }}</td>
+              <td>{{ contrato.data_final_vigencia|date:"d/m/Y" }}</td>
+              <td><span class="contratos-badge regime-{{ contrato.regime_atual|lower }}">{{ contrato.regime_atual_display }}</span></td>
+              <td>R$ {{ contrato.valor_global }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-primary" href="{% url 'contratos:contrato_detail' contrato.pk %}">Abrir</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos:dashboard' contrato.pk %}">Painel</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos:contrato_update' contrato.pk %}">Editar</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10" class="text-muted">Nenhum contrato encontrado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

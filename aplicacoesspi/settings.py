@@ -46,6 +46,21 @@ ALLOWED_HOSTS = [
     'portal.spi.sp.gov.br',
 ]
 
+# O Nginx encerra o TLS e repassa a requisição ao Gunicorn em HTTP local.
+# Este cabeçalho permite que o Django reconheça as requisições externas como HTTPS.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Origens institucionais aceitas para validações CSRF em acessos HTTP/HTTPS do portal.
+CSRF_TRUSTED_ORIGINS = [
+    'https://portal.spi.sp.gov.br',
+    'http://portal.spi.sp.gov.br',
+    'https://intranet.spi.sp.gov.br',
+    'http://intranet.spi.sp.gov.br',
+    'http://10.23.1.245',
+    'http://10.23.1.243',
+    'http://100.94.53.27',
+]
+
 
 # Application definition
 
@@ -59,6 +74,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'assinatura_e_mail',
     'atalhos',
+    'contratos',
     'licitacoes',
     'navbar',
     'noticias',

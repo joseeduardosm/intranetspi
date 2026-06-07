@@ -46,7 +46,12 @@ class ACLRequiredMixin(UserPassesTestMixin):
         # Se for nível MODIFICACAO em uma View de Edição/Exclusão, verifica se o usuário é o dono
         # do objeto. Assume que o objeto possui um atributo 'criado_por' ou 'usuario'.
         if nivel_atual == RegraAcesso.NIVEL_MODIFICACAO and self.request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
-            obj = getattr(self, 'object', None) or (self.get_object() if hasattr(self, 'get_object') else None)
+            obj = getattr(self, 'object', None)
+            if obj is None and hasattr(self, 'get_object'):
+                # CreateViews também herdam o método get_object, mas não possuem pk/slug na URL.
+                kwargs = getattr(self, 'kwargs', {}) or {}
+                if kwargs.get('pk') or kwargs.get('slug'):
+                    obj = self.get_object()
             if obj:
                 # Tenta localizar o campo de propriedade do registro
                 dono = getattr(obj, 'criado_por', None) or getattr(obj, 'user', None) or getattr(obj, 'usuario', None)

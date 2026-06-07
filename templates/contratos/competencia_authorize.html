@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
+<!-- Objetivo: Confirmar a autorização do pagamento com espera visual obrigatória. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="contratos-authorize-backdrop">
+    <div class="card border-0 shadow-lg contratos-authorize-card">
+      <div class="card-body p-4 p-lg-5">
+        <h1 class="h3 mb-3">Confirmação de pagamento</h1>
+        <p class="fs-5">
+          Confirma que toda a documentação obrigatória foi analisada, validada e encontra-se em conformidade para autorização do pagamento?
+        </p>
+        <p class="text-muted">A confirmação será liberada em <strong data-countdown>10</strong> segundos.</p>
+        <form method="post" class="d-flex gap-2 justify-content-end mt-4">
+          {% csrf_token %}
+          <a class="btn btn-light" href="{% url 'contratos:contrato_detail' object.contrato.pk %}">Cancelar</a>
+          <button class="btn btn-success" type="submit" data-confirm-button disabled>Autorizar pagamento</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const label = document.querySelector('[data-countdown]');
+      const button = document.querySelector('[data-confirm-button]');
+      if (!label || !button) {
+        return;
+      }
+      let remaining = 10;
+      const timer = window.setInterval(() => {
+        remaining -= 1;
+        label.textContent = remaining;
+        if (remaining <= 0) {
+          window.clearInterval(timer);
+          button.disabled = false;
+          label.textContent = '0';
+        }
+      }, 1000);
+    }());
+  </script>
+{% endblock %}

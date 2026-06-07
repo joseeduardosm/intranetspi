@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
+<!-- Objetivo: Exibir o painel financeiro e gerencial inicial do contrato. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Painel do contrato {{ contrato.numero_contrato }}</h1>
+    <p>Indicadores consolidados da execução financeira e da carteira.</p>
+  </div>
+
+  <section class="contratos-summary-grid mb-4">
+    <article class="card border-0 shadow-sm contratos-summary-card"><div class="card-body"><span class="contratos-kicker">Contratado</span><h2>R$ {{ contrato.valor_global }}</h2></div></article>
+    <article class="card border-0 shadow-sm contratos-summary-card"><div class="card-body"><span class="contratos-kicker">Executado</span><h2>R$ {{ valor_executado }}</h2></div></article>
+    <article class="card border-0 shadow-sm contratos-summary-card"><div class="card-body"><span class="contratos-kicker">Saldo</span><h2>R$ {{ saldo_contratual }}</h2></div></article>
+    <article class="card border-0 shadow-sm contratos-summary-card"><div class="card-body"><span class="contratos-kicker">Percentual executado</span><h2>{{ percentual_executado }}%</h2></div></article>
+  </section>
+
+  <section class="card border-0 shadow-sm mb-4">
+    <div class="card-header contratos-section-header">
+      <h2>Barra de execução</h2>
+    </div>
+    <div class="card-body">
+      <div class="progress contratos-progress" role="progressbar" aria-label="Execução financeira" aria-valuenow="{{ percentual_executado }}" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-bar" style="width: {{ percentual_executado }}%">{{ percentual_executado }}%</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <section class="card border-0 shadow-sm">
+        <div class="card-header contratos-section-header"><h2>Contratos por empresa</h2></div>
+        <ul class="list-group list-group-flush">
+          {% for row in contratos_por_empresa %}
+            <li class="list-group-item d-flex justify-content-between"><span>{{ row.empresa_contratada__razao_social }}</span><strong>{{ row.total }}</strong></li>
+          {% endfor %}
+        </ul>
+      </section>
+    </div>
+    <div class="col-lg-6">
+      <section class="card border-0 shadow-sm">
+        <div class="card-header contratos-section-header"><h2>Contratos por gestor</h2></div>
+        <ul class="list-group list-group-flush">
+          {% for row in contratos_por_gestor %}
+            <li class="list-group-item d-flex justify-content-between"><span>{{ row.gestor_contrato__username }}</span><strong>{{ row.total }}</strong></li>
+          {% endfor %}
+        </ul>
+      </section>
+    </div>
+  </div>
+{% endblock %}
+

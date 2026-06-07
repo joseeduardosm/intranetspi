@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
+<!-- Objetivo: Reaproveitar um formulário genérico para os cadastros do módulo. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{{ titulo }}</h1>
+  </div>
+  <div class="card border-0 shadow-sm contratos-form-card">
+    <div class="card-body p-4">
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% if show_empresa_atalho and form.empresa_contratada %}
+          {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+          {% for field in form.visible_fields %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {% if field.name == 'empresa_contratada' %}
+                <div class="contratos-field-with-action">
+                  <div class="flex-grow-1">
+                    {{ field }}
+                  </div>
+                  <a class="btn btn-outline-primary contratos-inline-action-btn" href="{% url 'contratos:empresa_create' %}" title="Cadastrar nova empresa" aria-label="Cadastrar nova empresa">+</a>
+                </div>
+              {% else %}
+                {{ field }}
+              {% endif %}
+              {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+              {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+          {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+        {% else %}
+          {{ form.as_p }}
+        {% endif %}
+        {% if detalhamento_formset %}
+          <section class="contratos-inline-section">
+            <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+              <div>
+                <h2 class="h5 mb-1">Detalhamento do objeto</h2>
+                <p class="text-muted mb-0">Use itens estruturados no estilo do mecanismo de tabela do TR.</p>
+              </div>
+              <button class="btn btn-sm btn-primary" type="button" data-add-detalhamento>+ item</button>
+            </div>
+            {{ detalhamento_formset.management_form }}
+            <div class="contratos-inline-list" data-detalhamento-list>
+              {% for item_form in detalhamento_formset %}
+                <article class="contratos-inline-card" data-detalhamento-item>
+                  {% for hidden in item_form.hidden_fields %}{{ hidden }}{% endfor %}
+                  <div class="row g-3 align-items-start">
+                    <div class="col-md-2">
+                      <label class="form-label" for="{{ item_form.ordem.id_for_label }}">Item</label>
+                      {{ item_form.ordem }}
+                    </div>
+                    <div class="col-md-9">
+                      <label class="form-label" for="{{ item_form.descricao.id_for_label }}">Descrição</label>
+                      {{ item_form.descricao }}
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                      {% if item_form.DELETE %}
+                        <button class="btn btn-sm btn-outline-danger w-100" type="button" data-remove-detalhamento>Remover</button>
+                        <div class="d-none">{{ item_form.DELETE }}</div>
+                      {% endif %}
+                    </div>
+                  </div>
+                </article>
+              {% endfor %}
+            </div>
+          </section>
+          <template id="detalhamento-empty-form-template">
+            {% with item_form=detalhamento_formset.empty_form %}
+              <article class="contratos-inline-card" data-detalhamento-item>
+                {% for hidden in item_form.hidden_fields %}{{ hidden }}{% endfor %}
+                <div class="row g-3 align-items-start">
+                  <div class="col-md-2">
+                    <label class="form-label" for="{{ item_form.ordem.id_for_label }}">Item</label>
+                    {{ item_form.ordem }}
+                  </div>
+                  <div class="col-md-9">
+                    <label class="form-label" for="{{ item_form.descricao.id_for_label }}">Descrição</label>
+                    {{ item_form.descricao }}
+                  </div>
+                  <div class="col-md-1 d-flex align-items-end">
+                    {% if item_form.DELETE %}
+                      <button class="btn btn-sm btn-outline-danger w-100" type="button" data-remove-detalhamento>Remover</button>
+                      <div class="d-none">{{ item_form.DELETE }}</div>
+                    {% endif %}
+                  </div>
+                </div>
+              </article>
+            {% endwith %}
+          </template>
+        {% endif %}
+        <div class="d-flex gap-2 justify-content-end">
+          <a class="btn btn-light" href="javascript:history.back()">Cancelar</a>
+          <button class="btn btn-primary" type="submit">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% if form.numero_contrato_incremental %}
+    <script>
+      (function () {
+        const checkbox = document.getElementById('id_numero_contrato_incremental');
+        const numeroInput = document.getElementById('id_numero_contrato');
+        if (!checkbox || !numeroInput) {
+          return;
+        }
+
+        const toggleNumeroField = () => {
+          const automatico = checkbox.checked;
+          numeroInput.readOnly = automatico;
+          if (automatico) {
+            numeroInput.setAttribute('placeholder', 'Será preenchido automaticamente ao salvar');
+          } else {
+            numeroInput.removeAttribute('placeholder');
+          }
+        };
+
+        checkbox.addEventListener('change', toggleNumeroField);
+        toggleNumeroField();
+      }());
+    </script>
+  {% endif %}
+  {% if detalhamento_formset %}
+    <script>
+      (function () {
+        const addButton = document.querySelector('[data-add-detalhamento]');
+        const list = document.querySelector('[data-detalhamento-list]');
+        const totalForms = document.getElementById('id_detalhamento-TOTAL_FORMS');
+        const template = document.getElementById('detalhamento-empty-form-template');
+        if (!addButton || !list || !totalForms || !template) {
+          return;
+        }
+
+        const refreshOrderValues = () => {
+          const cards = Array.from(list.querySelectorAll('[data-detalhamento-item]')).filter((card) => card.style.display !== 'none');
+          cards.forEach((card, index) => {
+            const ordemInput = card.querySelector('input[name$="-ordem"]');
+            if (ordemInput && !ordemInput.value) {
+              ordemInput.value = index + 1;
+            }
+          });
+        };
+
+        addButton.addEventListener('click', () => {
+          const formIndex = Number(totalForms.value);
+          const html = template.innerHTML.replace(/__prefix__/g, formIndex);
+          list.insertAdjacentHTML('beforeend', html);
+          totalForms.value = String(formIndex + 1);
+          refreshOrderValues();
+        });
+
+        list.addEventListener('click', (event) => {
+          const button = event.target.closest('[data-remove-detalhamento]');
+          if (!button) {
+            return;
+          }
+          const card = button.closest('[data-detalhamento-item]');
+          const deleteInput = card ? card.querySelector('input[type="checkbox"][name$="-DELETE"]') : null;
+          const idInput = card ? card.querySelector('input[name$="-id"]') : null;
+          if (!card) {
+            return;
+          }
+          if (deleteInput && idInput && idInput.value) {
+            deleteInput.checked = true;
+            card.style.display = 'none';
+            return;
+          }
+          card.remove();
+          refreshOrderValues();
+        });
+
+        refreshOrderValues();
+      }());
+    </script>
+  {% endif %}
+{% endblock %}

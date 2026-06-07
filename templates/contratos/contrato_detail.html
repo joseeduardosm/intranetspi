@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
+<!-- Objetivo: Exibir a visão 360º do contrato e seus fluxos satélites. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start">
+    <div>
+      <h1>{{ contrato.numero_contrato }} - {{ contrato.apelido }}</h1>
+      <p>{{ contrato.objeto }}</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'contratos:dashboard' contrato.pk %}">Painel</a>
+      <a class="btn btn-primary" href="{% url 'contratos:contrato_update' contrato.pk %}">Editar contrato</a>
+    </div>
+  </div>
+
+  <section class="contratos-summary-grid mb-4">
+    <article class="card border-0 shadow-sm contratos-summary-card">
+      <div class="card-body">
+        <span class="contratos-kicker">Situação</span>
+        <h2>{{ contrato.situacao_atual }}</h2>
+        <p>{{ contrato.prazo_atual_display }}</p>
+      </div>
+    </article>
+    <article class="card border-0 shadow-sm contratos-summary-card">
+      <div class="card-body">
+        <span class="contratos-kicker">Regime</span>
+        <h2>{{ contrato.regime_atual }}</h2>
+        <p>Limite ordinário: {{ contrato.data_limite_vigencia|date:"d/m/Y" }}</p>
+      </div>
+    </article>
+    <article class="card border-0 shadow-sm contratos-summary-card">
+      <div class="card-body">
+        <span class="contratos-kicker">Valor global</span>
+        <h2>R$ {{ contrato.valor_global }}</h2>
+        <p>Base mensal: R$ {{ contrato.base_mensal }}</p>
+      </div>
+    </article>
+    <article class="card border-0 shadow-sm contratos-summary-card">
+      <div class="card-body">
+        <span class="contratos-kicker">Empresa</span>
+        <h2>{{ contrato.empresa_contratada.razao_social }}</h2>
+        <p>{{ contrato.empresa_contratada.cnpj }}</p>
+      </div>
+    </article>
+  </section>
+
+  <div class="row g-4">
+    <div class="col-xl-8">
+      <section class="card border-0 shadow-sm mb-4">
+        <div class="card-header contratos-section-header">
+          <h2>Itens do contrato</h2>
+          <a class="btn btn-sm btn-primary" href="{% url 'contratos:item_create' contrato.pk %}">Novo item</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Descrição</th>
+                <th>Quantidade</th>
+                <th>Valor unitário</th>
+                <th>Subtotal</th>
+                <th>Referencial</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in contrato.itens.all %}
+                <tr>
+                  <td>{{ item.ordem }}</td>
+                  <td>{{ item.descricao }}</td>
+                  <td>{{ item.quantidade }}</td>
+                  <td>R$ {{ item.valor_unitario }}</td>
+                  <td>R$ {{ item.valor_subtotal }}</td>
+                  <td>R$ {{ item.valor_referencial }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="6" class="text-muted">Nenhum item cadastrado.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card border-0 shadow-sm mb-4">
+        <div class="card-header contratos-section-header">
+          <h2>Termos aditivos</h2>
+          <a class="btn btn-sm btn-primary" href="{% url 'contratos:aditivo_create' contrato.pk %}">Novo aditivo</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Termo</th>
+                <th>Tipo</th>
+                <th>Início</th>
+                <th>Término</th>
+                <th>Meses</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for aditivo in contrato.aditivos.all %}
+                <tr>
+                  <td>{{ aditivo.numero_termo }}</td>
+                  <td>{{ aditivo.get_tipo_display }}</td>
+                  <td>{{ aditivo.data_inicio|date:"d/m/Y" }}</td>
+                  <td>{{ aditivo.data_termino|date:"d/m/Y" }}</td>
+                  <td>{{ aditivo.quantidade_meses }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5" class="text-muted">Nenhum aditivo registrado.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card border-0 shadow-sm mb-4">
+        <div class="card-header contratos-section-header">
+          <h2>Documentos</h2>
+          <a class="btn btn-sm btn-primary" href="{% url 'contratos:documento_create' contrato.pk %}">Novo documento</a>
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for documento in contrato.documentos.all %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              <div>
+                <strong>{{ documento.descricao }}</strong>
+                <div class="text-muted small">{{ documento.get_tipo_display }} • {{ documento.data_documento|date:"d/m/Y" }}</div>
+              </div>
+              <a class="btn btn-sm btn-outline-secondary" href="{{ documento.arquivo.url }}" target="_blank" rel="noopener">Abrir</a>
+            </li>
+          {% empty %}
+            <li class="list-group-item text-muted">Nenhum documento anexado.</li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="card border-0 shadow-sm mb-4">
+        <div class="card-header contratos-section-header">
+          <div>
+            <h2>Diário de bordo</h2>
+            <p class="mb-0 text-muted">Ocorrências auditáveis da execução contratual.</p>
+          </div>
+          <div class="d-flex gap-2">
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos:ocorrencia_export_xlsx' contrato.pk %}">XLSX</a>
+            <a class="btn btn-sm btn-primary" href="{% url 'contratos:ocorrencia_create' contrato.pk %}">Nova ocorrência</a>
+          </div>
+        </div>
+        <div class="card-body contratos-timeline">
+          {% for ocorrencia in contrato.ocorrencias.all %}
+            <article class="contratos-timeline-item">
+              <div class="contratos-timeline-date">{{ ocorrencia.data_registro|date:"d/m/Y" }} {{ ocorrencia.hora_registro|time:"H:i" }}</div>
+              <h3>{{ ocorrencia.tipo_ocorrencia }}</h3>
+              <p>{{ ocorrencia.descricao }}</p>
+              <div class="text-muted small">
+                {% if ocorrencia.usuario %}{{ ocorrencia.usuario.get_full_name|default:ocorrencia.usuario.username }}{% else %}Sem usuário{% endif %}
+                • <a href="{% url 'contratos:ocorrencia_anexo_create' ocorrencia.pk %}">Adicionar anexo</a>
+              </div>
+            </article>
+          {% empty %}
+            <p class="text-muted mb-0">Nenhuma ocorrência registrada.</p>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+
+    <div class="col-xl-4">
+      <section class="card border-0 shadow-sm mb-4">
+        <div class="card-header contratos-section-header">
+          <h2>Responsáveis internos</h2>
+        </div>
+        <div class="card-body">
+          <ul class="list-unstyled mb-0">
+            <li><strong>Gestor:</strong> <a href="#" data-bs-toggle="modal" data-bs-target="#responsavel-{{ contrato.gestor_contrato.pk }}">{{ contrato.gestor_contrato.get_full_name|default:contrato.gestor_contrato.username }}</a></li>
+            <li><strong>Fiscal administrativo:</strong> <a href="#" data-bs-toggle="modal" data-bs-target="#responsavel-{{ contrato.fiscal_administrativo.pk }}">{{ contrato.fiscal_administrativo.get_full_name|default:contrato.fiscal_administrativo.username }}</a></li>
+            <li><strong>Fiscal técnico:</strong> <a href="#" data-bs-toggle="modal" data-bs-target="#responsavel-{{ contrato.fiscal_tecnico.pk }}">{{ contrato.fiscal_tecnico.get_full_name|default:contrato.fiscal_tecnico.username }}</a></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="card border-0 shadow-sm mb-4">
+        <div class="card-header contratos-section-header">
+          <h2>Checklist padrão</h2>
+          {% if contrato.competencias.first %}
+            <a class="btn btn-sm btn-primary" href="{% url 'contratos:checklist_modelo_create' contrato.competencias.first.pk %}">Novo item</a>
+          {% endif %}
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for item in contrato.checklist_modelos.all %}
+            <li class="list-group-item">{{ item.ordem }}. {{ item.titulo }}</li>
+          {% empty %}
+            <li class="list-group-item text-muted">Cadastre o checklist a partir de uma competência.</li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="card border-0 shadow-sm mb-4">
+        <div class="card-header contratos-section-header">
+          <h2>Modelos de qualidade</h2>
+          <a class="btn btn-sm btn-primary" href="{% url 'contratos:modelo_qualidade_create' contrato.pk %}">Novo modelo</a>
+        </div>
+        <div class="card-body">
+          {% for modelo in contrato.modelos_qualidade.all %}
+            <article class="mb-3">
+              <strong>{{ modelo.nome }}</strong>
+              <div class="small text-muted mb-2">Vigência {{ modelo.vigencia_inicio|date:"d/m/Y" }}</div>
+              <div class="d-flex gap-2 flex-wrap">
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos:grupo_qualidade_create' modelo.pk %}">Novo grupo</a>
+              </div>
+            </article>
+          {% empty %}
+            <p class="text-muted mb-0">Nenhum modelo de qualidade cadastrado.</p>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="card border-0 shadow-sm mb-4">
+        <div class="card-header contratos-section-header">
+          <h2>Eventos financeiros</h2>
+          <a class="btn btn-sm btn-primary" href="{% url 'contratos:evento_create' contrato.pk %}">Novo evento</a>
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for evento in contrato.eventos_financeiros.all %}
+            <li class="list-group-item">
+              <strong>{{ evento.get_tipo_display }}</strong>
+              <div class="small text-muted">{{ evento.indice_aplicado }} • base {{ evento.data_base|date:"d/m/Y" }}</div>
+              <a class="small" href="{% url 'contratos:evento_item_create' evento.pk %}">Adicionar item reajustado</a>
+            </li>
+          {% empty %}
+            <li class="list-group-item text-muted">Nenhum evento financeiro registrado.</li>
+          {% endfor %}
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <section class="card border-0 shadow-sm">
+    <div class="card-header contratos-section-header">
+      <h2>Competências de pagamento</h2>
+      <a class="btn btn-sm btn-primary" href="{% url 'contratos:competencia_create' contrato.pk %}">Nova competência</a>
+    </div>
+    <div class="card-body">
+      {% for competencia in competencias %}
+        <article class="contratos-competencia-card">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+              <h3>{{ competencia.periodo_inicio|date:"m/Y" }}</h3>
+              <p class="text-muted mb-1">{{ competencia.periodo_inicio|date:"d/m/Y" }} a {{ competencia.periodo_fim|date:"d/m/Y" }}</p>
+              <p class="mb-0">Status: <strong>{{ competencia.get_status_display }}</strong></p>
+            </div>
+            <div class="text-end">
+              <div><strong>Medido:</strong> R$ {{ competencia.valor_medido }}</div>
+              <div><strong>Liberado:</strong> R$ {{ competencia.valor_liberado }}</div>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-1">
+            <div class="col-lg-4">
+              <h4>Checklist</h4>
+              <ul class="list-group">
+                {% for item in competencia.checklist_itens.all %}
+                  <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{{ item.titulo }}</span>
+                    <div class="d-flex gap-2 align-items-center">
+                      <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos:checklist_anexo_create' item.pk %}">Anexo</a>
+                      <form method="post" action="{% url 'contratos:checklist_item_toggle' competencia.pk item.pk %}">
+                        {% csrf_token %}
+                        <button class="btn btn-sm {% if item.concluido %}btn-success{% else %}btn-outline-secondary{% endif %}" type="submit">
+                          {% if item.concluido %}Concluído{% else %}Pendente{% endif %}
+                        </button>
+                      </form>
+                    </div>
+                  </li>
+                {% empty %}
+                  <li class="list-group-item text-muted">Sem checklist replicado.</li>
+                {% endfor %}
+              </ul>
+            </div>
+
+            <div class="col-lg-4">
+              <h4>Medições</h4>
+              <a class="btn btn-sm btn-outline-primary mb-2" href="{% url 'contratos:medicao_create' competencia.pk %}">Nova medição</a>
+              <ul class="list-group">
+                {% for medicao in competencia.medicoes.all %}
+                  <li class="list-group-item">
+                    Item {{ medicao.item_contrato.ordem }} • {{ medicao.quantidade }} × R$ {{ medicao.valor_unitario_aplicado }}
+                    <div class="small text-muted">Subtotal: R$ {{ medicao.valor_subtotal }}</div>
+                  </li>
+                {% empty %}
+                  <li class="list-group-item text-muted">Sem medições.</li>
+                {% endfor %}
+              </ul>
+            </div>
+
+            <div class="col-lg-4">
+              <h4>Avaliação de qualidade</h4>
+              {% if competencia.avaliacao_qualidade %}
+                <div class="contratos-quality-box">
+                  <div><strong>Modelo:</strong> {{ competencia.avaliacao_qualidade.modelo.nome }}</div>
+                  <div><strong>Desempenho:</strong> {{ competencia.avaliacao_qualidade.percentual_desempenho }}%</div>
+                  <div><strong>Ajuste:</strong> R$ {{ competencia.avaliacao_qualidade.valor_ajuste }}</div>
+                  <div><strong>Valor final:</strong> R$ {{ competencia.avaliacao_qualidade.valor_final_ajustado }}</div>
+                  <a class="btn btn-sm btn-outline-secondary mt-2" href="{% url 'contratos:avaliacao_item_create' competencia.avaliacao_qualidade.pk %}">Nova pontuação</a>
+                </div>
+              {% else %}
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'contratos:avaliacao_create' competencia.pk %}">Criar avaliação</a>
+              {% endif %}
+              {% if competencia.pode_liberar %}
+                <a class="btn btn-sm btn-success mt-2" href="{% url 'contratos:competencia_authorize' competencia.pk %}">Autorizar pagamento</a>
+              {% endif %}
+            </div>
+          </div>
+        </article>
+      {% empty %}
+        <p class="text-muted mb-0">Nenhuma competência cadastrada.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% for responsavel in responsaveis_modal %}
+    <div class="modal fade" id="responsavel-{{ responsavel.pk }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg contratos-modal">
+          <div class="modal-header border-0">
+            <h2 class="modal-title fs-5">{{ responsavel.get_full_name|default:responsavel.username }}</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <p><strong>Nome:</strong> {{ responsavel.perfil.nome_completo|default:responsavel.get_full_name|default:responsavel.username }}</p>
+            <p><strong>Cargo:</strong> {{ responsavel.perfil.cargo|default:"-" }}</p>
+            <p><strong>Unidade administrativa:</strong> {{ responsavel.perfil.setor|default:"-" }}</p>
+            <p><strong>Telefone:</strong> {{ responsavel.perfil.ramal|default:"-" }}</p>
+            <p class="mb-0"><strong>E-mail:</strong> {{ responsavel.email|default:"-" }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+{% endblock %}
