@@ -34,13 +34,3 @@ def sync_local_apps_as_recursos(sender, **kwargs):
                 )
                 if created:
                     print(f"ACL: Novo app local '{nome}' auto-detectado e cadastrado como recurso.")
-
-    # Garante o recurso extra 'organograma' de forma segregada porque ele não é um app Django comum.
-    from acls.models import Recurso
-    Recurso.objects.get_or_create(
-        slug='organograma',
-        defaults={
-            'nome': 'Organograma',
-            'descricao': 'Organograma institucional dos setores'
-        }
-    )

@@ -34,7 +34,7 @@ def obter_nivel_acesso(user, app_slug):
         return RegraAcesso.NIVEL_CONTROLE_TOTAL
 
     # Regras individuais têm prioridade sobre regras herdadas por grupo/setor.
-    regras_usuario = regras.filter(usuario=user)
+    regras_usuario = regras.filter(usuarios=user).distinct()
     if regras_usuario.exists():
         # Retorna o nível da regra individual (se houver mais de uma, pega a maior)
         niveis = [r.nivel for r in regras_usuario]
@@ -44,7 +44,7 @@ def obter_nivel_acesso(user, app_slug):
     # Na ausência de regra individual, usa o maior nível disponível nos grupos do usuário.
     user_groups = user.groups.all()
     if user_groups.exists():
-        regras_grupo = regras.filter(grupo__in=user_groups)
+        regras_grupo = regras.filter(grupos__in=user_groups).distinct()
         if regras_grupo.exists():
             # Obtém a de maior privilégio entre os grupos que o usuário pertence
             niveis = [r.nivel for r in regras_grupo]

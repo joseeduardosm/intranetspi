@@ -24,7 +24,9 @@ class ACLRuleListView(LoginRequiredMixin, ACLAdminRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        return RegraAcesso.objects.select_related('recurso', 'usuario', 'grupo').all()
+        # Prefetch dos alvos evita consultas extras na listagem quando a regra possui
+        # vários usuários e grupos associados.
+        return RegraAcesso.objects.select_related('recurso').prefetch_related('usuarios', 'grupos')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

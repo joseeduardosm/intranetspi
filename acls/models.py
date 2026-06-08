@@ -22,7 +22,7 @@ class Recurso(models.Model):
 
 
 class RegraAcesso(models.Model):
-    """Define o nível de permissão aplicado a um usuário, grupo ou ambos em um recurso."""
+    """Define o nível de permissão aplicado a vários usuários e grupos em um recurso."""
 
     NIVEL_LEITURA = 'LEITURA'
     NIVEL_MODIFICACAO = 'MODIFICACAO'
@@ -37,23 +37,19 @@ class RegraAcesso(models.Model):
     recurso = models.ForeignKey(Recurso, on_delete=models.CASCADE, related_name='regras')
     nivel = models.CharField("Nível de Permissão", max_length=20, choices=NIVEL_PERMISSAO, default=NIVEL_LEITURA)
     
-    usuario = models.ForeignKey(
+    usuarios = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        null=True,
         blank=True,
         related_name='regras_acesso',
-        verbose_name="Usuário",
-        help_text="Selecione o usuário para aplicar a regra."
+        verbose_name="Usuários",
+        help_text="Selecione zero ou vários usuários para aplicar a regra."
     )
-    grupo = models.ForeignKey(
+    grupos = models.ManyToManyField(
         Group,
-        on_delete=models.CASCADE,
-        null=True,
         blank=True,
         related_name='regras_acesso',
-        verbose_name="Grupo/Setor",
-        help_text="Selecione o grupo/setor para aplicar a regra."
+        verbose_name="Grupos/Setores",
+        help_text="Selecione zero ou vários grupos/setores para aplicar a regra."
     )
     
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -67,14 +63,28 @@ class RegraAcesso(models.Model):
     def __str__(self):
         # Monta uma descrição legível combinando o nível, o recurso e os alvos da regra.
         alvos = []
-        if self.usuario:
-            alvos.append(f"Usuário: {self.usuario}")
-        if self.grupo:
-            alvos.append(f"Grupo/Setor: {self.grupo}")
+        if self.pk:
+            usuarios = list(self.usuarios.all()[:3])
+            grupos = list(self.grupos.all()[:3])
+            if usuarios:
+                nomes_usuarios = ", ".join(str(usuario) for usuario in usuarios)
+                sufixo_usuarios = "..." if self.usuarios.count() > len(usuarios) else ""
+                alvos.append(f"Usuários: {nomes_usuarios}{sufixo_usuarios}")
+            if grupos:
+                nomes_grupos = ", ".join(str(grupo) for grupo in grupos)
+                sufixo_grupos = "..." if self.grupos.count() > len(grupos) else ""
+                alvos.append(f"Grupos/Setores: {nomes_grupos}{sufixo_grupos}")
+
+        if not alvos:
+            alvos.append("Sem alvos definidos")
+
         return f"{self.get_nivel_display()} -> {self.recurso.nome} ({', '.join(alvos)})"
 
     def clean(self):
         from django.core.exceptions import ValidationError
-        # Uma regra sem usuário e sem grupo não teria alvo para aplicar a permissão.
-        if not self.usuario and not self.grupo:
+
+        # Durante a validação de ModelForm, os relacionamentos muitos-para-muitos ainda
+        # não ficam disponíveis na instância. Por isso, a validação principal permanece
+        # no formulário, e aqui cobrimos chamadas diretas ao model já persistido.
+        if self.pk and not self.usuarios.exists() and not self.grupos.exists():
             raise ValidationError("Você deve selecionar pelo menos um Usuário ou um Grupo/Setor.")

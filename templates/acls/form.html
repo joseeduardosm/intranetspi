@@ -4,14 +4,8 @@
 {% load static %}
 {% block title %}{{ titulo }}{% endblock %}
 {% block extra_css %}
+  <link rel="stylesheet" href="{% static 'acls/css/acls.css' %}">
   <link rel="stylesheet" href="{% static 'setores/css/setores.css' %}">
-  <style>
-    /* Ajuste local para reaproveitar o picker de setores como seleção única no ACL. */
-    .setores-picker-item.is-selected {
-      background: #e7f0ff;
-      border-color: rgba(13, 110, 253, .28);
-    }
-  </style>
 {% endblock %}
 {% block content %}
 <div class="setores-shell py-4">
@@ -40,52 +34,52 @@
           {% for error in form.recurso.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
         </div>
 
-        <!-- Nível de acesso aplicado ao usuário ou grupo selecionado. -->
+        <!-- Nível de acesso aplicado aos usuários e grupos selecionados. -->
         <div class="col-md-6">
           <label class="form-label fw-semibold" for="{{ form.nivel.id_for_label }}">{{ form.nivel.label }}</label>
           {{ form.nivel }}
           {% for error in form.nivel.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
         </div>
 
-        <!-- Seletores independentes permitem aplicar a mesma regra a usuário, grupo ou ambos. -->
+        <!-- Seletores independentes permitem aplicar a mesma regra a vários usuários, grupos ou ambos. -->
         <div class="col-12 border-top pt-4">
-          <p class="text-muted mb-4">Selecione o usuário, o grupo/setor, ou ambos para os quais deseja aplicar esta regra.</p>
+          <p class="text-muted mb-4">Selecione zero ou vários usuários e zero ou vários grupos/setores para os quais deseja aplicar esta regra.</p>
           
           <div class="row g-4">
-            <!-- Coluna de usuário individual. -->
+            <!-- Coluna de usuários com seleção múltipla. -->
             <div class="col-lg-6">
-              <label class="form-label fw-semibold" for="acl-user-search">Usuário</label>
-              <input type="text" class="form-control mb-3" id="acl-user-search" placeholder="Buscar usuário por nome...">
-              {{ form.usuario }}
+              <label class="form-label fw-semibold" for="acl-users-search">Usuários</label>
+              <input type="text" class="form-control mb-3" id="acl-users-search" placeholder="Buscar usuário por nome...">
+              {{ form.usuarios }}
               <div class="setores-picker">
                 <div class="setores-picker-column">
                   <div class="setores-picker-label">Disponíveis</div>
                   <div class="setores-picker-list" id="acl-users-available" style="max-height: 250px;"></div>
                 </div>
                 <div class="setores-picker-column">
-                  <div class="setores-picker-label">Selecionado</div>
-                  <div class="setores-picker-list is-selected" id="acl-users-selected" style="max-height: 250px;"></div>
+                  <div class="setores-picker-label">Selecionados</div>
+                  <div class="setores-picker-list" id="acl-users-selected" style="max-height: 250px;"></div>
                 </div>
               </div>
-              {% for error in form.usuario.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+              {% for error in form.usuarios.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
             </div>
 
-            <!-- Coluna de grupo/setor. -->
+            <!-- Coluna de grupos/setores com seleção múltipla. -->
             <div class="col-lg-6">
-              <label class="form-label fw-semibold" for="acl-group-search">Grupo/Setor</label>
-              <input type="text" class="form-control mb-3" id="acl-group-search" placeholder="Buscar grupo/setor...">
-              {{ form.grupo }}
+              <label class="form-label fw-semibold" for="acl-groups-search">Grupos/Setores</label>
+              <input type="text" class="form-control mb-3" id="acl-groups-search" placeholder="Buscar grupo/setor...">
+              {{ form.grupos }}
               <div class="setores-picker">
                 <div class="setores-picker-column">
                   <div class="setores-picker-label">Disponíveis</div>
                   <div class="setores-picker-list" id="acl-groups-available" style="max-height: 250px;"></div>
                 </div>
                 <div class="setores-picker-column">
-                  <div class="setores-picker-label">Selecionado</div>
-                  <div class="setores-picker-list is-selected" id="acl-groups-selected" style="max-height: 250px;"></div>
+                  <div class="setores-picker-label">Selecionados</div>
+                  <div class="setores-picker-list" id="acl-groups-selected" style="max-height: 250px;"></div>
                 </div>
               </div>
-              {% for error in form.grupo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+              {% for error in form.grupos.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
             </div>
           </div>
         </div>
@@ -103,8 +97,8 @@
 {% block extra_js %}
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    // Constrói um picker pesquisável de seleção única mantendo o select original para o Django.
-    function setupSinglePicker(selectId, searchId, availableId, selectedId) {
+    // Constrói um picker pesquisável de seleção múltipla mantendo o select original para o Django.
+    function setupMultiPicker(selectId, searchId, availableId, selectedId) {
       const select = document.getElementById(selectId);
       const search = document.getElementById(searchId);
       const availableList = document.getElementById(availableId);
@@ -127,7 +121,7 @@
           const label = (option.textContent || '').trim();
           const item = document.createElement('button');
           item.type = 'button';
-          item.className = 'setores-picker-item';
+          item.className = 'setores-picker-item acls-picker-item';
           item.textContent = label;
 
           if (option.selected) {
@@ -146,25 +140,22 @@
           }
 
           item.addEventListener('click', () => {
-            Array.from(select.options).forEach(opt => opt.selected = false);
             option.selected = true;
             render(search.value);
           });
           availableList.appendChild(item);
         });
 
-        if (!hasSelected) {
-          select.value = '';
-        }
+        if (!hasSelected) select.selectedIndex = -1;
       };
 
       search.addEventListener('input', () => render(search.value));
       render('');
     }
 
-    // Inicializa usuários e grupos de forma independente para permitir combinação dos dois alvos.
-    setupSinglePicker('{{ form.usuario.id_for_label }}', 'acl-user-search', 'acl-users-available', 'acl-users-selected');
-    setupSinglePicker('{{ form.grupo.id_for_label }}', 'acl-group-search', 'acl-groups-available', 'acl-groups-selected');
+    // Inicializa usuários e grupos de forma independente para permitir múltiplos alvos.
+    setupMultiPicker('{{ form.usuarios.id_for_label }}', 'acl-users-search', 'acl-users-available', 'acl-users-selected');
+    setupMultiPicker('{{ form.grupos.id_for_label }}', 'acl-groups-search', 'acl-groups-available', 'acl-groups-selected');
   });
 </script>
 {% endblock %}

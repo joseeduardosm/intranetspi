@@ -14,29 +14,31 @@ class RegraAcessoForm(forms.ModelForm):
 
     class Meta:
         model = RegraAcesso
-        fields = ['recurso', 'nivel', 'usuario', 'grupo']
+        fields = ['recurso', 'nivel', 'usuarios', 'grupos']
         widgets = {
             'recurso': forms.Select(attrs={'class': 'form-select form-select-lg'}),
             'nivel': forms.Select(attrs={'class': 'form-select form-select-lg'}),
-            'usuario': forms.Select(attrs={'class': 'form-select'}),
-            'grupo': forms.Select(attrs={'class': 'form-select'}),
+            # O select múltiplo original permanece oculto no template para o Django
+            # continuar recebendo um campo padrão, enquanto a interface usa um picker.
+            'usuarios': forms.SelectMultiple(attrs={'class': 'form-select', 'size': 10}),
+            'grupos': forms.SelectMultiple(attrs={'class': 'form-select', 'size': 10}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Limita a seleção a usuários humanos ativos e grupos cadastrados no sistema.
-        self.fields['usuario'].queryset = User.objects.filter(is_active=True).exclude(
+        self.fields['usuarios'].queryset = User.objects.filter(is_active=True).exclude(
             username__in=SYSTEM_USERNAMES
         ).order_by('first_name', 'username')
-        self.fields['grupo'].queryset = Group.objects.all().order_by('name')
+        self.fields['grupos'].queryset = Group.objects.all().order_by('name')
 
     def clean(self):
         cleaned_data = super().clean()
-        usuario = cleaned_data.get('usuario')
-        grupo = cleaned_data.get('grupo')
+        usuarios = cleaned_data.get('usuarios')
+        grupos = cleaned_data.get('grupos')
 
         # A regra precisa apontar para pelo menos um alvo para ter efeito no controle de acesso.
-        if not usuario and not grupo:
+        if (not usuarios or not usuarios.exists()) and (not grupos or not grupos.exists()):
             raise forms.ValidationError("Você deve selecionar pelo menos um Usuário ou um Grupo/Setor.")
 
         return cleaned_data

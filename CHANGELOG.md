@@ -2,6 +2,22 @@
 
 Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
+## [0.3.1] - 2026-06-08
+- Atualizado o módulo `acls` para permitir múltiplos alvos por regra:
+  - substituídos os vínculos únicos por relacionamentos muitos-para-muitos com usuários e grupos/setores;
+  - ajustada a tela `acls/nova/` para seleção de zero ou vários usuários e zero ou vários grupos/setores em cada regra;
+  - preservada a prioridade da regra direta de usuário sobre a regra herdada por grupo na apuração de permissões;
+  - criada migração para converter automaticamente os vínculos antigos para a nova estrutura.
+- Refinada a apresentação do módulo `acls`:
+  - atualizada a listagem para exibir todos os usuários e grupos associados a cada regra;
+  - separado o CSS específico do módulo em arquivo próprio, sem estilos inline no template.
+- Ampliada a cobertura de testes do `acls` para validar seleção múltipla e cálculo de nível de acesso.
+- Ajustados os testes do módulo `contratos` para a nova estrutura de regras de ACL.
+- Atualizados textos da experiência de autenticação e perfil:
+  - alterado o nome exibido na tela de login para `Intranet SPI`;
+  - revisada a mensagem de atualização cadastral obrigatória com texto institucional mais detalhado.
+- Removido do `acls.signals` o cadastro manual segregado do recurso `organograma`, mantendo o fluxo centralizado de sincronização de recursos.
+
 ## [0.3.0] - 2026-06-07
 - Criado e integrado o novo módulo `contratos` ao projeto `aplicacoesspi`, com rotas próprias, ACL dedicada e identidade visual isolada em CSS.
 - Estruturado o domínio contratual com cadastros de contrato, empresa contratada, responsáveis da empresa, itens, termos aditivos, documentos, ocorrências, competências de pagamento, checklist padrão, avaliação de qualidade e eventos financeiros.

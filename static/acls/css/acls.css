@@ -1,0 +1,6 @@
+/* Ajustes visuais específicos do módulo de ACL. */
+
+.acls-picker-item.is-selected {
+  background: #e7f0ff;
+  border-color: rgba(13, 110, 253, 0.28);
+}

@@ -28,7 +28,7 @@
     {% endfor %}
   {% endif %}
 
-  <!-- Tabela principal de regras, incluindo recurso, nível e alvo da permissão. -->
+  <!-- Tabela principal de regras, incluindo recurso, nível e alvos da permissão. -->
   <div class="card shadow-sm border-0">
     <div class="card-body p-0">
       <div class="table-responsive">
@@ -62,26 +62,33 @@
                   {% endif %}
                 </td>
                 <td>
-                  <!-- O alvo pode ser um usuário individual ou um grupo/setor. -->
-                  {% if regra.usuario %}
-                    <div class="d-flex align-items-center">
-                      <span class="avatar bg-primary text-white rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px;">U</span>
-                      <div>
-                        <strong>{{ regra.usuario.get_full_name|default:regra.usuario.username }}</strong>
-                        <div class="text-muted small">@{{ regra.usuario.username }}</div>
+                  <!-- A mesma regra pode abranger vários usuários e grupos ao mesmo tempo. -->
+                  {% with usuarios=regra.usuarios.all grupos=regra.grupos.all %}
+                    {% if usuarios or grupos %}
+                      <div class="d-flex flex-column gap-2">
+                        {% for usuario in usuarios %}
+                          <div class="d-flex align-items-center">
+                            <span class="avatar bg-primary text-white rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px;">U</span>
+                            <div>
+                              <strong>{{ usuario.get_full_name|default:usuario.username }}</strong>
+                              <div class="text-muted small">@{{ usuario.username }}</div>
+                            </div>
+                          </div>
+                        {% endfor %}
+                        {% for grupo in grupos %}
+                          <div class="d-flex align-items-center">
+                            <span class="avatar bg-success text-white rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px;">G</span>
+                            <div>
+                              <strong>{{ grupo.name }}</strong>
+                              <div class="text-muted small">Grupo/Setor</div>
+                            </div>
+                          </div>
+                        {% endfor %}
                       </div>
-                    </div>
-                  {% elif regra.grupo %}
-                    <div class="d-flex align-items-center">
-                      <span class="avatar bg-success text-white rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px;">G</span>
-                      <div>
-                        <strong>{{ regra.grupo.name }}</strong>
-                        <div class="text-muted small">Grupo/Setor</div>
-                      </div>
-                    </div>
-                  {% else %}
-                    <span class="text-muted">-</span>
-                  {% endif %}
+                    {% else %}
+                      <span class="text-muted">-</span>
+                    {% endif %}
+                  {% endwith %}
                 </td>
                 <td>{{ regra.criado_em|date:"d/m/Y H:i" }}</td>
                 <td class="text-end pe-4">

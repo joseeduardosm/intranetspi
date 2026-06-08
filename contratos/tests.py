@@ -45,7 +45,8 @@ class ContratosBaseTest(TestCase):
         self.user = User.objects.create_user(username='joao', password='123')
         self.sem_acesso = User.objects.create_user(username='maria', password='123')
         self.recurso, _ = Recurso.objects.get_or_create(slug='contratos', defaults={'nome': 'Contratos'})
-        RegraAcesso.objects.create(recurso=self.recurso, usuario=self.user, nivel=RegraAcesso.NIVEL_MODIFICACAO)
+        regra_usuario = RegraAcesso.objects.create(recurso=self.recurso, nivel=RegraAcesso.NIVEL_MODIFICACAO)
+        regra_usuario.usuarios.add(self.user)
         self.empresa = EmpresaContratada.objects.create(razao_social='Empresa XPTO', cnpj='00.000.000/0001-00')
         self.contrato = Contrato.objects.create(
             numero_contrato='01/2026',
@@ -429,7 +430,8 @@ class ContratosViewTests(ContratosBaseTest):
         competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
         avaliacao = AvaliacaoQualidadeCompetencia.objects.create(competencia=competencia, modelo=modelo)
         AvaliacaoCriterioCompetencia.objects.create(avaliacao=avaliacao, criterio=criterio, nota_obtida=Decimal('8.00'))
-        RegraAcesso.objects.create(recurso=self.recurso, usuario=self.admin, nivel=RegraAcesso.NIVEL_MODIFICACAO)
+        regra_admin = RegraAcesso.objects.create(recurso=self.recurso, nivel=RegraAcesso.NIVEL_MODIFICACAO)
+        regra_admin.usuarios.add(self.admin)
         self.client.login(username='admin-contratos', password='123')
 
         response = self.client.post(reverse('contratos:contrato_delete', args=[self.contrato.pk]))

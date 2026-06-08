@@ -211,13 +211,26 @@
         <!-- Bloqueio de navegação até que o usuário atualize o cadastro obrigatório. -->
         <div class="spi-profile-alert-backdrop" aria-hidden="true"></div>
         <div class="spi-profile-alert-modal" role="dialog" aria-modal="true" aria-label="Atualize seus dados">
-          <h3>Atualize seus dados antes de continuar</h3>
+          <h3>Atualize seus dados cadastrais</h3>
           <p>
-            {% if usuario_profile_reason == "revalidation" %}
-              Já se passaram mais de 30 dias desde a última atualização. Para continuar usando o sistema, confirme seus dados cadastrais.
-            {% else %}
-              No primeiro acesso é obrigatório completar seu cadastro para liberar o uso do sistema.
-            {% endif %}
+            Prezado(a) {{ usuario_perfil.nome_completo|default:request.user.get_full_name|default:request.user.username }},
+          </p>
+          <p>
+            Realizamos uma atualização no cadastro de usuários da Intranet com o objetivo de aprimorar a organização das informações institucionais e facilitar a comunicação entre os colaboradores.
+          </p>
+          <p>
+            Foram implementados campos padronizados de setor para todas as unidades da Secretaria de Parcerias em Investimentos, além da inclusão de dois campos opcionais: Celular e Data de Nascimento.
+          </p>
+          <p>
+            <strong>Data de Nascimento:</strong> ao informar este dado, seu nome poderá ser exibido na seção Aniversariantes do Mês da Intranet.
+            <br>
+            <strong>Celular:</strong> ao informar este dado, seu número poderá ser exibido em seu cartão de contato profissional disponível na página Ramais.
+          </p>
+          <p>
+            A atualização dessas informações é opcional, mas contribui para manter o diretório corporativo mais completo e fortalecer a integração entre as equipes.
+          </p>
+          <p class="mb-0">
+            Acesse seu perfil e mantenha seus dados atualizados.
           </p>
           <div class="d-flex gap-2 justify-content-end mt-4">
             <form method="post" action="{% url 'logout' %}">
