@@ -2,6 +2,31 @@
 
 Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
+## [0.3.0] - 2026-06-07
+- Criado e integrado o novo módulo `contratos` ao projeto `aplicacoesspi`, com rotas próprias, ACL dedicada e identidade visual isolada em CSS.
+- Estruturado o domínio contratual com cadastros de contrato, empresa contratada, responsáveis da empresa, itens, termos aditivos, documentos, ocorrências, competências de pagamento, checklist padrão, avaliação de qualidade e eventos financeiros.
+- Automatizado o ciclo inicial do contrato:
+  - geração de competências conforme a vigência, inclusive períodos parciais no início e no fim;
+  - bloqueio operacional das competências até o cadastro do checklist padrão do contrato;
+  - replicação do checklist padrão para todas as competências já criadas.
+- Implementados os fluxos operacionais do detalhe do contrato:
+  - inclusão e manutenção de itens;
+  - anexos de checklist com ações de anexar, editar, ver e limpar;
+  - medição mensal baseada automaticamente nos itens do contrato;
+  - lançamento de pagamento com anexos obrigatórios e conclusão da competência.
+- Aprimorada a experiência de uso do módulo:
+  - cadastro de empresa em modal sem perda dos dados já digitados no contrato;
+  - preenchimento automático do número do contrato no formato `NNN/AAAA`;
+  - links para responsáveis internos com cartão/modal de contato;
+  - menus de ações `...` nas listagens e grades do contrato;
+  - ordenação crescente e decrescente em todas as colunas da listagem principal;
+  - link direto no número do contrato para abrir o detalhe.
+- Ajustados cálculos e exibições financeiras do contrato:
+  - separação explícita entre base mensal e valor global;
+  - exibição monetária padronizada em reais;
+  - vigência refletida corretamente no valor global consolidado.
+- Adicionadas migrações, templates parciais, tela de medição em lote e tags auxiliares específicas do módulo `contratos`.
+
 ## [0.2.0] - 2026-06-06
 - Reformulada a navegação global:
   - Substituída a navbar horizontal por uma sidebar vertical dentro e fora da área autenticada.
