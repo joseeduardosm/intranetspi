@@ -85,10 +85,92 @@ def periodo_texto(utilizado, total):
 
 
 def contrato_total_itens(contrato):
-    """Soma os subtotais dos itens do contrato."""
+    """Soma os subtotais mensais dos itens do contrato."""
 
     total = contrato.itens.aggregate(total=Sum('valor_subtotal')).get('total') or ZERO
     return quantize_money(total)
+
+
+def contrato_valor_global(contrato):
+    """Calcula o valor global a partir da base mensal multiplicada pela vigência total."""
+
+    base_mensal = contrato_total_itens(contrato)
+    vigencia_meses = contrato_prazo_total_meses(contrato)
+    return quantize_money(base_mensal * Decimal(vigencia_meses))
+
+
+def ultimo_dia_mes(data_referencia):
+    """Retorna o último dia do mês da data informada."""
+
+    return date(
+        data_referencia.year,
+        data_referencia.month,
+        calendar.monthrange(data_referencia.year, data_referencia.month)[1],
+    )
+
+
+def iterar_periodos_competencia(data_inicio, data_fim):
+    """Gera as fatias mensais da vigência respeitando meses parciais no início e no fim."""
+
+    if not data_inicio or not data_fim or data_fim < data_inicio:
+        return []
+
+    periodos = []
+    cursor = data_inicio
+    while cursor <= data_fim:
+        fim_mes = ultimo_dia_mes(cursor)
+        periodo_fim = min(fim_mes, data_fim)
+        periodos.append((cursor, periodo_fim))
+        cursor = periodo_fim + timedelta(days=1)
+    return periodos
+
+
+def calcular_valor_previsto_competencia(contrato, periodo_inicio, periodo_fim):
+    """Usa sempre a base mensal vigente como valor previsto da competência."""
+
+    del periodo_inicio, periodo_fim
+    return quantize_money(contrato.base_mensal or contrato_total_itens(contrato))
+
+
+def sync_competencias_pagamento(contrato):
+    """Cria e atualiza automaticamente as competências previstas da vigência atual."""
+
+    from .models import CompetenciaPagamento
+
+    data_inicio = contrato.data_inicio_vigencia
+    data_fim = contrato_data_final_vigente(contrato)
+    if not data_inicio or not data_fim:
+        return
+
+    periodos_esperados = iterar_periodos_competencia(data_inicio, data_fim)
+    competencias_existentes = {
+        (competencia.periodo_inicio, competencia.periodo_fim): competencia
+        for competencia in contrato.competencias.filter(gerada_automaticamente=True)
+    }
+
+    for periodo_inicio, periodo_fim in periodos_esperados:
+        valor_previsto = calcular_valor_previsto_competencia(contrato, periodo_inicio, periodo_fim)
+        competencia = competencias_existentes.get((periodo_inicio, periodo_fim))
+        if competencia is None:
+            CompetenciaPagamento.objects.create(
+                contrato=contrato,
+                periodo_inicio=periodo_inicio,
+                periodo_fim=periodo_fim,
+                valor_previsto=valor_previsto,
+                gerada_automaticamente=True,
+            )
+            continue
+
+        campos_atualizar = []
+        if competencia.valor_previsto != valor_previsto:
+            competencia.valor_previsto = valor_previsto
+            campos_atualizar.append('valor_previsto')
+        if not competencia.gerada_automaticamente:
+            competencia.gerada_automaticamente = True
+            campos_atualizar.append('gerada_automaticamente')
+        if campos_atualizar:
+            campos_atualizar.append('atualizado_em')
+            competencia.save(update_fields=campos_atualizar)
 
 
 def contrato_total_prorrogacoes(contrato):
@@ -270,10 +352,15 @@ def recalcular_competencia(competencia):
     else:
         competencia.valor_liberado = competencia.valor_medido
 
-    todos_ok = not competencia.checklist_itens.filter(obrigatorio=True, concluido=False).exists()
-    novo_status = competencia.status
-    if competencia.status == competencia.Status.RASCUNHO and todos_ok:
-        novo_status = competencia.Status.APTO_LIBERACAO
+    if competencia.aguardando_checklist_padrao:
+        novo_status = competencia.Status.BLOQUEADO
+    else:
+        todos_ok = not competencia.checklist_itens.filter(obrigatorio=True, concluido=False).exists()
+        novo_status = competencia.status
+        if novo_status == competencia.Status.BLOQUEADO:
+            novo_status = competencia.Status.RASCUNHO
+        if novo_status == competencia.Status.RASCUNHO and todos_ok:
+            novo_status = competencia.Status.APTO_LIBERACAO
     type(competencia).objects.filter(pk=competencia.pk).update(
         valor_medido=competencia.valor_medido,
         valor_liberado=competencia.valor_liberado,
@@ -294,6 +381,40 @@ def criar_checklist_competencia(competencia):
             obrigatorio=modelo.obrigatorio,
             ordem=modelo.ordem,
         )
+
+
+def sincronizar_checklist_contrato(contrato):
+    """Replica o checklist padrão do contrato nas competências já criadas e libera o fluxo."""
+
+    modelos = list(contrato.checklist_modelos.order_by('ordem', 'id'))
+    if not modelos:
+        return
+
+    for competencia in contrato.competencias.all():
+        existentes = {
+            (item.ordem, item.titulo)
+            for item in competencia.checklist_itens.all()
+        }
+        for modelo in modelos:
+            chave = (modelo.ordem, modelo.titulo)
+            if chave in existentes:
+                continue
+            competencia.checklist_itens.create(
+                titulo=modelo.titulo,
+                descricao=modelo.descricao,
+                obrigatorio=modelo.obrigatorio,
+                ordem=modelo.ordem,
+            )
+        recalcular_competencia(competencia)
+
+
+def reordenar_checklist_padrao_contrato(contrato):
+    """Normaliza a numeração do checklist padrão do contrato em sequência crescente."""
+
+    for indice, modelo in enumerate(contrato.checklist_modelos.order_by('ordem', 'id'), start=1):
+        if modelo.ordem == indice:
+            continue
+        type(modelo).objects.filter(pk=modelo.pk).update(ordem=indice)
 
 
 def calcular_memorias_retroativas(evento):

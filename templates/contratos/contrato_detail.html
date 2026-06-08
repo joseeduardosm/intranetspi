@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 {% load static %}
+{% load contratos_extras %}
 <!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
 <!-- Objetivo: Exibir a visão 360º do contrato e seus fluxos satélites. -->
-{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">
+  <link rel="stylesheet" href="{% static 'usuarios/css/ramais.css' %}">
+{% endblock %}
 
 {% block content %}
   <div class="spi-page-title d-flex justify-content-between align-items-start">
@@ -34,8 +38,8 @@
     <article class="card border-0 shadow-sm contratos-summary-card">
       <div class="card-body">
         <span class="contratos-kicker">Valor global</span>
-        <h2>R$ {{ contrato.valor_global }}</h2>
-        <p>Base mensal: R$ {{ contrato.base_mensal }}</p>
+        <h2>R$ {{ contrato.valor_global|brl }}</h2>
+        <p>Base mensal: R$ {{ contrato.base_mensal|brl }}</p>
       </div>
     </article>
     <article class="card border-0 shadow-sm contratos-summary-card">
@@ -55,7 +59,7 @@
           <a class="btn btn-sm btn-primary" href="{% url 'contratos:item_create' contrato.pk %}">Novo item</a>
         </div>
         <div class="table-responsive">
-          <table class="table table-sm align-middle mb-0">
+          <table class="table table-sm align-middle mb-0 contratos-itens-table">
             <thead>
               <tr>
                 <th>Item</th>
@@ -64,6 +68,8 @@
                 <th>Valor unitário</th>
                 <th>Subtotal</th>
                 <th>Referencial</th>
+                <th>Vigência</th>
+                <th class="text-end">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -72,12 +78,22 @@
                   <td>{{ item.ordem }}</td>
                   <td>{{ item.descricao }}</td>
                   <td>{{ item.quantidade }}</td>
-                  <td>R$ {{ item.valor_unitario }}</td>
-                  <td>R$ {{ item.valor_subtotal }}</td>
-                  <td>R$ {{ item.valor_referencial }}</td>
+                  <td>R$ {{ item.valor_unitario|brl }}</td>
+                  <td>R$ {{ item.valor_subtotal|brl }}</td>
+                  <td>R$ {{ item.valor_referencial|brl }}</td>
+                  <td>{{ contrato.vigencia_total_meses }} meses</td>
+                  <td class="text-end">
+                    <div class="spi-action-menu contratos-action-menu">
+                      <button class="btn btn-sm btn-outline-secondary spi-action-menu-toggle" type="button" aria-label="Ações do item" aria-expanded="false" title="Ações">...</button>
+                      <div class="spi-action-menu-panel" role="menu" hidden>
+                        <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'contratos:item_update' contrato.pk item.pk %}">Editar</a>
+                        <a class="btn btn-sm btn-outline-danger" role="menuitem" href="{% url 'contratos:item_delete' contrato.pk item.pk %}">Excluir</a>
+                      </div>
+                    </div>
+                  </td>
                 </tr>
               {% empty %}
-                <tr><td colspan="6" class="text-muted">Nenhum item cadastrado.</td></tr>
+                <tr><td colspan="8" class="text-muted">Nenhum item cadastrado.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -173,9 +189,24 @@
         </div>
         <div class="card-body">
           <ul class="list-unstyled mb-0">
-            <li><strong>Gestor:</strong> <a href="#" data-bs-toggle="modal" data-bs-target="#responsavel-{{ contrato.gestor_contrato.pk }}">{{ contrato.gestor_contrato.get_full_name|default:contrato.gestor_contrato.username }}</a></li>
-            <li><strong>Fiscal administrativo:</strong> <a href="#" data-bs-toggle="modal" data-bs-target="#responsavel-{{ contrato.fiscal_administrativo.pk }}">{{ contrato.fiscal_administrativo.get_full_name|default:contrato.fiscal_administrativo.username }}</a></li>
-            <li><strong>Fiscal técnico:</strong> <a href="#" data-bs-toggle="modal" data-bs-target="#responsavel-{{ contrato.fiscal_tecnico.pk }}">{{ contrato.fiscal_tecnico.get_full_name|default:contrato.fiscal_tecnico.username }}</a></li>
+            {% for responsavel in responsaveis_internos %}
+              <li>
+                <strong>{{ responsavel.label }}:</strong>
+                <a
+                  href="#"
+                  data-ramal-card-open
+                  data-name="{{ responsavel.nome }}"
+                  data-photo="{{ responsavel.foto_url }}"
+                  data-cargo="{{ responsavel.cargo }}"
+                  data-setor="{{ responsavel.setor }}"
+                  data-email="{{ responsavel.email }}"
+                  data-ramal="{{ responsavel.ramal }}"
+                  data-celular="{{ responsavel.celular }}"
+                  data-whatsapp="{{ responsavel.whatsapp }}"
+                  data-local="{{ responsavel.local }}"
+                >{{ responsavel.nome_link }}</a>
+              </li>
+            {% endfor %}
           </ul>
         </div>
       </section>
@@ -183,22 +214,27 @@
       <section class="card border-0 shadow-sm mb-4">
         <div class="card-header contratos-section-header">
           <h2>Checklist padrão</h2>
-          {% if contrato.competencias.first %}
-            <a class="btn btn-sm btn-primary" href="{% url 'contratos:checklist_modelo_create' contrato.competencias.first.pk %}">Novo item</a>
-          {% endif %}
+          <a class="btn btn-sm btn-primary" href="{% url 'contratos:checklist_modelo_create' contrato.pk %}">Novo item</a>
         </div>
+        {% if not contrato.possui_checklist_padrao %}
+          <div class="card-body pb-0">
+            <div class="alert alert-warning mb-0">
+              Cadastre o checklist padrão deste contrato para liberar as competências e iniciar os pagamentos.
+            </div>
+          </div>
+        {% endif %}
         <ul class="list-group list-group-flush">
           {% for item in contrato.checklist_modelos.all %}
             <li class="list-group-item">{{ item.ordem }}. {{ item.titulo }}</li>
           {% empty %}
-            <li class="list-group-item text-muted">Cadastre o checklist a partir de uma competência.</li>
+            <li class="list-group-item text-muted">Cadastre o checklist padrão deste contrato.</li>
           {% endfor %}
         </ul>
       </section>
 
       <section class="card border-0 shadow-sm mb-4">
         <div class="card-header contratos-section-header">
-          <h2>Modelos de qualidade</h2>
+          <h2>Avaliação de Qualidade</h2>
           <a class="btn btn-sm btn-primary" href="{% url 'contratos:modelo_qualidade_create' contrato.pk %}">Novo modelo</a>
         </div>
         <div class="card-body">
@@ -211,7 +247,7 @@
               </div>
             </article>
           {% empty %}
-            <p class="text-muted mb-0">Nenhum modelo de qualidade cadastrado.</p>
+            <p class="text-muted mb-0">Nenhuma avaliação de qualidade cadastrada.</p>
           {% endfor %}
         </div>
       </section>
@@ -249,28 +285,62 @@
               <h3>{{ competencia.periodo_inicio|date:"m/Y" }}</h3>
               <p class="text-muted mb-1">{{ competencia.periodo_inicio|date:"d/m/Y" }} a {{ competencia.periodo_fim|date:"d/m/Y" }}</p>
               <p class="mb-0">Status: <strong>{{ competencia.get_status_display }}</strong></p>
+              <p class="mb-0 text-muted small">{% if competencia.gerada_automaticamente %}Competência automática{% else %}Competência manual{% endif %}</p>
+              {% if competencia.aguardando_checklist_padrao %}
+                <p class="mb-0 text-warning small">Bloqueada até o checklist padrão do contrato ser cadastrado e replicado.</p>
+              {% endif %}
             </div>
             <div class="text-end">
-              <div><strong>Medido:</strong> R$ {{ competencia.valor_medido }}</div>
-              <div><strong>Liberado:</strong> R$ {{ competencia.valor_liberado }}</div>
+              <div><strong>Previsto:</strong> R$ {{ competencia.valor_previsto|brl }}</div>
+              <div><strong>Medido:</strong> R$ {{ competencia.valor_medido|brl }}</div>
+              <div><strong>Liberado:</strong> R$ {{ competencia.valor_liberado|brl }}</div>
             </div>
           </div>
 
           <div class="row g-3 mt-1">
             <div class="col-lg-4">
               <h4>Checklist</h4>
+              {% if competencia.aguardando_checklist_padrao %}
+                <div class="alert alert-warning py-2">
+                  Aguardando checklist padrão do contrato para liberar esta competência.
+                </div>
+              {% endif %}
               <ul class="list-group">
                 {% for item in competencia.checklist_itens.all %}
                   <li class="list-group-item d-flex justify-content-between align-items-center">
                     <span>{{ item.titulo }}</span>
                     <div class="d-flex gap-2 align-items-center">
-                      <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos:checklist_anexo_create' item.pk %}">Anexo</a>
-                      <form method="post" action="{% url 'contratos:checklist_item_toggle' competencia.pk item.pk %}">
-                        {% csrf_token %}
-                        <button class="btn btn-sm {% if item.concluido %}btn-success{% else %}btn-outline-secondary{% endif %}" type="submit">
-                          {% if item.concluido %}Concluído{% else %}Pendente{% endif %}
-                        </button>
-                      </form>
+                      <span class="btn btn-sm {% if item.anexo_principal %}btn-success{% else %}btn-outline-secondary{% endif %} disabled" aria-disabled="true">
+                        {% if item.anexo_principal %}Concluído{% else %}Pendente{% endif %}
+                      </span>
+                      <div class="spi-action-menu contratos-action-menu">
+                        <button class="btn btn-sm btn-outline-secondary spi-action-menu-toggle" type="button" aria-label="Ações do anexo" aria-expanded="false" title="Ações">...</button>
+                        <div class="spi-action-menu-panel" role="menu" hidden>
+                          {% if item.anexo_principal %}
+                            <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'contratos:checklist_anexo_update' item.pk %}">Editar</a>
+                            <a
+                              class="btn btn-sm btn-outline-secondary"
+                              role="menuitem"
+                              href="{{ item.anexo_principal.arquivo.url }}"
+                              target="_blank"
+                              rel="noopener"
+                              title="Abrir PDF em nova aba"
+                            >Ver</a>
+                            <form method="post" action="{% url 'contratos:checklist_anexo_delete' item.pk %}">
+                              {% csrf_token %}
+                              <button class="btn btn-sm btn-outline-danger w-100" type="submit" role="menuitem">Limpar</button>
+                            </form>
+                          {% else %}
+                            <a
+                              class="btn btn-sm btn-outline-secondary"
+                              role="menuitem"
+                              href="{% url 'contratos:checklist_anexo_create' item.pk %}"
+                              data-checklist-anexo-modal-open
+                              data-url="{% url 'contratos:checklist_anexo_create' item.pk %}?modal=1"
+                            >Anexar</a>
+                          {% endif %}
+                        </div>
+                      </div>
                     </div>
                   </li>
                 {% empty %}
@@ -280,13 +350,19 @@
             </div>
 
             <div class="col-lg-4">
-              <h4>Medições</h4>
-              <a class="btn btn-sm btn-outline-primary mb-2" href="{% url 'contratos:medicao_create' competencia.pk %}">Nova medição</a>
+              <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                <h4 class="mb-0">Medição</h4>
+                {% if competencia.aguardando_checklist_padrao %}
+                  <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Nova medição</span>
+                {% else %}
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'contratos:medicao_create' competencia.pk %}">Nova medição</a>
+                {% endif %}
+              </div>
               <ul class="list-group">
                 {% for medicao in competencia.medicoes.all %}
                   <li class="list-group-item">
-                    Item {{ medicao.item_contrato.ordem }} • {{ medicao.quantidade }} × R$ {{ medicao.valor_unitario_aplicado }}
-                    <div class="small text-muted">Subtotal: R$ {{ medicao.valor_subtotal }}</div>
+                    Item {{ medicao.item_contrato.ordem }} • {{ medicao.quantidade }} × R$ {{ medicao.valor_unitario_aplicado|brl }}
+                    <div class="small text-muted">Subtotal: R$ {{ medicao.valor_subtotal|brl }}</div>
                   </li>
                 {% empty %}
                   <li class="list-group-item text-muted">Sem medições.</li>
@@ -295,20 +371,37 @@
             </div>
 
             <div class="col-lg-4">
-              <h4>Avaliação de qualidade</h4>
-              {% if competencia.avaliacao_qualidade %}
-                <div class="contratos-quality-box">
-                  <div><strong>Modelo:</strong> {{ competencia.avaliacao_qualidade.modelo.nome }}</div>
-                  <div><strong>Desempenho:</strong> {{ competencia.avaliacao_qualidade.percentual_desempenho }}%</div>
-                  <div><strong>Ajuste:</strong> R$ {{ competencia.avaliacao_qualidade.valor_ajuste }}</div>
-                  <div><strong>Valor final:</strong> R$ {{ competencia.avaliacao_qualidade.valor_final_ajustado }}</div>
-                  <a class="btn btn-sm btn-outline-secondary mt-2" href="{% url 'contratos:avaliacao_item_create' competencia.avaliacao_qualidade.pk %}">Nova pontuação</a>
-                </div>
+              {% if mostrar_avaliacao_qualidade_competencia %}
+                <h4>Avaliação de qualidade</h4>
+                {% if competencia.aguardando_checklist_padrao %}
+                  <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Criar avaliação</span>
+                {% elif competencia.avaliacao_qualidade %}
+                  <div class="contratos-quality-box">
+                    <div><strong>Modelo:</strong> {{ competencia.avaliacao_qualidade.modelo.nome }}</div>
+                    <div><strong>Desempenho:</strong> {{ competencia.avaliacao_qualidade.percentual_desempenho }}%</div>
+                    <div><strong>Ajuste:</strong> R$ {{ competencia.avaliacao_qualidade.valor_ajuste|brl }}</div>
+                    <div><strong>Valor final:</strong> R$ {{ competencia.avaliacao_qualidade.valor_final_ajustado|brl }}</div>
+                    <a class="btn btn-sm btn-outline-secondary mt-2" href="{% url 'contratos:avaliacao_item_create' competencia.avaliacao_qualidade.pk %}">Nova pontuação</a>
+                  </div>
+                {% else %}
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'contratos:avaliacao_create' competencia.pk %}">Criar avaliação</a>
+                {% endif %}
               {% else %}
-                <a class="btn btn-sm btn-outline-primary" href="{% url 'contratos:avaliacao_create' competencia.pk %}">Criar avaliação</a>
+                <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                  <h4 class="mb-0">Pagamento</h4>
+                  {% if competencia.pode_liberar %}
+                    <a class="btn btn-sm btn-success" href="{% url 'contratos:competencia_pagamento_executar' competencia.pk %}">Inserir pagamento</a>
+                  {% elif competencia.aguardando_checklist_padrao %}
+                    <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Inserir pagamento</span>
+                  {% endif %}
+                </div>
               {% endif %}
-              {% if competencia.pode_liberar %}
-                <a class="btn btn-sm btn-success mt-2" href="{% url 'contratos:competencia_authorize' competencia.pk %}">Autorizar pagamento</a>
+              {% if mostrar_avaliacao_qualidade_competencia %}
+                {% if competencia.pode_liberar %}
+                  <a class="btn btn-sm btn-success mt-2" href="{% url 'contratos:competencia_pagamento_executar' competencia.pk %}">Inserir pagamento</a>
+                {% elif competencia.aguardando_checklist_padrao %}
+                  <span class="btn btn-sm btn-outline-secondary mt-2 disabled" aria-disabled="true">Inserir pagamento</span>
+                {% endif %}
               {% endif %}
             </div>
           </div>
@@ -319,23 +412,410 @@
     </div>
   </section>
 
-  {% for responsavel in responsaveis_modal %}
-    <div class="modal fade" id="responsavel-{{ responsavel.pk }}" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg contratos-modal">
-          <div class="modal-header border-0">
-            <h2 class="modal-title fs-5">{{ responsavel.get_full_name|default:responsavel.username }}</h2>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+  <div class="modal fade" id="ramalContactModal" tabindex="-1" aria-labelledby="ramalContactModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered ramal-contact-dialog">
+      <div class="modal-content ramal-contact-modal">
+        <button class="btn-close ramal-contact-close" type="button" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        <div class="ramal-contact-card">
+          <div class="ramal-contact-photo">
+            <img id="ramalContactPhoto" src="" alt="">
           </div>
-          <div class="modal-body">
-            <p><strong>Nome:</strong> {{ responsavel.perfil.nome_completo|default:responsavel.get_full_name|default:responsavel.username }}</p>
-            <p><strong>Cargo:</strong> {{ responsavel.perfil.cargo|default:"-" }}</p>
-            <p><strong>Unidade administrativa:</strong> {{ responsavel.perfil.setor|default:"-" }}</p>
-            <p><strong>Telefone:</strong> {{ responsavel.perfil.ramal|default:"-" }}</p>
-            <p class="mb-0"><strong>E-mail:</strong> {{ responsavel.email|default:"-" }}</p>
+          <div class="ramal-contact-data">
+            <section class="ramal-contact-field ramal-contact-field-name">
+              <span>Nome</span>
+              <h2 id="ramalContactModalTitle"></h2>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-cargo">
+              <span>Cargo</span>
+              <p id="ramalContactCargo"></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-setor">
+              <span>Setor</span>
+              <p id="ramalContactSetor"></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-email">
+              <span>E-mail</span>
+              <button
+                id="ramalContactEmail"
+                class="ramal-contact-email ramal-email-trigger"
+                type="button"
+                data-email=""
+                aria-label="Abrir ações para o e-mail"
+              ></button>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-ramal">
+              <span>Ramal</span>
+              <p id="ramalContactRamal"></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-celular" id="ramalContactCelularWrapper" style="display: none;">
+              <span>Celular</span>
+              <p><a id="ramalContactCelular" href="" target="_blank" rel="noopener" style="color: #198754; text-decoration: none; font-weight: bold;"></a></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-local">
+              <span>Localização</span>
+              <p id="ramalContactLocal"></p>
+            </section>
           </div>
         </div>
       </div>
     </div>
-  {% endfor %}
+  </div>
+
+  <div class="modal fade" id="checklistAnexoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content border-0 shadow-lg contratos-modal">
+        <div class="modal-header border-0">
+          <h2 class="modal-title fs-5">Anexar documento do checklist</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body" data-checklist-anexo-modal-body>
+          <div class="text-muted">Carregando formulário...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="checklistPreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content border-0 shadow-lg contratos-modal">
+        <div class="modal-header border-0">
+          <h2 class="modal-title fs-5" id="checklistPreviewTitle">Visualização do anexo</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <iframe
+            id="checklistPreviewFrame"
+            title="Pré-visualização do anexo do checklist"
+            style="width: 100%; min-height: 70vh; border: 1px solid rgba(20, 54, 66, 0.12); border-radius: 0.75rem;"
+          ></iframe>
+          <div class="mt-3">
+            <a class="btn btn-outline-secondary" id="checklistPreviewOpenLink" href="#" target="_blank" rel="noopener">Abrir em nova aba</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ramal-email-popover" id="ramalEmailPopover" role="tooltip" hidden>
+    <div class="ramal-email-popover-address" id="ramalEmailPopoverAddress"></div>
+    <div class="ramal-email-popover-actions">
+      <a class="ramal-email-action" id="ramalEmailTeams" href="#" target="_blank" rel="noopener">
+        <span class="ramal-email-logo ramal-email-logo-teams" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="7" y="4" width="13" height="14" rx="2"></rect>
+            <rect x="3" y="7" width="10" height="10" rx="1.5"></rect>
+            <path d="M6 10h4M8 10v5"></path>
+          </svg>
+        </span>
+        <span>Teams</span>
+      </a>
+      <a class="ramal-email-action" id="ramalEmailOutlook" href="#" target="_blank" rel="noopener">
+        <span class="ramal-email-logo ramal-email-logo-outlook" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="4" y="6" width="15" height="12" rx="2"></rect>
+            <rect x="2" y="8" width="10" height="8" rx="1.5"></rect>
+            <path d="M5 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0M12 9l4 3l4-3"></path>
+          </svg>
+        </span>
+        <span>Outlook</span>
+      </a>
+      <button class="ramal-email-action" id="ramalEmailCopy" type="button">
+        <span class="ramal-email-logo ramal-email-logo-copy" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <rect x="8" y="8" width="10" height="12" rx="2"></rect>
+            <path d="M6 16h-.5A1.5 1.5 0 0 1 4 14.5v-9A1.5 1.5 0 0 1 5.5 4h8A1.5 1.5 0 0 1 15 5.5V6"></path>
+          </svg>
+        </span>
+        <span id="ramalEmailCopyText">Copiar</span>
+      </button>
+    </div>
+  </div>
+  <script>
+    function positionContratoActionMenu(menu) {
+      var toggle = menu.querySelector('.spi-action-menu-toggle');
+      var panel = menu.querySelector('.spi-action-menu-panel');
+      if (!toggle || !panel) {
+        return;
+      }
+      var rect = toggle.getBoundingClientRect();
+      var maxTop = Math.max(8, window.innerHeight - panel.offsetHeight - 8);
+      panel.style.right = 'auto';
+      panel.style.left = Math.max(8, rect.right - panel.offsetWidth) + 'px';
+      panel.style.top = Math.min(maxTop, Math.max(8, rect.top + (rect.height / 2) - (panel.offsetHeight / 2))) + 'px';
+    }
+
+    function closeContratoActionMenus(exceptToggle) {
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(function (menu) {
+        if (!exceptToggle || !menu.contains(exceptToggle)) {
+          menu.classList.remove('is-open');
+          var panel = menu.querySelector('.spi-action-menu-panel');
+          if (panel) {
+            panel.hidden = true;
+            panel.style.left = '';
+            panel.style.right = '';
+            panel.style.top = '';
+          }
+          var openToggle = menu.querySelector('.spi-action-menu-toggle');
+          if (openToggle) {
+            openToggle.setAttribute('aria-expanded', 'false');
+          }
+        }
+      });
+    }
+
+    document.addEventListener('click', function (event) {
+      var toggle = event.target.closest('.spi-action-menu-toggle');
+      closeContratoActionMenus(toggle);
+      if (!toggle) {
+        return;
+      }
+      var menu = toggle.closest('.spi-action-menu');
+      var isOpen = menu.classList.toggle('is-open');
+      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      var panel = menu.querySelector('.spi-action-menu-panel');
+      if (panel) {
+        panel.hidden = !isOpen;
+      }
+      if (isOpen) {
+        positionContratoActionMenu(menu);
+      }
+      event.preventDefault();
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      closeContratoActionMenus();
+    });
+
+    window.addEventListener('scroll', function () {
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(positionContratoActionMenu);
+    }, true);
+
+    window.addEventListener('resize', function () {
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(positionContratoActionMenu);
+    });
+
+    (function () {
+      const modalElement = document.getElementById('checklistAnexoModal');
+      const modalBody = modalElement ? modalElement.querySelector('[data-checklist-anexo-modal-body]') : null;
+      if (!modalElement || !modalBody) {
+        return;
+      }
+
+      const modal = new bootstrap.Modal(modalElement);
+
+      const loadModalForm = async (url) => {
+        modalBody.innerHTML = '<div class="text-muted">Carregando formulário...</div>';
+        try {
+          const response = await fetch(url, {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+          });
+          modalBody.innerHTML = await response.text();
+        } catch (error) {
+          modalBody.innerHTML = '<div class="alert alert-danger mb-0">Não foi possível carregar o formulário de anexo agora.</div>';
+        }
+      };
+
+      document.addEventListener('click', async function (event) {
+        const openButton = event.target.closest('[data-checklist-anexo-modal-open]');
+        if (!openButton) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        modal.show();
+        await loadModalForm(openButton.dataset.url);
+      });
+
+      modalBody.addEventListener('submit', async function (event) {
+        const form = event.target.closest('[data-checklist-anexo-modal-form]');
+        if (!form) {
+          return;
+        }
+        event.preventDefault();
+        const response = await fetch(form.action, {
+          method: 'POST',
+          headers: {'X-Requested-With': 'XMLHttpRequest'},
+          body: new FormData(form),
+        });
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const payload = await response.json();
+          if (payload.success) {
+            modal.hide();
+            window.location.reload();
+          }
+          return;
+        }
+        modalBody.innerHTML = await response.text();
+      });
+    }());
+
+    (function () {
+      const modalElement = document.getElementById('checklistPreviewModal');
+      const frame = document.getElementById('checklistPreviewFrame');
+      const title = document.getElementById('checklistPreviewTitle');
+      const link = document.getElementById('checklistPreviewOpenLink');
+      if (!modalElement || !frame || !title || !link) {
+        return;
+      }
+
+      const modal = new bootstrap.Modal(modalElement);
+
+      document.addEventListener('click', function (event) {
+        const trigger = event.target.closest('[data-checklist-preview-open]');
+        if (!trigger) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const url = trigger.dataset.fileUrl || '';
+        const name = trigger.dataset.fileName || 'Visualização do anexo';
+        const pdfUrl = url ? `${url}#toolbar=1&navpanes=0&view=FitH` : '';
+        title.textContent = name;
+        frame.src = pdfUrl;
+        link.href = url;
+        modal.show();
+      });
+
+      modalElement.addEventListener('hidden.bs.modal', function () {
+        frame.src = '';
+        link.href = '#';
+      });
+    }());
+
+    const ramalContactModal = document.getElementById('ramalContactModal');
+    if (ramalContactModal) {
+      const ramalModalInstance = new bootstrap.Modal(ramalContactModal);
+
+      document.addEventListener('click', function (event) {
+        const trigger = event.target.closest('[data-ramal-card-open]');
+        if (!trigger) {
+          return;
+        }
+        event.preventDefault();
+        const name = trigger.dataset.name || '-';
+        const photo = trigger.dataset.photo || '';
+
+        document.getElementById('ramalContactModalTitle').textContent = name;
+        document.getElementById('ramalContactCargo').textContent = trigger.dataset.cargo || '-';
+        document.getElementById('ramalContactSetor').textContent = trigger.dataset.setor || '-';
+        const modalEmail = document.getElementById('ramalContactEmail');
+        const email = trigger.dataset.email || '-';
+        modalEmail.textContent = email;
+        modalEmail.dataset.email = email;
+        modalEmail.title = email;
+        modalEmail.setAttribute('aria-label', `Abrir ações para ${email}`);
+        const ramalVal = trigger.dataset.ramal || '-';
+        document.getElementById('ramalContactRamal').textContent = (ramalVal !== '-' && ramalVal !== '') ? 'R: ' + ramalVal : '-';
+        document.getElementById('ramalContactLocal').textContent = trigger.dataset.local || '-';
+
+        const celular = trigger.dataset.celular || '';
+        const whatsapp = trigger.dataset.whatsapp || '';
+        const celularWrapper = document.getElementById('ramalContactCelularWrapper');
+        const celularElement = document.getElementById('ramalContactCelular');
+        if (celularWrapper && celularElement) {
+          if (celular) {
+            celularElement.textContent = 'Celular: ' + celular;
+            celularElement.href = whatsapp || '#';
+            celularWrapper.style.display = 'block';
+          } else {
+            celularWrapper.style.display = 'none';
+          }
+        }
+
+        const photoElement = document.getElementById('ramalContactPhoto');
+        photoElement.src = photo;
+        photoElement.alt = name;
+        ramalModalInstance.show();
+      });
+    }
+
+    const ramalEmailPopover = document.getElementById('ramalEmailPopover');
+    const ramalEmailPopoverAddress = document.getElementById('ramalEmailPopoverAddress');
+    const ramalEmailTeams = document.getElementById('ramalEmailTeams');
+    const ramalEmailOutlook = document.getElementById('ramalEmailOutlook');
+    const ramalEmailCopy = document.getElementById('ramalEmailCopy');
+    const ramalEmailCopyText = document.getElementById('ramalEmailCopyText');
+    const ramalEmailTrigger = document.getElementById('ramalContactEmail');
+
+    function closeRamalEmailPopover() {
+      if (!ramalEmailPopover) return;
+      ramalEmailPopover.hidden = true;
+      ramalEmailPopover.dataset.email = '';
+      if (ramalEmailCopyText) {
+        ramalEmailCopyText.textContent = 'Copiar';
+      }
+    }
+
+    function positionRamalEmailPopover(trigger) {
+      if (!ramalEmailPopover || !trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const top = rect.bottom + window.scrollY + 10;
+      const left = Math.max(12, rect.left + window.scrollX);
+      ramalEmailPopover.style.top = `${top}px`;
+      ramalEmailPopover.style.left = `${left}px`;
+    }
+
+    if (ramalEmailTrigger) {
+      ramalEmailTrigger.addEventListener('click', function () {
+        const email = (ramalEmailTrigger.dataset.email || '').trim();
+        if (!email || email === '-') {
+          return;
+        }
+        const alreadyOpen = !ramalEmailPopover.hidden && ramalEmailPopover.dataset.email === email;
+        if (alreadyOpen) {
+          closeRamalEmailPopover();
+          return;
+        }
+        ramalEmailPopover.hidden = false;
+        ramalEmailPopover.dataset.email = email;
+        ramalEmailPopoverAddress.textContent = email;
+        ramalEmailTeams.href = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`;
+        ramalEmailOutlook.href = `mailto:${encodeURIComponent(email)}`;
+        if (ramalEmailCopyText) {
+          ramalEmailCopyText.textContent = 'Copiar';
+        }
+        positionRamalEmailPopover(ramalEmailTrigger);
+      });
+    }
+
+    if (ramalEmailCopy) {
+      ramalEmailCopy.addEventListener('click', async function () {
+        const email = ramalEmailPopover ? ramalEmailPopover.dataset.email || '' : '';
+        if (!email) {
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(email);
+          if (ramalEmailCopyText) {
+            ramalEmailCopyText.textContent = 'Copiado';
+          }
+        } catch (error) {
+          if (ramalEmailCopyText) {
+            ramalEmailCopyText.textContent = 'Falhou';
+          }
+        }
+      });
+    }
+
+    document.addEventListener('click', function (event) {
+      if (!ramalEmailPopover || ramalEmailPopover.hidden) {
+        return;
+      }
+      if (event.target.closest('#ramalEmailPopover') || event.target.closest('#ramalContactEmail')) {
+        return;
+      }
+      closeRamalEmailPopover();
+    });
+
+    window.addEventListener('resize', function () {
+      if (!ramalEmailPopover || ramalEmailPopover.hidden || !ramalEmailTrigger) {
+        return;
+      }
+      positionRamalEmailPopover(ramalEmailTrigger);
+    });
+  </script>
 {% endblock %}

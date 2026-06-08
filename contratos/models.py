@@ -6,25 +6,31 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Sum
+from django.db.models import Max, Sum
 from django.utils import timezone
 
 from .services import (
     ZERO,
     calcular_memorias_retroativas,
+    calcular_valor_previsto_competencia,
     contrato_alerta,
     contrato_data_final_vigente,
     contrato_data_limite_ordinaria,
     contrato_periodo_acumulado_texto,
     contrato_prazo_atual_texto,
+    contrato_prazo_total_meses,
     contrato_regime,
     contrato_situacao,
     contrato_total_itens,
+    contrato_valor_global,
     criar_checklist_competencia,
     quantize_money,
     recalcular_avaliacao,
     recalcular_competencia,
+    reordenar_checklist_padrao_contrato,
     snapshot_modelo_qualidade,
+    sincronizar_checklist_contrato,
+    sync_competencias_pagamento,
 )
 
 
@@ -152,12 +158,21 @@ class Contrato(models.Model):
     def __str__(self):
         return f'{self.numero_contrato} - {self.apelido}'
 
-    def refresh_financials(self, save=True):
-        """Atualiza o valor global consolidado com base nos itens atuais."""
+    def save(self, *args, **kwargs):
+        """Persiste o contrato e mantém a agenda automática de competências alinhada à vigência."""
 
-        self.valor_global = contrato_total_itens(self)
+        super().save(*args, **kwargs)
+        sync_competencias_pagamento(self)
+
+    def refresh_financials(self, save=True):
+        """Atualiza base mensal e valor global consolidado a partir dos itens e da vigência."""
+
+        self.base_mensal = contrato_total_itens(self)
+        self.valor_global = contrato_valor_global(self)
         if save:
-            self.save(update_fields=['valor_global', 'atualizado_em'])
+            self.save(update_fields=['base_mensal', 'valor_global', 'atualizado_em'])
+        else:
+            sync_competencias_pagamento(self)
 
     @property
     def data_limite_vigencia(self):
@@ -192,8 +207,18 @@ class Contrato(models.Model):
         return contrato_periodo_acumulado_texto(self)
 
     @property
+    def vigencia_total_meses(self):
+        return contrato_prazo_total_meses(self)
+
+    @property
     def alerta_vigencia(self):
         return contrato_alerta(self)
+
+    @property
+    def possui_checklist_padrao(self):
+        """Indica se o contrato já tem checklist padrão suficiente para liberar as competências."""
+
+        return self.checklist_modelos.exists()
 
     def sync_detalhamento_texto(self, save=True):
         """Consolida os itens estruturados em texto para manter compatibilidade com o campo legado."""
@@ -299,6 +324,12 @@ class TermoAditivo(models.Model):
         if self.data_termino < self.data_inicio:
             raise ValidationError({'data_termino': 'A data de término deve ser posterior à data de início.'})
 
+    def save(self, *args, **kwargs):
+        """Recalcula a grade de competências quando a vigência é prorrogada por aditivo."""
+
+        super().save(*args, **kwargs)
+        sync_competencias_pagamento(self.contrato)
+
 
 class DocumentoContrato(models.Model):
     """Repositório documental geral do contrato."""
@@ -382,6 +413,7 @@ class CompetenciaPagamento(models.Model):
     """Competência financeira com checklist, medições e liberação de pagamento."""
 
     class Status(models.TextChoices):
+        BLOQUEADO = 'BLOQUEADO', 'Bloqueado'
         RASCUNHO = 'RASCUNHO', 'Rascunho'
         EM_CONFERENCIA = 'EM_CONFERENCIA', 'Em conferência'
         APTO_LIBERACAO = 'APTO_LIBERACAO', 'Apto para liberação'
@@ -392,9 +424,14 @@ class CompetenciaPagamento(models.Model):
     periodo_inicio = models.DateField('Período inicial')
     periodo_fim = models.DateField('Período final')
     nota_fiscal = models.CharField('Nota fiscal', max_length=120, blank=True)
+    anexo_nota_fiscal = models.FileField('Anexo da nota fiscal', upload_to='contratos/pagamentos/', blank=True)
+    anexo_atestado_realizacao = models.FileField('Atestado de realização', upload_to='contratos/pagamentos/', blank=True)
+    anexo_despacho_dof = models.FileField('Despacho DOF', upload_to='contratos/pagamentos/', blank=True)
     status = models.CharField('Status', max_length=20, choices=Status.choices, default=Status.RASCUNHO)
+    valor_previsto = models.DecimalField('Valor previsto', max_digits=14, decimal_places=2, default=Decimal('0.00'))
     valor_medido = models.DecimalField('Valor medido', max_digits=14, decimal_places=2, default=Decimal('0.00'))
     valor_liberado = models.DecimalField('Valor liberado', max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    gerada_automaticamente = models.BooleanField('Gerada automaticamente', default=True)
     data_efetivacao = models.DateField('Data de efetivação', null=True, blank=True)
     usuario_responsavel = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -422,6 +459,10 @@ class CompetenciaPagamento(models.Model):
             raise ValidationError({'periodo_fim': 'O período final deve ser posterior ao período inicial.'})
 
     def save(self, *args, **kwargs):
+        # Mantém o valor previsto sincronizado com a base mensal sempre que o período mudar.
+        self.valor_previsto = calcular_valor_previsto_competencia(self.contrato, self.periodo_inicio, self.periodo_fim)
+        if self.aguardando_checklist_padrao:
+            self.status = self.Status.BLOQUEADO
         nova = self.pk is None
         super().save(*args, **kwargs)
         if nova:
@@ -430,7 +471,17 @@ class CompetenciaPagamento(models.Model):
 
     @property
     def pode_liberar(self):
-        return not self.checklist_itens.filter(obrigatorio=True, concluido=False).exists()
+        return not self.aguardando_checklist_padrao and not self.checklist_itens.filter(obrigatorio=True, concluido=False).exists()
+
+    @property
+    def aguardando_checklist_padrao(self):
+        """Bloqueia a competência até existir checklist padrão do contrato replicado nela."""
+
+        if not self.contrato.possui_checklist_padrao:
+            return True
+        if not self.pk:
+            return False
+        return not self.checklist_itens.exists()
 
 
 class ChecklistPagamentoModelo(models.Model):
@@ -451,6 +502,18 @@ class ChecklistPagamentoModelo(models.Model):
 
     def __str__(self):
         return self.titulo
+
+    def save(self, *args, **kwargs):
+        """Numera automaticamente o checklist padrão em sequência dentro do contrato."""
+
+        if self.pk is None:
+            maior_ordem = (
+                type(self).objects.filter(contrato=self.contrato).aggregate(max_ordem=Max('ordem')).get('max_ordem') or 0
+            )
+            self.ordem = maior_ordem + 1
+        super().save(*args, **kwargs)
+        reordenar_checklist_padrao_contrato(self.contrato)
+        sincronizar_checklist_contrato(self.contrato)
 
 
 class ChecklistPagamentoItem(models.Model):
@@ -473,6 +536,12 @@ class ChecklistPagamentoItem(models.Model):
     def __str__(self):
         return self.titulo
 
+    @property
+    def anexo_principal(self):
+        """Retorna o anexo corrente do item para edição, visualização e limpeza na tela."""
+
+        return self.anexos.order_by('-id').first()
+
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         recalcular_competencia(self.competencia)
@@ -493,6 +562,25 @@ class ChecklistPagamentoAnexo(models.Model):
 
     def __str__(self):
         return self.nome_exibicao or self.arquivo.name
+
+    def save(self, *args, **kwargs):
+        """Ao anexar um documento, conclui automaticamente o item do checklist correspondente."""
+
+        super().save(*args, **kwargs)
+        if not self.item.concluido or not self.item.validado_em:
+            self.item.concluido = True
+            self.item.validado_em = timezone.now()
+            self.item.save(update_fields=['concluido', 'validado_em'])
+
+    def delete(self, *args, **kwargs):
+        """Ao limpar o último anexo, devolve o item ao estado pendente para novo upload."""
+
+        item = self.item
+        super().delete(*args, **kwargs)
+        if not item.anexos.exists():
+            item.concluido = False
+            item.validado_em = None
+            item.save(update_fields=['concluido', 'validado_em'])
 
 
 class MedicaoItemCompetencia(models.Model):

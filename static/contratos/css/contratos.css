@@ -53,6 +53,20 @@
   gap: 0.75rem;
 }
 
+.contratos-numero-grid {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+}
+
+.contratos-numero-auto-box {
+  background: linear-gradient(180deg, rgba(20, 54, 66, 0.03), rgba(11, 110, 79, 0.02));
+  border: 1px solid rgba(20, 54, 66, 0.12);
+  border-radius: 0.85rem;
+  padding: 0.85rem 1rem;
+}
+
 .contratos-inline-action-btn {
   align-items: center;
   display: inline-flex;
@@ -60,6 +74,39 @@
   font-weight: 700;
   justify-content: center;
   min-width: 3.25rem;
+}
+
+.contratos-modal .modal-body {
+  background: linear-gradient(180deg, rgba(20, 54, 66, 0.02), rgba(11, 110, 79, 0.02));
+}
+
+.spi-action-menu {
+  position: relative;
+}
+
+.spi-action-menu-toggle {
+  min-width: 2.5rem;
+}
+
+.spi-action-menu-panel {
+  background: #fffdf9;
+  border: 1px solid rgba(20, 54, 66, 0.14);
+  border-radius: 0.9rem;
+  box-shadow: 0 18px 32px rgba(20, 54, 66, 0.18);
+  display: grid;
+  gap: 0.45rem;
+  min-width: 10rem;
+  padding: 0.75rem;
+  position: fixed;
+  z-index: 2000;
+}
+
+.spi-action-menu-panel .btn {
+  justify-content: flex-start;
+}
+
+.contratos-itens-table {
+  overflow: visible;
 }
 
 .contratos-summary-grid {
@@ -212,9 +259,40 @@
   font-weight: 700;
 }
 
+.contratos-sort-link {
+  align-items: center;
+  color: inherit;
+  display: inline-flex;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+
+.contratos-sort-link:hover {
+  color: var(--contratos-accent);
+}
+
+.contratos-sort-link.is-active {
+  color: var(--contratos-accent);
+  font-weight: 700;
+}
+
+.contratos-sort-indicator {
+  color: rgba(20, 54, 66, 0.55);
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.contratos-sort-link.is-active .contratos-sort-indicator {
+  color: inherit;
+}
+
 @media (max-width: 991.98px) {
   .contratos-section-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .contratos-numero-grid {
+    grid-template-columns: 1fr;
   }
 }

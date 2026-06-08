@@ -1,0 +1,19 @@
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 07/06/2026 -->
+<!-- Objetivo: Renderizar o upload de anexo do checklist em modal no detalhe do contrato. -->
+<form method="post" action="{% url 'contratos:checklist_anexo_create' item.pk %}?modal=1" enctype="multipart/form-data" data-checklist-anexo-modal-form>
+  {% csrf_token %}
+  {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+  {% for field in form.visible_fields %}
+    <div class="mb-3">
+      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+      {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+  {% endfor %}
+  {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+  <div class="d-flex gap-2 justify-content-end">
+    <button class="btn btn-light" type="button" data-bs-dismiss="modal">Cancelar</button>
+    <button class="btn btn-primary" type="submit">Salvar anexo</button>
+  </div>
+</form>

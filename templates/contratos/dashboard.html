@@ -1,19 +1,23 @@
 {% extends "base.html" %}
 {% load static %}
+{% load contratos_extras %}
 <!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
 <!-- Objetivo: Exibir o painel financeiro e gerencial inicial do contrato. -->
 {% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
 
 {% block content %}
-  <div class="spi-page-title">
-    <h1>Painel do contrato {{ contrato.numero_contrato }}</h1>
-    <p>Indicadores consolidados da execução financeira e da carteira.</p>
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div>
+      <h1>Painel do contrato {{ contrato.numero_contrato }}</h1>
+      <p>Indicadores consolidados da execução financeira e da carteira.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'contratos:contrato_detail' contrato.pk %}">Voltar ao detalhe</a>
   </div>
 
   <section class="contratos-summary-grid mb-4">
-    <article class="card border-0 shadow-sm contratos-summary-card"><div class="card-body"><span class="contratos-kicker">Contratado</span><h2>R$ {{ contrato.valor_global }}</h2></div></article>
-    <article class="card border-0 shadow-sm contratos-summary-card"><div class="card-body"><span class="contratos-kicker">Executado</span><h2>R$ {{ valor_executado }}</h2></div></article>
-    <article class="card border-0 shadow-sm contratos-summary-card"><div class="card-body"><span class="contratos-kicker">Saldo</span><h2>R$ {{ saldo_contratual }}</h2></div></article>
+    <article class="card border-0 shadow-sm contratos-summary-card"><div class="card-body"><span class="contratos-kicker">Contratado</span><h2>R$ {{ contrato.valor_global|brl }}</h2></div></article>
+    <article class="card border-0 shadow-sm contratos-summary-card"><div class="card-body"><span class="contratos-kicker">Executado</span><h2>R$ {{ valor_executado|brl }}</h2></div></article>
+    <article class="card border-0 shadow-sm contratos-summary-card"><div class="card-body"><span class="contratos-kicker">Saldo</span><h2>R$ {{ saldo_contratual|brl }}</h2></div></article>
     <article class="card border-0 shadow-sm contratos-summary-card"><div class="card-body"><span class="contratos-kicker">Percentual executado</span><h2>{{ percentual_executado }}%</h2></div></article>
   </section>
 
@@ -51,4 +55,3 @@
     </div>
   </div>
 {% endblock %}
-

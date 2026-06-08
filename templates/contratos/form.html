@@ -15,6 +15,34 @@
         {% if show_empresa_atalho and form.empresa_contratada %}
           {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
           {% for field in form.visible_fields %}
+            {% if field.name == 'numero_contrato_incremental' %}
+              {# O checkbox é renderizado junto ao campo numero_contrato para manter a relacao visual entre ambos. #}
+            {% elif field.name == 'numero_contrato' %}
+              <div class="mb-3">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                <div class="contratos-numero-grid">
+                  <div>
+                    {{ field }}
+                    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                    {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  </div>
+                  {% if form.numero_contrato_incremental %}
+                    <div class="contratos-numero-auto-box">
+                      <div class="form-check mb-0">
+                        {{ form.numero_contrato_incremental }}
+                        <label class="form-check-label" for="{{ form.numero_contrato_incremental.id_for_label }}">
+                          {{ form.numero_contrato_incremental.label }}
+                        </label>
+                      </div>
+                      {% if form.numero_contrato_incremental.help_text %}
+                        <div class="form-text mt-1">{{ form.numero_contrato_incremental.help_text }}</div>
+                      {% endif %}
+                      {% for error in form.numero_contrato_incremental.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            {% else %}
             <div class="mb-3">
               <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
               {% if field.name == 'empresa_contratada' %}
@@ -22,7 +50,7 @@
                   <div class="flex-grow-1">
                     {{ field }}
                   </div>
-                  <a class="btn btn-outline-primary contratos-inline-action-btn" href="{% url 'contratos:empresa_create' %}" title="Cadastrar nova empresa" aria-label="Cadastrar nova empresa">+</a>
+                  <button class="btn btn-outline-primary contratos-inline-action-btn" type="button" data-empresa-modal-open data-url="{% url 'contratos:empresa_create' %}?modal=1" title="Cadastrar nova empresa" aria-label="Cadastrar nova empresa">+</button>
                 </div>
               {% else %}
                 {{ field }}
@@ -30,68 +58,11 @@
               {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
               {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
             </div>
+            {% endif %}
           {% endfor %}
           {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
         {% else %}
           {{ form.as_p }}
-        {% endif %}
-        {% if detalhamento_formset %}
-          <section class="contratos-inline-section">
-            <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
-              <div>
-                <h2 class="h5 mb-1">Detalhamento do objeto</h2>
-                <p class="text-muted mb-0">Use itens estruturados no estilo do mecanismo de tabela do TR.</p>
-              </div>
-              <button class="btn btn-sm btn-primary" type="button" data-add-detalhamento>+ item</button>
-            </div>
-            {{ detalhamento_formset.management_form }}
-            <div class="contratos-inline-list" data-detalhamento-list>
-              {% for item_form in detalhamento_formset %}
-                <article class="contratos-inline-card" data-detalhamento-item>
-                  {% for hidden in item_form.hidden_fields %}{{ hidden }}{% endfor %}
-                  <div class="row g-3 align-items-start">
-                    <div class="col-md-2">
-                      <label class="form-label" for="{{ item_form.ordem.id_for_label }}">Item</label>
-                      {{ item_form.ordem }}
-                    </div>
-                    <div class="col-md-9">
-                      <label class="form-label" for="{{ item_form.descricao.id_for_label }}">Descrição</label>
-                      {{ item_form.descricao }}
-                    </div>
-                    <div class="col-md-1 d-flex align-items-end">
-                      {% if item_form.DELETE %}
-                        <button class="btn btn-sm btn-outline-danger w-100" type="button" data-remove-detalhamento>Remover</button>
-                        <div class="d-none">{{ item_form.DELETE }}</div>
-                      {% endif %}
-                    </div>
-                  </div>
-                </article>
-              {% endfor %}
-            </div>
-          </section>
-          <template id="detalhamento-empty-form-template">
-            {% with item_form=detalhamento_formset.empty_form %}
-              <article class="contratos-inline-card" data-detalhamento-item>
-                {% for hidden in item_form.hidden_fields %}{{ hidden }}{% endfor %}
-                <div class="row g-3 align-items-start">
-                  <div class="col-md-2">
-                    <label class="form-label" for="{{ item_form.ordem.id_for_label }}">Item</label>
-                    {{ item_form.ordem }}
-                  </div>
-                  <div class="col-md-9">
-                    <label class="form-label" for="{{ item_form.descricao.id_for_label }}">Descrição</label>
-                    {{ item_form.descricao }}
-                  </div>
-                  <div class="col-md-1 d-flex align-items-end">
-                    {% if item_form.DELETE %}
-                      <button class="btn btn-sm btn-outline-danger w-100" type="button" data-remove-detalhamento>Remover</button>
-                      <div class="d-none">{{ item_form.DELETE }}</div>
-                    {% endif %}
-                  </div>
-                </div>
-              </article>
-            {% endwith %}
-          </template>
         {% endif %}
         <div class="d-flex gap-2 justify-content-end">
           <a class="btn btn-light" href="javascript:history.back()">Cancelar</a>
@@ -100,6 +71,21 @@
       </form>
     </div>
   </div>
+  {% if show_empresa_atalho and form.empresa_contratada %}
+    <div class="modal fade" id="empresaCreateModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg contratos-modal">
+          <div class="modal-header border-0">
+            <h2 class="modal-title fs-5">Nova empresa contratada</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body" data-empresa-modal-body>
+            <div class="text-muted">Carregando formulário...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
   {% if form.numero_contrato_incremental %}
     <script>
       (function () {
@@ -124,57 +110,67 @@
       }());
     </script>
   {% endif %}
-  {% if detalhamento_formset %}
+  {% if show_empresa_atalho and form.empresa_contratada %}
     <script>
-      (function () {
-        const addButton = document.querySelector('[data-add-detalhamento]');
-        const list = document.querySelector('[data-detalhamento-list]');
-        const totalForms = document.getElementById('id_detalhamento-TOTAL_FORMS');
-        const template = document.getElementById('detalhamento-empty-form-template');
-        if (!addButton || !list || !totalForms || !template) {
+      document.addEventListener('DOMContentLoaded', function () {
+        const openButton = document.querySelector('[data-empresa-modal-open]');
+        const modalElement = document.getElementById('empresaCreateModal');
+        const modalBody = modalElement ? modalElement.querySelector('[data-empresa-modal-body]') : null;
+        const empresaSelect = document.getElementById('id_empresa_contratada');
+        if (!openButton || !modalElement || !modalBody || !empresaSelect) {
           return;
         }
 
-        const refreshOrderValues = () => {
-          const cards = Array.from(list.querySelectorAll('[data-detalhamento-item]')).filter((card) => card.style.display !== 'none');
-          cards.forEach((card, index) => {
-            const ordemInput = card.querySelector('input[name$="-ordem"]');
-            if (ordemInput && !ordemInput.value) {
-              ordemInput.value = index + 1;
-            }
+        const modal = new bootstrap.Modal(modalElement);
+
+        const loadModalForm = async (url) => {
+          modalBody.innerHTML = '<div class="text-muted">Carregando formulário...</div>';
+          const response = await fetch(url, {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
           });
+          modalBody.innerHTML = await response.text();
         };
 
-        addButton.addEventListener('click', () => {
-          const formIndex = Number(totalForms.value);
-          const html = template.innerHTML.replace(/__prefix__/g, formIndex);
-          list.insertAdjacentHTML('beforeend', html);
-          totalForms.value = String(formIndex + 1);
-          refreshOrderValues();
+        const upsertEmpresaOption = (empresa) => {
+          let option = Array.from(empresaSelect.options).find((entry) => entry.value === String(empresa.id));
+          if (!option) {
+            option = new Option(empresa.label, empresa.id, true, true);
+            empresaSelect.add(option);
+          } else {
+            option.text = empresa.label;
+            option.selected = true;
+          }
+          empresaSelect.dispatchEvent(new Event('change', {bubbles: true}));
+        };
+
+        openButton.addEventListener('click', async () => {
+          await loadModalForm(openButton.dataset.url);
+          modal.show();
         });
 
-        list.addEventListener('click', (event) => {
-          const button = event.target.closest('[data-remove-detalhamento]');
-          if (!button) {
+        modalBody.addEventListener('submit', async (event) => {
+          const form = event.target.closest('[data-empresa-modal-form]');
+          if (!form) {
             return;
           }
-          const card = button.closest('[data-detalhamento-item]');
-          const deleteInput = card ? card.querySelector('input[type="checkbox"][name$="-DELETE"]') : null;
-          const idInput = card ? card.querySelector('input[name$="-id"]') : null;
-          if (!card) {
+          event.preventDefault();
+          const response = await fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+          });
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const payload = await response.json();
+            if (payload.success) {
+              upsertEmpresaOption(payload.empresa);
+              modal.hide();
+            }
             return;
           }
-          if (deleteInput && idInput && idInput.value) {
-            deleteInput.checked = true;
-            card.style.display = 'none';
-            return;
-          }
-          card.remove();
-          refreshOrderValues();
+          modalBody.innerHTML = await response.text();
         });
-
-        refreshOrderValues();
-      }());
+      });
     </script>
   {% endif %}
 {% endblock %}

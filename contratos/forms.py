@@ -40,6 +40,18 @@ BOOTSTRAP_INPUT = 'form-control form-control-lg'
 BOOTSTRAP_TEXTAREA = 'form-control spi-textarea-compact'
 
 
+def validar_upload_pdf(arquivo):
+    """Aceita apenas PDF nos fluxos em que o documento precisa ser visualizado no modal."""
+
+    if not arquivo:
+        return arquivo
+    nome = (getattr(arquivo, 'name', '') or '').lower()
+    content_type = (getattr(arquivo, 'content_type', '') or '').lower()
+    if not nome.endswith('.pdf') or content_type not in {'application/pdf', 'application/x-pdf'}:
+        raise ValidationError('Envie um arquivo PDF válido.')
+    return arquivo
+
+
 class BootstrapModelForm(forms.ModelForm):
     """Aplica classes visuais padronizadas aos widgets do módulo."""
 
@@ -74,15 +86,14 @@ class EmpresaContratadaForm(BootstrapModelForm):
         model = EmpresaContratada
         fields = [
             'razao_social',
-            'cnpj',
             'nome_fantasia',
+            'cnpj',
             'logradouro',
             'numero',
             'complemento',
             'bairro',
             'cidade',
             'estado',
-            'cep',
         ]
 
 
@@ -162,6 +173,8 @@ class ContratoForm(BootstrapModelForm):
 
 
 class ContratoItemForm(BootstrapModelForm):
+    """Formulário de item do contrato com ordem opcional para preenchimento automático."""
+
     class Meta:
         model = ContratoItem
         fields = [
@@ -175,6 +188,12 @@ class ContratoItemForm(BootstrapModelForm):
             'valor_referencial',
         ]
         widgets = {'descricao': forms.Textarea(attrs={'rows': 4})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # A ordem é sugerida automaticamente pela view; o usuário pode ajustar se precisar.
+        self.fields['ordem'].required = False
+        self.fields['ordem'].help_text = 'Se deixar em branco, o sistema usará o próximo número disponível.'
 
 
 class ContratoDetalhamentoItemForm(BootstrapModelForm):
@@ -212,9 +231,43 @@ class TermoAditivoForm(BootstrapModelForm):
 
 
 class DocumentoContratoForm(BootstrapModelForm):
+    DOCUMENTOS_PREDEFINIDOS = [
+        ('DFD_PCA', 'Documento Formalizador da Demanda do PCA'),
+        ('DFD_CONTRATACAO', 'Documento Formalizador da Demanda da Contratação'),
+        ('ETP', 'Estudo Técnico Preliminar'),
+        ('MATRIZ_RISCO', 'Matriz de Risco'),
+        ('TERMO_REFERENCIA', 'Termo de Referência'),
+        ('PARECER_CJ', 'Parecer CJ'),
+        ('CONTRATO', 'Contrato'),
+    ]
+    MAPA_TIPO_DESCRICAO = {
+        'DFD_PCA': (DocumentoContrato.Tipo.OUTRO, 'Documento Formalizador da Demanda do PCA'),
+        'DFD_CONTRATACAO': (DocumentoContrato.Tipo.OUTRO, 'Documento Formalizador da Demanda da Contratação'),
+        'ETP': (DocumentoContrato.Tipo.OUTRO, 'Estudo Técnico Preliminar'),
+        'MATRIZ_RISCO': (DocumentoContrato.Tipo.OUTRO, 'Matriz de Risco'),
+        'TERMO_REFERENCIA': (DocumentoContrato.Tipo.OUTRO, 'Termo de Referência'),
+        'PARECER_CJ': (DocumentoContrato.Tipo.PARECER, 'Parecer CJ'),
+        'CONTRATO': (DocumentoContrato.Tipo.CONTRATO, 'Contrato'),
+    }
+    documento_predefinido = forms.ChoiceField(label='Documento', choices=DOCUMENTOS_PREDEFINIDOS)
+
     class Meta:
         model = DocumentoContrato
-        fields = ['tipo', 'descricao', 'arquivo', 'data_documento']
+        fields = ['documento_predefinido', 'arquivo', 'data_documento']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Tipo e descrição passam a ser derivados do documento pré-estabelecido.
+        self.fields['documento_predefinido'].widget.attrs['class'] = 'form-select form-select-lg'
+
+    def save(self, commit=True):
+        instancia = super().save(commit=False)
+        tipo, descricao = self.MAPA_TIPO_DESCRICAO[self.cleaned_data['documento_predefinido']]
+        instancia.tipo = tipo
+        instancia.descricao = descricao
+        if commit:
+            instancia.save()
+        return instancia
 
 
 class OcorrenciaContratoForm(BootstrapModelForm):
@@ -236,10 +289,37 @@ class CompetenciaPagamentoForm(BootstrapModelForm):
         fields = ['periodo_inicio', 'periodo_fim', 'nota_fiscal', 'status', 'data_efetivacao']
 
 
+class CompetenciaPagamentoExecucaoForm(BootstrapModelForm):
+    """Conclui o pagamento da competência por meio dos três anexos obrigatórios."""
+
+    class Meta:
+        model = CompetenciaPagamento
+        fields = ['anexo_nota_fiscal', 'anexo_atestado_realizacao', 'anexo_despacho_dof']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['anexo_nota_fiscal'].label = 'Nota Fiscal'
+        self.fields['anexo_atestado_realizacao'].label = 'Atestado de Realização'
+        self.fields['anexo_despacho_dof'].label = 'Despacho DOF'
+        for field_name in ('anexo_nota_fiscal', 'anexo_atestado_realizacao', 'anexo_despacho_dof'):
+            self.fields[field_name].widget.attrs['accept'] = 'application/pdf,.pdf'
+
+    def clean_anexo_nota_fiscal(self):
+        return validar_upload_pdf(self.cleaned_data.get('anexo_nota_fiscal'))
+
+    def clean_anexo_atestado_realizacao(self):
+        return validar_upload_pdf(self.cleaned_data.get('anexo_atestado_realizacao'))
+
+    def clean_anexo_despacho_dof(self):
+        return validar_upload_pdf(self.cleaned_data.get('anexo_despacho_dof'))
+
+
 class ChecklistPagamentoModeloForm(BootstrapModelForm):
+    """Checklist padrão do contrato com índice totalmente automático."""
+
     class Meta:
         model = ChecklistPagamentoModelo
-        fields = ['ordem', 'titulo', 'descricao', 'obrigatorio']
+        fields = ['titulo', 'descricao', 'obrigatorio']
         widgets = {'descricao': forms.Textarea(attrs={'rows': 3})}
 
 
@@ -252,7 +332,49 @@ class ChecklistPagamentoItemForm(BootstrapModelForm):
 class ChecklistPagamentoAnexoForm(BootstrapModelForm):
     class Meta:
         model = ChecklistPagamentoAnexo
-        fields = ['arquivo', 'nome_exibicao']
+        fields = ['arquivo']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['arquivo'].widget.attrs['accept'] = 'application/pdf,.pdf'
+
+    def clean_arquivo(self):
+        return validar_upload_pdf(self.cleaned_data.get('arquivo'))
+
+
+class CompetenciaMedicaoLoteForm(forms.Form):
+    """Monta a tabela mensal de medição trazendo os itens do contrato para preenchimento das quantidades."""
+
+    def __init__(self, *args, contrato=None, competencia=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.contrato = contrato
+        self.competencia = competencia
+        self.itens = list((contrato.itens.order_by('ordem', 'id') if contrato is not None else []))
+        medicoes_existentes = {}
+        if competencia is not None:
+            medicoes_existentes = {
+                medicao.item_contrato_id: medicao
+                for medicao in competencia.medicoes.select_related('item_contrato')
+            }
+
+        for item in self.itens:
+            medicao = medicoes_existentes.get(item.pk)
+            self.fields[f'quantidade_{item.pk}'] = forms.DecimalField(
+                label=f'Quantidade medida do item {item.ordem}',
+                required=False,
+                min_value=0,
+                decimal_places=2,
+                max_digits=14,
+                initial=getattr(medicao, 'quantidade', None),
+                widget=forms.NumberInput(
+                    attrs={
+                        'class': BOOTSTRAP_INPUT,
+                        'step': '0.01',
+                        'min': '0',
+                        'placeholder': '0,00',
+                    }
+                ),
+            )
 
 
 class MedicaoItemCompetenciaForm(BootstrapModelForm):
