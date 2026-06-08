@@ -9,6 +9,7 @@
     <title>{% block title %}Aplicações SPI{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'usuarios/css/ramais.css' %}">
     {% block extra_css %}{% endblock %}
   </head>
   <body class="spi-body{% if request.user.is_authenticated %} spi-authenticated-body{% endif %}">
@@ -105,13 +106,166 @@
           </header>
 
           {% if aniversariantes %}
-            <!-- Barra mensal de aniversariantes, ocultável por usuário via localStorage. -->
-            <div class="spi-marquee-bar" id="birthdayMarqueeBar" style="display: none; cursor: pointer;" title="Clique para ocultar os aniversariantes deste mês">
-              <div class="spi-marquee-content">
-                <span class="title">Aniversariantes do mês:</span>
-                {% for a in aniversariantes %}
-                  <strong>{{ a.nome }}</strong> ({{ a.dia }}/{{ a.mes }}){% if not forloop.last %} &nbsp;&nbsp;&bull;&nbsp;&nbsp; {% endif %}
-                {% endfor %}
+            <!-- Barra mensal de aniversariantes com abertura de lista detalhada e ação separada para ocultar. -->
+            <div class="spi-marquee-bar" id="birthdayMarqueeBar" style="display: none;">
+              <button
+                class="spi-marquee-launch"
+                id="birthdayMarqueeLaunch"
+                type="button"
+                title="Clique para ver os aniversariantes do mês"
+              >
+                <div class="spi-marquee-content">
+                  <span class="title">Aniversariantes do mês:</span>
+                  {% for a in aniversariantes %}
+                    <strong>{{ a.nome }}</strong> ({{ a.dia }}/{{ a.mes }}){% if not forloop.last %} &nbsp;&nbsp;&bull;&nbsp;&nbsp; {% endif %}
+                  {% endfor %}
+                </div>
+              </button>
+              <button
+                class="spi-marquee-dismiss"
+                id="birthdayMarqueeDismiss"
+                type="button"
+                aria-label="Ocultar aniversariantes de hoje"
+                title="Ocultar aniversariantes de hoje"
+              >×</button>
+            </div>
+
+            <!-- Lista modal dos aniversariantes do mês, com acesso direto ao cartão de contato. -->
+            <div class="modal fade" id="birthdayListModal" tabindex="-1" aria-labelledby="birthdayListModalTitle" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered birthday-list-dialog">
+                <div class="modal-content birthday-list-modal">
+                  <div class="modal-header border-0 pb-0">
+                    <div>
+                      <span class="birthday-list-eyebrow">Funcionários</span>
+                      <h2 class="modal-title birthday-list-title" id="birthdayListModalTitle">Aniversariantes do mês</h2>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                  </div>
+                  <div class="modal-body birthday-list-body">
+                    <div class="birthday-list-stack">
+                      {% for a in aniversariantes %}
+                        <button
+                          class="birthday-person-card"
+                          type="button"
+                          data-birthday-contact-open
+                          data-name="{{ a.nome }}"
+                          data-cargo="{{ a.cargo }}"
+                          data-setor="{{ a.setor }}"
+                          data-email="{{ a.email }}"
+                          data-ramal="{{ a.ramal }}"
+                          data-celular="{{ a.celular }}"
+                          data-whatsapp="{{ a.whatsapp }}"
+                          data-local="{{ a.local }}"
+                          data-photo="{{ a.foto_url }}"
+                          data-iniciais="{{ a.iniciais }}"
+                          aria-label="Ver contato de {{ a.nome }}"
+                        >
+                          <span class="birthday-person-avatar">
+                            {% if a.foto_url %}
+                              <img src="{{ a.foto_url }}" alt="{{ a.nome }}">
+                            {% else %}
+                              <span>{{ a.iniciais }}</span>
+                            {% endif %}
+                          </span>
+                          <span class="birthday-person-copy">
+                            <strong>{{ a.nome }}</strong>
+                            <small>{{ a.cargo }}</small>
+                          </span>
+                          <span class="birthday-person-meta">
+                            <small>{{ a.dia }}/{{ a.mes }}</small>
+                            <span class="birthday-person-arrow" aria-hidden="true">›</span>
+                          </span>
+                        </button>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cartão detalhado do aniversariante clicado na lista mensal. -->
+            <div class="modal fade" id="birthdayContactModal" tabindex="-1" aria-labelledby="birthdayContactModalTitle" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered ramal-contact-dialog">
+                <div class="modal-content ramal-contact-modal">
+                  <button class="btn-close ramal-contact-close" type="button" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                  <div class="ramal-contact-card">
+                    <div class="ramal-contact-photo">
+                      <img id="birthdayContactPhoto" src="" alt="">
+                    </div>
+                    <div class="ramal-contact-data">
+                      <section class="ramal-contact-field ramal-contact-field-name">
+                        <span>Nome</span>
+                        <h2 id="birthdayContactModalTitle"></h2>
+                      </section>
+                      <section class="ramal-contact-field ramal-contact-field-cargo">
+                        <span>Cargo</span>
+                        <p id="birthdayContactCargo"></p>
+                      </section>
+                      <section class="ramal-contact-field ramal-contact-field-setor">
+                        <span>Setor</span>
+                        <p id="birthdayContactSetor"></p>
+                      </section>
+                      <section class="ramal-contact-field ramal-contact-field-email">
+                        <span>E-mail</span>
+                        <button
+                          id="birthdayContactEmail"
+                          class="ramal-contact-email ramal-email-trigger"
+                          type="button"
+                          data-email=""
+                          aria-label="Abrir ações para o e-mail"
+                        ></button>
+                      </section>
+                      <section class="ramal-contact-field ramal-contact-field-ramal">
+                        <span>Ramal</span>
+                        <p id="birthdayContactRamal"></p>
+                      </section>
+                      <section class="ramal-contact-field ramal-contact-field-celular" id="birthdayContactCelularWrapper" style="display: none;">
+                        <span>Celular</span>
+                        <p><a id="birthdayContactCelular" href="" target="_blank" rel="noopener" style="color: #198754; text-decoration: none; font-weight: bold;"></a></p>
+                      </section>
+                      <section class="ramal-contact-field ramal-contact-field-local">
+                        <span>Localização</span>
+                        <p id="birthdayContactLocal"></p>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Popover com ações rápidas para o e-mail do aniversariante selecionado. -->
+            <div class="ramal-email-popover" id="birthdayEmailPopover" role="tooltip" hidden>
+              <div class="ramal-email-popover-address" id="birthdayEmailPopoverAddress"></div>
+              <div class="ramal-email-popover-actions">
+                <a class="ramal-email-action" id="birthdayEmailTeams" href="#" target="_blank" rel="noopener">
+                  <span class="ramal-email-logo ramal-email-logo-teams" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <rect x="7" y="4" width="13" height="14" rx="2"></rect>
+                      <rect x="3" y="7" width="10" height="10" rx="1.5"></rect>
+                      <path d="M6 10h4M8 10v5"></path>
+                    </svg>
+                  </span>
+                  <span>Teams</span>
+                </a>
+                <a class="ramal-email-action" id="birthdayEmailOutlook" href="#" target="_blank" rel="noopener">
+                  <span class="ramal-email-logo ramal-email-logo-outlook" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <rect x="4" y="6" width="15" height="12" rx="2"></rect>
+                      <rect x="2" y="8" width="10" height="8" rx="1.5"></rect>
+                      <path d="M5 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0M12 9l4 3l4-3"></path>
+                    </svg>
+                  </span>
+                  <span>Outlook</span>
+                </a>
+                <button class="ramal-email-action" id="birthdayEmailCopy" type="button">
+                  <span class="ramal-email-logo ramal-email-logo-copy" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <rect x="8" y="8" width="10" height="12" rx="2"></rect>
+                      <path d="M6 16h-.5A1.5 1.5 0 0 1 4 14.5v-9A1.5 1.5 0 0 1 5.5 4h8A1.5 1.5 0 0 1 15 5.5V6"></path>
+                    </svg>
+                  </span>
+                  <span id="birthdayEmailCopyText">Copiar</span>
+                </button>
               </div>
             </div>
 
@@ -122,9 +276,6 @@
                   <div class="modal-header border-0 pb-0">
                     <h5 class="modal-title fw-bold text-dark">Aviso</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                  </div>
-                  <div class="modal-body py-4">
-                    <p class="text-secondary fs-5 mb-0">Mês que vem trarei os aniversariantes novamente!</p>
                   </div>
                   <div class="modal-footer border-0 pt-0">
                     <button type="button" class="btn btn-primary px-4" data-bs-dismiss="modal" style="border-radius: 8px;">Ok</button>
@@ -294,14 +445,22 @@
           });
         }
 
-        // Controla a exibição mensal da barra de aniversariantes por usuário.
+        // Controla a exibição diária da barra de aniversariantes por usuário.
         const marqueeBar = document.getElementById('birthdayMarqueeBar');
         if (marqueeBar) {
-          const currentMonthKey = new Date().getFullYear() + '-' + (new Date().getMonth() + 1);
+          // A chave inclui o dia para que a barra reapareça automaticamente no dia seguinte.
+          const today = new Date();
+          const currentDayKey = today.getFullYear() + '-' + (today.getMonth() + 1) + '-' + today.getDate();
           const userKey = 'birthday_marquee_dismissed_' + '{{ request.user.id|default:"anonymous" }}';
-          const dismissedMonth = localStorage.getItem(userKey);
+          const dismissedDay = localStorage.getItem(userKey);
+          const marqueeLaunch = document.getElementById('birthdayMarqueeLaunch');
+          const marqueeDismiss = document.getElementById('birthdayMarqueeDismiss');
+          const birthdayListModalEl = document.getElementById('birthdayListModal');
+          const birthdayContactModalEl = document.getElementById('birthdayContactModal');
+          const birthdayContactModal = birthdayContactModalEl ? new bootstrap.Modal(birthdayContactModalEl) : null;
+          const birthdayListModal = birthdayListModalEl ? new bootstrap.Modal(birthdayListModalEl) : null;
 
-          if (dismissedMonth !== currentMonthKey) {
+          if (dismissedDay !== currentDayKey) {
             marqueeBar.style.display = 'flex';
           }
 
@@ -311,19 +470,158 @@
             dismissModalObj = new bootstrap.Modal(dismissModalEl);
 
             dismissModalEl.addEventListener('hidden.bs.modal', () => {
-              localStorage.setItem(userKey, currentMonthKey);
+              localStorage.setItem(userKey, currentDayKey);
               marqueeBar.style.display = 'none';
             });
           }
 
-          marqueeBar.addEventListener('click', () => {
+          marqueeLaunch?.addEventListener('click', () => {
+            birthdayListModal?.show();
+          });
+
+          marqueeDismiss?.addEventListener('click', () => {
             if (dismissModalObj) {
               dismissModalObj.show();
             } else {
-              localStorage.setItem(userKey, currentMonthKey);
+              localStorage.setItem(userKey, currentDayKey);
               marqueeBar.style.display = 'none';
             }
           });
+
+          // Abre o cartão de contato do aniversariante escolhido usando os dados já carregados na página.
+          document.querySelectorAll('[data-birthday-contact-open]').forEach((trigger) => {
+            trigger.addEventListener('click', () => {
+              const name = trigger.dataset.name || '-';
+              const photo = trigger.dataset.photo || '';
+              const initials = trigger.dataset.iniciais || name.slice(0, 1).toUpperCase();
+              const photoElement = document.getElementById('birthdayContactPhoto');
+              const modalEmail = document.getElementById('birthdayContactEmail');
+              const email = trigger.dataset.email || '-';
+              const ramalVal = trigger.dataset.ramal || '-';
+              const celular = trigger.dataset.celular || '';
+              const whatsapp = trigger.dataset.whatsapp || '';
+              const celularWrapper = document.getElementById('birthdayContactCelularWrapper');
+              const celularElement = document.getElementById('birthdayContactCelular');
+
+              document.getElementById('birthdayContactModalTitle').textContent = name;
+              document.getElementById('birthdayContactCargo').textContent = trigger.dataset.cargo || '-';
+              document.getElementById('birthdayContactSetor').textContent = trigger.dataset.setor || '-';
+              document.getElementById('birthdayContactRamal').textContent = (ramalVal !== '-' && ramalVal !== '') ? 'R: ' + ramalVal : '-';
+              document.getElementById('birthdayContactLocal').textContent = trigger.dataset.local || '-';
+
+              modalEmail.textContent = email;
+              modalEmail.dataset.email = email;
+              modalEmail.title = email;
+              modalEmail.setAttribute('aria-label', `Abrir ações para ${email}`);
+
+              if (celularWrapper && celularElement) {
+                if (celular) {
+                  celularElement.textContent = 'Celular: ' + celular;
+                  celularElement.href = whatsapp;
+                  celularWrapper.style.display = 'block';
+                } else {
+                  celularWrapper.style.display = 'none';
+                }
+              }
+
+              if (photo) {
+                photoElement.src = photo;
+                photoElement.alt = name;
+              } else {
+                const placeholderSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 960"><rect width="800" height="960" fill="#E8EEF8"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#1F2D4A" font-family="Arial, sans-serif" font-size="220" font-weight="700">${initials}</text></svg>`;
+                photoElement.src = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(placeholderSvg)}`;
+                photoElement.alt = `Sem foto cadastrada para ${name}`;
+              }
+
+              birthdayListModal?.hide();
+              birthdayContactModal?.show();
+            });
+          });
+
+          const birthdayEmailPopover = document.getElementById('birthdayEmailPopover');
+          const birthdayEmailPopoverAddress = document.getElementById('birthdayEmailPopoverAddress');
+          const birthdayEmailTeams = document.getElementById('birthdayEmailTeams');
+          const birthdayEmailOutlook = document.getElementById('birthdayEmailOutlook');
+          const birthdayEmailCopy = document.getElementById('birthdayEmailCopy');
+          const birthdayEmailCopyText = document.getElementById('birthdayEmailCopyText');
+          let birthdayActiveEmail = '';
+
+          function hideBirthdayEmailPopover() {
+            if (!birthdayEmailPopover) return;
+            birthdayEmailPopover.hidden = true;
+            birthdayActiveEmail = '';
+          }
+
+          function positionBirthdayEmailPopover(trigger) {
+            const rect = trigger.getBoundingClientRect();
+            const popoverRect = birthdayEmailPopover.getBoundingClientRect();
+            const gap = 8;
+            let top = rect.bottom + gap;
+            let left = rect.left;
+
+            if (left + popoverRect.width > window.innerWidth - 12) {
+              left = window.innerWidth - popoverRect.width - 12;
+            }
+            if (top + popoverRect.height > window.innerHeight - 12) {
+              top = rect.top - popoverRect.height - gap;
+            }
+
+            birthdayEmailPopover.style.left = `${Math.max(12, left)}px`;
+            birthdayEmailPopover.style.top = `${Math.max(12, top)}px`;
+          }
+
+          function showBirthdayEmailPopover(trigger) {
+            if (!birthdayEmailPopover) return;
+            const email = (trigger.dataset.email || trigger.textContent || '').trim();
+            if (!email || email === '-') return;
+
+            birthdayActiveEmail = email;
+            birthdayEmailPopoverAddress.textContent = email;
+            birthdayEmailTeams.href = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`;
+            birthdayEmailOutlook.href = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(email)}`;
+            birthdayEmailCopyText.textContent = 'Copiar';
+            birthdayEmailPopover.hidden = false;
+            positionBirthdayEmailPopover(trigger);
+          }
+
+          async function copyBirthdayEmail() {
+            if (!birthdayActiveEmail) return;
+            try {
+              await navigator.clipboard.writeText(birthdayActiveEmail);
+            } catch (error) {
+              const input = document.createElement('input');
+              input.value = birthdayActiveEmail;
+              document.body.appendChild(input);
+              input.select();
+              document.execCommand('copy');
+              input.remove();
+            }
+            birthdayEmailCopyText.textContent = 'Copiado';
+            window.setTimeout(() => {
+              if (birthdayActiveEmail) birthdayEmailCopyText.textContent = 'Copiar';
+            }, 1400);
+          }
+
+          document.addEventListener('click', (event) => {
+            const emailTrigger = event.target.closest('#birthdayContactEmail');
+            if (emailTrigger) {
+              event.preventDefault();
+              event.stopPropagation();
+              showBirthdayEmailPopover(emailTrigger);
+              return;
+            }
+
+            if (birthdayEmailPopover && !birthdayEmailPopover.hidden && !event.target.closest('#birthdayEmailPopover')) {
+              hideBirthdayEmailPopover();
+            }
+          });
+
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') hideBirthdayEmailPopover();
+          });
+
+          window.addEventListener('resize', hideBirthdayEmailPopover);
+          birthdayEmailCopy?.addEventListener('click', copyBirthdayEmail);
         }
       });
     </script>

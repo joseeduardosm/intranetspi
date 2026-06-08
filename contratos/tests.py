@@ -397,6 +397,15 @@ class ContratosViewTests(ContratosBaseTest):
 
         self.assertContains(response, 'Criar avaliação')
 
+    def test_detalhe_renderiza_cards_para_responsaveis_internos(self):
+        self.client.login(username='joao', password='123')
+
+        response = self.client.get(reverse('contratos:contrato_detail', args=[self.contrato.pk]))
+
+        self.assertContains(response, 'class="birthday-person-card contratos-responsavel-card"', html=False)
+        self.assertContains(response, 'onclick="openContratoResponsavelModal(this)"', html=False)
+        self.assertContains(response, 'Responsáveis internos')
+
     def test_rota_de_avaliacao_bloqueia_usuario_que_nao_e_fiscal(self):
         ModeloAvaliacaoQualidade.objects.create(
             contrato=self.contrato,
@@ -717,6 +726,16 @@ class ContratosViewTests(ContratosBaseTest):
         criado = Contrato.objects.get(apelido='Contrato incremental')
         self.assertRedirects(response, reverse('contratos:contrato_detail', args=[criado.pk]), fetch_redirect_response=False)
         self.assertEqual(criado.numero_contrato, '071/2026')
+
+    def test_tela_de_cadastro_renderiza_management_form_do_detalhamento(self):
+        """Garante que o POST do navegador leve os campos ocultos exigidos pelo formset."""
+
+        self.client.login(username='joao', password='123')
+        response = self.client.get(reverse('contratos:contrato_create'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="detalhamento-TOTAL_FORMS"', html=False)
+        self.assertContains(response, 'name="detalhamento-INITIAL_FORMS"', html=False)
 
     def test_formulario_incremental_reinicia_sequencia_em_novo_ano(self):
         form = ContratoForm(

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% load static %}
+{% load contratos_extras %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
+<!-- Objetivo: Concluir o pagamento da competência anexando os documentos obrigatórios e registrando o valor final. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos_v2/css/contratos_v2.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{{ titulo }}</h1>
+    <p>{{ contrato.numero_contrato }} • competência de {{ competencia.periodo_inicio|date:"d/m/Y" }} a {{ competencia.periodo_fim|date:"d/m/Y" }}</p>
+  </div>
+
+  <div class="card border-0 shadow-sm contratos-v2-form-card">
+    <div class="card-body p-4">
+      <div class="contratos-v2-payment-summary mb-4">
+        <div><span class="contratos-v2-kicker">Valor medido</span><strong>R$ {{ competencia.valor_medido|brl }}</strong></div>
+        <div><span class="contratos-v2-kicker">Valor sugerido</span><strong>R$ {{ competencia.valor_liberado_sugerido|brl }}</strong></div>
+      </div>
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+        {% for field in form.visible_fields %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+        {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+        <div class="d-flex gap-2 justify-content-end">
+          <a class="btn btn-light" href="{% url 'contratos_v2:contrato_detail' contrato.pk %}">Cancelar</a>
+          <button class="btn btn-primary" type="submit">Registrar pagamento</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

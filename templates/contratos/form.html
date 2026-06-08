@@ -12,6 +12,12 @@
     <div class="card-body p-4">
       <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
+        {% if detalhamento_formset %}
+          {# O management form mantém o formset válido mesmo quando nenhum item de detalhamento é exibido na tela. #}
+          {{ detalhamento_formset.management_form }}
+          {% for hidden in detalhamento_formset.hidden_fields %}{{ hidden }}{% endfor %}
+          {% for error in detalhamento_formset.non_form_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+        {% endif %}
         {% if show_empresa_atalho and form.empresa_contratada %}
           {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
           {% for field in form.visible_fields %}

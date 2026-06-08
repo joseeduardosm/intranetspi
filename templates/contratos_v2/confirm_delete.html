@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
+<!-- Objetivo: Confirmar a exclusão do contrato V2 com mensagem objetiva. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos_v2/css/contratos_v2.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="card border-0 shadow-sm contratos-v2-form-card">
+    <div class="card-body p-4">
+      <h1 class="h3 mb-3">Excluir contrato</h1>
+      <p class="text-muted">Confirma a exclusão de <strong>{{ object.numero_contrato }} - {{ object.apelido }}</strong>?</p>
+      <form method="post">
+        {% csrf_token %}
+        <div class="d-flex gap-2 justify-content-end">
+          <a class="btn btn-light" href="{% url 'contratos_v2:contrato_detail' object.pk %}">Cancelar</a>
+          <button class="btn btn-danger" type="submit">Excluir</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

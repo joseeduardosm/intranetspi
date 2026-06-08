@@ -188,26 +188,43 @@
           <h2>Responsáveis internos</h2>
         </div>
         <div class="card-body">
-          <ul class="list-unstyled mb-0">
+          <div class="contratos-responsaveis-stack">
             {% for responsavel in responsaveis_internos %}
-              <li>
-                <strong>{{ responsavel.label }}:</strong>
-                <a
-                  href="#"
-                  data-ramal-card-open
-                  data-name="{{ responsavel.nome }}"
-                  data-photo="{{ responsavel.foto_url }}"
-                  data-cargo="{{ responsavel.cargo }}"
-                  data-setor="{{ responsavel.setor }}"
-                  data-email="{{ responsavel.email }}"
-                  data-ramal="{{ responsavel.ramal }}"
-                  data-celular="{{ responsavel.celular }}"
-                  data-whatsapp="{{ responsavel.whatsapp }}"
-                  data-local="{{ responsavel.local }}"
-                >{{ responsavel.nome_link }}</a>
-              </li>
+              <button
+                class="birthday-person-card contratos-responsavel-card"
+                type="button"
+                data-ramal-card-open
+                data-name="{{ responsavel.nome }}"
+                data-photo="{{ responsavel.foto_url }}"
+                data-cargo="{{ responsavel.cargo }}"
+                data-setor="{{ responsavel.setor }}"
+                data-email="{{ responsavel.email }}"
+                data-ramal="{{ responsavel.ramal }}"
+                data-celular="{{ responsavel.celular }}"
+                data-whatsapp="{{ responsavel.whatsapp }}"
+                data-local="{{ responsavel.local }}"
+                onclick="openContratoResponsavelModal(this)"
+                aria-label="Ver contato de {{ responsavel.nome }}"
+              >
+                <span class="birthday-person-avatar">
+                  {% if responsavel.foto_url %}
+                    <img src="{{ responsavel.foto_url }}" alt="{{ responsavel.nome }}">
+                  {% else %}
+                    <span>{{ responsavel.iniciais }}</span>
+                  {% endif %}
+                </span>
+                <span class="birthday-person-copy">
+                  <small class="contratos-responsavel-label">{{ responsavel.label }}</small>
+                  <strong>{{ responsavel.nome }}</strong>
+                  <small>{{ responsavel.cargo }}</small>
+                </span>
+                <span class="birthday-person-meta">
+                  <small>{{ responsavel.ramal }}</small>
+                  <span class="birthday-person-arrow" aria-hidden="true">›</span>
+                </span>
+              </button>
             {% endfor %}
-          </ul>
+          </div>
         </div>
       </section>
 
@@ -688,14 +705,12 @@
 
     const ramalContactModal = document.getElementById('ramalContactModal');
     if (ramalContactModal) {
-      const ramalModalInstance = new bootstrap.Modal(ramalContactModal);
+      const ramalModalInstance = bootstrap.Modal.getOrCreateInstance(ramalContactModal);
 
-      document.addEventListener('click', function (event) {
-        const trigger = event.target.closest('[data-ramal-card-open]');
+      window.openContratoResponsavelModal = function (trigger) {
         if (!trigger) {
           return;
         }
-        event.preventDefault();
         const name = trigger.dataset.name || '-';
         const photo = trigger.dataset.photo || '';
 
@@ -730,7 +745,7 @@
         photoElement.src = photo;
         photoElement.alt = name;
         ramalModalInstance.show();
-      });
+      };
     }
 
     const ramalEmailPopover = document.getElementById('ramalEmailPopover');

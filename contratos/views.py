@@ -124,6 +124,7 @@ def serializar_responsavel_interno(label, usuario):
 
     perfil = getattr(usuario, 'perfil', None)
     foto = getattr(perfil, 'foto', None)
+    nome = getattr(perfil, 'nome_completo', None) or usuario.get_full_name() or usuario.username
     foto_url = ''
     if foto and getattr(foto, 'name', ''):
         try:
@@ -132,8 +133,9 @@ def serializar_responsavel_interno(label, usuario):
             foto_url = ''
     return {
         'label': label,
-        'nome': getattr(perfil, 'nome_completo', None) or usuario.get_full_name() or usuario.username,
+        'nome': nome,
         'foto_url': foto_url,
+        'iniciais': ''.join(parte[0].upper() for parte in nome.split()[:2] if parte) or nome[:1].upper(),
         'cargo': getattr(perfil, 'cargo', '') or '-',
         'setor': getattr(perfil, 'setor', '') or '-',
         'email': usuario.email or '-',

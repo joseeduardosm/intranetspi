@@ -142,6 +142,33 @@
   margin: 0;
 }
 
+.contratos-responsaveis-stack {
+  display: grid;
+  gap: .7rem;
+}
+
+.contratos-responsavel-card {
+  width: 100%;
+  padding: .85rem .95rem;
+  border-width: 1px;
+  box-shadow: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.contratos-responsavel-card:focus-visible {
+  outline: 2px solid rgba(13, 110, 253, .28);
+  outline-offset: 2px;
+}
+
+.contratos-responsavel-label {
+  color: var(--contratos-accent);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
 .contratos-table tr.alerta-amarelo {
   background: rgba(255, 224, 130, 0.35);
 }

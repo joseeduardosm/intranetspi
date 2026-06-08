@@ -2,6 +2,15 @@
 
 Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
+## [0.3.2] - 2026-06-08
+- Criado o módulo `contratos_v2` com identidade visual isolada, rotas próprias e fluxo inicial de cadastro de contratos.
+- Estruturado o domínio de competências mensais com checklist versionado, avaliação de qualidade por itens, medição, pagamento e estados operacionais.
+- Implementado o detalhamento dos responsáveis internos com cards clicáveis e modal de contato reutilizando o padrão do módulo de ramais.
+- Ajustada a área de avaliação de qualidade para exibir justificativa do fiscal e manifestação do gestor apenas quando a nota fica abaixo da máxima, com estado pendente até a conclusão das manifestações exigidas.
+- Adicionada a etapa de medição com opção de pró-rata nas competências de borda da vigência.
+- Refinados os cards de status da competência para destacar pendências de avaliação em amarelo até a manifestação do gestor.
+- Ampliado o conjunto de formulários e ações do `contratos_v2`, incluindo versões de checklist, grupos, itens, escalas, faixas de liberação e geração idempotente de competências.
+
 ## [0.3.1] - 2026-06-08
 - Atualizado o módulo `acls` para permitir múltiplos alvos por regra:
   - substituídos os vínculos únicos por relacionamentos muitos-para-muitos com usuários e grupos/setores;

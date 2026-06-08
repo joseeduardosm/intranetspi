@@ -15,6 +15,176 @@
   background: #fff;
 }
 
+/* Barra global de aniversariantes com CTA para lista detalhada e ação separada de ocultação. */
+.spi-marquee-bar {
+  display: flex;
+  align-items: stretch;
+  margin: 0 1.5rem;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(90deg, #183153 0%, #204a7a 52%, #2f6aa8 100%);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, .16);
+}
+
+.spi-marquee-launch {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  padding: .85rem 1.2rem;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.spi-marquee-launch:hover,
+.spi-marquee-launch:focus {
+  background: rgba(255, 255, 255, .06);
+}
+
+.spi-marquee-launch:focus-visible,
+.spi-marquee-dismiss:focus-visible,
+.birthday-person-card:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, .62);
+  outline-offset: -2px;
+}
+
+.spi-marquee-dismiss {
+  width: 3.4rem;
+  flex: 0 0 3.4rem;
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(7, 15, 28, .16);
+  color: rgba(255, 255, 255, .92);
+  font-size: 1.7rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.spi-marquee-dismiss:hover,
+.spi-marquee-dismiss:focus {
+  background: rgba(7, 15, 28, .28);
+}
+
+.birthday-list-dialog {
+  max-width: min(560px, calc(100vw - 2rem));
+}
+
+.birthday-list-modal {
+  border: 0;
+  border-radius: 18px;
+  box-shadow: 0 32px 72px rgba(15, 23, 42, .26);
+}
+
+.birthday-list-body {
+  padding-top: .4rem;
+}
+
+.birthday-list-eyebrow {
+  display: inline-block;
+  margin-bottom: .35rem;
+  color: #667085;
+  font-size: .76rem;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.birthday-list-title {
+  margin: 0;
+  color: #182238;
+  font-size: 1.45rem;
+  font-weight: 760;
+}
+
+.birthday-list-stack {
+  display: grid;
+  gap: .7rem;
+}
+
+.birthday-person-card {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .95rem;
+  padding: .85rem .95rem;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  color: #182238;
+  text-align: left;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .05);
+}
+
+.birthday-person-card:hover,
+.birthday-person-card:focus {
+  border-color: rgba(13, 110, 253, .28);
+  background: linear-gradient(180deg, #ffffff 0%, #eef5ff 100%);
+}
+
+.birthday-person-avatar {
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 3rem;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #dde8f8 0%, #b8cee9 100%);
+  color: #1f2d4a;
+  font-size: .9rem;
+  font-weight: 800;
+}
+
+.birthday-person-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.birthday-person-copy {
+  min-width: 0;
+  display: grid;
+  gap: .2rem;
+}
+
+.birthday-person-copy strong,
+.birthday-person-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.birthday-person-copy strong {
+  color: #182238;
+  font-size: 1rem;
+  font-weight: 720;
+}
+
+.birthday-person-copy small,
+.birthday-person-meta small {
+  color: #667085;
+  font-size: .9rem;
+}
+
+.birthday-person-meta {
+  display: grid;
+  justify-items: end;
+  gap: .25rem;
+}
+
+.birthday-person-arrow {
+  color: #667085;
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
 /* Layout autenticado com sidebar recolhível e barra superior de usuário. */
 .spi-app-shell {
   --spi-sidebar-width: 240px;

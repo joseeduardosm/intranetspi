@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load static %}
+{% load contratos_extras %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
+<!-- Objetivo: Medir a competência mensal trazendo automaticamente os itens do contrato V2. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos_v2/css/contratos_v2.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{{ titulo }}</h1>
+    <p>{{ contrato.numero_contrato }} • competência de {{ competencia.periodo_inicio|date:"d/m/Y" }} a {{ competencia.periodo_fim|date:"d/m/Y" }}</p>
+  </div>
+
+  <div class="card border-0 shadow-sm contratos-v2-form-card">
+    <div class="card-body p-4">
+      <p class="text-muted">Informe apenas as quantidades medidas de cada item do contrato. O valor medido será calculado automaticamente.</p>
+      <form method="post">
+        {% csrf_token %}
+        {% if form.aplicar_pro_rata %}
+          <div class="form-check mb-4">
+            {{ form.aplicar_pro_rata }}
+            <label class="form-check-label" for="{{ form.aplicar_pro_rata.id_for_label }}">{{ form.aplicar_pro_rata.label }}</label>
+            {% if form.aplicar_pro_rata.help_text %}<div class="form-text">{{ form.aplicar_pro_rata.help_text }}</div>{% endif %}
+            {% for error in form.aplicar_pro_rata.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+        {% endif %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0 contratos-v2-items-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Descrição</th>
+                <th>Quantidade contratada</th>
+                <th>Valor unitário</th>
+                <th>Quantidade medida</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for linha in itens_medicao %}
+                <tr>
+                  <td>{{ linha.item.ordem }}</td>
+                  <td>{{ linha.item.descricao }}</td>
+                  <td>{{ linha.item.quantidade }}</td>
+                  <td>R$ {{ linha.item.valor_unitario|brl }}</td>
+                  <td>
+                    {{ linha.field }}
+                    {% for error in linha.field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5" class="text-muted">Nenhum item cadastrado no contrato.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="d-flex gap-2 justify-content-end mt-4">
+          <a class="btn btn-light" href="{% url 'contratos_v2:contrato_detail' contrato.pk %}">Cancelar</a>
+          <button class="btn btn-primary" type="submit">Salvar medição</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

@@ -10,11 +10,13 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
+from django.utils import timezone
 from PIL import Image
 
 from setores.models import SetorNode, UserSetorMembership
 from .backends import LDAPBackend
 from .models import LDAPDirectory, UsuarioPerfil
+from .context_processors import usuario_profile_state
 from .services import profile_update_context
 
 
@@ -98,6 +100,34 @@ class UsuariosTests(TestCase):
         context = profile_update_context(request)
         self.assertTrue(context["usuario_profile_requires_update"])
         self.assertTrue(context["usuario_profile_update_allowed"])
+
+    def test_contexto_de_aniversariantes_entrega_dados_do_cartao_de_contato(self):
+        self.user.perfil.nome_completo = "Joao Silva"
+        self.user.perfil.ramal = "4321"
+        self.user.perfil.celular = "(11) 99999-1111"
+        self.user.perfil.cargo = "Analista"
+        self.user.perfil.setor = "TI"
+        self.user.perfil.andar = "4"
+        self.user.perfil.bloco = "A"
+        self.user.perfil.data_nascimento = timezone.localdate().replace(day=1)
+        self.user.perfil.foto = "usuarios/fotos/joao.png"
+        self.user.perfil.save()
+
+        request = RequestFactory().get("/noticias/")
+        request.user = self.user
+        request.resolver_match = SimpleNamespace(namespace="noticias", url_name="public_list", kwargs={})
+
+        context = usuario_profile_state(request)
+
+        self.assertEqual(len(context["aniversariantes"]), 1)
+        aniversariante = context["aniversariantes"][0]
+        self.assertEqual(aniversariante["nome"], "Joao Silva")
+        self.assertEqual(aniversariante["cargo"], "Analista")
+        self.assertEqual(aniversariante["setor"], "TI")
+        self.assertEqual(aniversariante["email"], "joao@example.com")
+        self.assertEqual(aniversariante["ramal"], "4321")
+        self.assertEqual(aniversariante["local"], "4 Andar - Bloco A")
+        self.assertTrue(aniversariante["foto_url"].endswith("usuarios/fotos/joao.png"))
 
     def test_lista_ramais_busca_e_ordena_no_queryset(self):
         outro = User.objects.create_user(username="maria", password="123")

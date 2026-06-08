@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'assinatura_e_mail',
     'atalhos',
     'contratos',
+    'contratos_v2',
     'licitacoes',
     'navbar',
     'noticias',
