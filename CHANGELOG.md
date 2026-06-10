@@ -2,6 +2,26 @@
 
 Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
+## [0.3.3] - 2026-06-09
+- Reestruturado o módulo `regulariza_sgi` com novo cadastro e detalhe do imóvel em abas:
+  - `Dados Iniciais`, `Dívida` e `Observações`;
+  - subabas `Observações` e `Timeline` no detalhe;
+  - inclusão de `Número SGI`, `Imissão na posse`, `Imunidade` e novos campos de dívida.
+- Ajustado o fluxo processual do RegulaSGI para manter `prorrogação` e `manifestação` disponíveis em paralelo após o protocolo, até o registro da manifestação final.
+- Criado o histórico funcional consolidado do imóvel:
+  - observações com usuário, data/hora e paginação;
+  - timeline geral para cadastro, edição, SEI, anexos, protocolo, prorrogação, manifestação e novos ciclos.
+- Refinada a experiência do formulário do imóvel:
+  - campo `Imunidade` com radiobox inline `Sim/Não`;
+  - exibição condicional de `Tempo de imunidade (anos)` apenas quando `Sim` estiver marcado;
+  - ocultação de `SEI` e `Link SEI` no cadastro novo, mantendo-os apenas onde fazem sentido no detalhe/edição.
+- Ajustado o bloco de processos SEI no detalhe para usar o próprio número do processo como link clicável, sem exibir a URL bruta.
+- Convertidos os campos `Dívidas não ajuizadas`, `Dívidas ajuizadas` e `Encargos` para valores monetários:
+  - autoformatação em tela no padrão brasileiro `2.123,32`;
+  - persistência em banco como valores decimais;
+  - migração dos dados legados em texto para formato numérico.
+- Adicionadas migrações, filtro de template para moeda e ampliação da suíte de testes do `regulariza_sgi`, mantendo `manage.py check` e os testes do módulo verdes após as mudanças.
+
 ## [0.3.2] - 2026-06-08
 - Criado o módulo `contratos_v2` com identidade visual isolada, rotas próprias e fluxo inicial de cadastro de contratos.
 - Estruturado o domínio de competências mensais com checklist versionado, avaliação de qualidade por itens, medição, pagamento e estados operacionais.

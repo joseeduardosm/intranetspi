@@ -1,17 +1,18 @@
 {% extends "base.html" %}
 {% load static %}
+{% load regulariza_sgi_extras %}
 <!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
-<!-- Objetivo: Exibir imóvel, timeline, histórico, SEI, anexos e ações do ciclo. -->
+<!-- Atualizado por Codex em 09/06/2026 -->
+<!-- Objetivo: Exibir o detalhe do imóvel com abas cadastrais, observações e timeline completa. -->
 {% block title %}{{ imovel.inscricao_imobiliaria }} | RegulaSGI{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'regulariza_sgi/css/regulariza_sgi.css' %}">{% endblock %}
 {% block content %}
   <div class="regulariza-detail-shell">
-    <!-- Cabeçalho compacto do imóvel com ações principais alinhadas à direita. -->
     <header class="regulariza-detail-header">
       <div>
         <p class="regulariza-eyebrow">Regulariza SGI</p>
         <h1>{{ imovel.inscricao_imobiliaria }}</h1>
-        <p>{{ imovel.endereco_completo }}</p>
+        <p>{{ imovel.logradouro }}, {{ imovel.bairro }} - {{ imovel.municipio }}/{{ imovel.uf }}</p>
       </div>
       <div class="regulariza-detail-actions">
         <a class="btn btn-outline-secondary" href="{% url 'regulariza_sgi:imovel_list' %}">Voltar</a>
@@ -19,7 +20,6 @@
       </div>
     </header>
 
-    <!-- Cartões de leitura rápida com as informações que orientam o acompanhamento do imóvel. -->
     <section class="regulariza-metric-grid" aria-label="Resumo do imóvel">
       <article class="regulariza-metric-card">
         <span>Status do ciclo</span>
@@ -27,69 +27,67 @@
         <p>Ciclo {{ ciclo_atual.numero|default:"-" }}{% if ciclo_atual %} - {{ ciclo_atual.get_tipo_display }}{% endif %}</p>
       </article>
       <article class="regulariza-metric-card">
-        <span>Processo SGI</span>
-        <strong>{{ imovel.numero_sgi }}</strong>
-        <p>Matrícula {{ imovel.matricula }}</p>
+        <span>Imunidade</span>
+        <strong>{% if imovel.imunidade %}Ativa{% else %}Não ativa{% endif %}</strong>
+        <p>{% if imovel.tempo_imunidade %}{{ imovel.tempo_imunidade }} ano(s){% else %}Sem tempo informado{% endif %}</p>
+      </article>
+      <article class="regulariza-metric-card">
+        <span>SEI principal</span>
+        <strong>{{ imovel.sei|default:"-" }}</strong>
+        <p>{% if imovel.link_sei %}<a href="{{ imovel.link_sei }}" target="_blank" rel="noopener">Abrir link SEI</a>{% else %}Sem link cadastrado{% endif %}</p>
       </article>
       <article class="regulariza-metric-card">
         <span>Área cadastrada</span>
         <strong>{% if imovel.area %}{{ imovel.area }} m²{% else %}-{% endif %}</strong>
         <p>{{ imovel.municipio }}/{{ imovel.uf }}</p>
       </article>
-      <article class="regulariza-metric-card {% if imovel.possui_cadin_ativo %}regulariza-metric-card-alert{% endif %}">
-        <span>CADIN</span>
-        <strong>{% if imovel.possui_cadin_ativo %}Ativo{% elif imovel.possui_cadin %}Regularizado{% else %}Sem registro{% endif %}</strong>
-        <p>{% if imovel.possui_cadin %}Exercício {{ imovel.exercicio_cadin }}{% else %}Sem notificação municipal{% endif %}</p>
-      </article>
     </section>
 
-    <!-- Timeline em destaque: mostra o trecho atual sem usar percentual textual. -->
     <section class="regulariza-panel regulariza-timeline-panel" aria-labelledby="regularizaTimelineTitle">
       <div class="regulariza-panel-header">
         <div>
           <p class="regulariza-eyebrow">Acompanhamento</p>
-          <h2 id="regularizaTimelineTitle">Timeline atual</h2>
+          <h2 id="regularizaTimelineTitle">Timeline processual atual</h2>
         </div>
         <div class="regulariza-timeline-meta">
           {% if timeline.dias_consumidos_trecho is not None and timeline.prazo_total_dias %}
             <span>{{ timeline.dias_consumidos_trecho }} de {{ timeline.prazo_total_dias }} dias do trecho</span>
           {% endif %}
           <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#timelineHistoryModal">
-            Histórico
+            Histórico do ciclo
           </button>
         </div>
       </div>
 
-      <div class="regulariza-timeline regulariza-timeline-{{ timeline.color }}">
-        <div class="regulariza-timeline-track">
-          <div class="regulariza-timeline-line"></div>
-          <div class="regulariza-timeline-progress" style="width: {{ timeline.marker_percent|floatformat:0 }}%;"></div>
-          <div class="regulariza-timeline-marker" style="left: {{ timeline.marker_percent|floatformat:0 }}%;">
-            <span>{{ timeline.dias_desde_cadastro }} dias</span>
+      {% if timeline.marco_atual and timeline.proximo_marco %}
+        <div class="regulariza-timeline regulariza-timeline-{{ timeline.color }}">
+          <div class="regulariza-timeline-track">
+            <div class="regulariza-timeline-line"></div>
+            <div class="regulariza-timeline-progress" style="width: {{ timeline.marker_percent|floatformat:0 }}%;"></div>
+            <div class="regulariza-timeline-marker" style="left: {{ timeline.marker_percent|floatformat:0 }}%;">
+              <span>{{ timeline.dias_desde_cadastro }} dias</span>
+            </div>
+            <div class="regulariza-timeline-anchor regulariza-timeline-anchor-current"><div class="regulariza-timeline-dot"></div></div>
+            <div class="regulariza-timeline-anchor regulariza-timeline-anchor-next"><div class="regulariza-timeline-dot regulariza-timeline-dot-future"></div></div>
           </div>
-          <div class="regulariza-timeline-anchor regulariza-timeline-anchor-current">
-            <div class="regulariza-timeline-dot"></div>
-          </div>
-          <div class="regulariza-timeline-anchor regulariza-timeline-anchor-next">
-            <div class="regulariza-timeline-dot regulariza-timeline-dot-future"></div>
-          </div>
-        </div>
-        <div class="regulariza-timeline-ends">
-          <div class="regulariza-timeline-end">
-            <span class="regulariza-timeline-end-label">{{ timeline.marco_atual.legenda }}</span>
-            <strong>{{ timeline.marco_atual.titulo }}</strong>
-            <span>{{ timeline.marco_atual.data|date:"d/m/Y" }}</span>
-          </div>
-          <div class="regulariza-timeline-end regulariza-timeline-end-next">
-            <span class="regulariza-timeline-end-label">{{ timeline.proximo_marco.legenda }}</span>
-            <strong>{{ timeline.proximo_marco.titulo }}</strong>
-            <span>{{ timeline.proximo_marco.data|date:"d/m/Y" }}</span>
+          <div class="regulariza-timeline-ends">
+            <div class="regulariza-timeline-end">
+              <span class="regulariza-timeline-end-label">{{ timeline.marco_atual.legenda }}</span>
+              <strong>{{ timeline.marco_atual.titulo }}</strong>
+              <span>{{ timeline.marco_atual.data|date:"d/m/Y" }}</span>
+            </div>
+            <div class="regulariza-timeline-end regulariza-timeline-end-next">
+              <span class="regulariza-timeline-end-label">{{ timeline.proximo_marco.legenda }}</span>
+              <strong>{{ timeline.proximo_marco.titulo }}</strong>
+              <span>{{ timeline.proximo_marco.data|date:"d/m/Y" }}</span>
+            </div>
           </div>
         </div>
-      </div>
+      {% else %}
+        <p class="text-muted mb-0">Ainda não há trecho processual suficiente para montar a timeline atual.</p>
+      {% endif %}
     </section>
 
-    <!-- Dados cadastrais complementares ficam abaixo da timeline para consulta sem disputar destaque. -->
     <section class="regulariza-panel">
       <div class="regulariza-panel-header">
         <div>
@@ -97,230 +95,356 @@
           <h2>Dados do imóvel</h2>
         </div>
       </div>
-      <dl class="regulariza-definition-grid">
-        <div><dt>Processo judicial</dt><dd>{{ imovel.processo_judicial }}</dd></div>
-        <div><dt>Número SGI</dt><dd>{{ imovel.numero_sgi }}</dd></div>
-        <div><dt>Matrícula</dt><dd>{{ imovel.matricula }}</dd></div>
-        <div><dt>Endereço</dt><dd>{{ imovel.endereco_completo }}</dd></div>
-        {% if imovel.possui_cadin %}
-          <div><dt>Notificação CADIN Municipal</dt><dd>{{ imovel.notificacao_cadin_municipal }}</dd></div>
-        {% endif %}
-      </dl>
+
+      <nav class="regulariza-tab-nav mt-3" aria-label="Abas de detalhe do imóvel">
+        <button class="regulariza-tab-trigger{% if aba_ativa == 'dados-iniciais' %} is-active{% endif %}" type="button" data-tab-target="dados-iniciais">Dados Iniciais</button>
+        <button class="regulariza-tab-trigger{% if aba_ativa == 'divida' %} is-active{% endif %}" type="button" data-tab-target="divida">Dívida</button>
+        <button class="regulariza-tab-trigger{% if aba_ativa == 'observacoes' %} is-active{% endif %}" type="button" data-tab-target="observacoes">Observações</button>
+      </nav>
+
+      <section class="regulariza-tab-panel{% if aba_ativa == 'dados-iniciais' %} is-active{% endif %}" data-tab-panel="dados-iniciais" {% if aba_ativa != 'dados-iniciais' %}hidden{% endif %}>
+        <dl class="regulariza-definition-grid">
+          <div><dt>Cadastro SQL</dt><dd>{{ imovel.inscricao_imobiliaria }}</dd></div>
+          <div><dt>Matrícula</dt><dd>{{ imovel.matricula }}</dd></div>
+          <div><dt>Número SGI</dt><dd>{{ imovel.numero_sgi|default:"-" }}</dd></div>
+          <div><dt>Logradouro</dt><dd>{{ imovel.logradouro }}</dd></div>
+          <div><dt>Estado</dt><dd>{{ imovel.get_uf_display }}</dd></div>
+          <div><dt>Cidade</dt><dd>{{ imovel.municipio }}</dd></div>
+          <div><dt>Bairro</dt><dd>{{ imovel.bairro }}</dd></div>
+          <div><dt>Área (m²)</dt><dd>{% if imovel.area %}{{ imovel.area }}{% else %}-{% endif %}</dd></div>
+          <div><dt>Processo Judicial</dt><dd>{{ imovel.processo_judicial }}</dd></div>
+          <div><dt>Imissão na posse</dt><dd>{% if imovel.imissao_posse %}{{ imovel.imissao_posse|date:"d/m/Y" }}{% else %}-{% endif %}</dd></div>
+          <div><dt>Imunidade</dt><dd>{% if imovel.imunidade %}Sim{% else %}Não{% endif %}{% if imovel.tempo_imunidade %} • {{ imovel.tempo_imunidade }} ano(s){% endif %}</dd></div>
+        </dl>
+      </section>
+
+      <section class="regulariza-tab-panel{% if aba_ativa == 'divida' %} is-active{% endif %}" data-tab-panel="divida" {% if aba_ativa != 'divida' %}hidden{% endif %}>
+        <dl class="regulariza-definition-grid">
+          <div><dt>Exerc. Cobrança</dt><dd>{{ imovel.exercicio_cobranca|default:"-" }}</dd></div>
+          <div><dt>Dívida Ativa</dt><dd>{{ imovel.divida_ativa|default:"-" }}</dd></div>
+          <div><dt>Nº da Dívida</dt><dd>{{ imovel.numero_divida|default:"-" }}</dd></div>
+          <div><dt>Dívidas não ajuizadas</dt><dd>{{ imovel.dividas_nao_ajuizadas|br_money }}</dd></div>
+          <div><dt>Dívidas ajuizadas</dt><dd>{{ imovel.dividas_ajuizadas|br_money }}</dd></div>
+          <div><dt>Encargos</dt><dd>{{ imovel.encargos|br_money }}</dd></div>
+        </dl>
+      </section>
+
+      <section class="regulariza-tab-panel{% if aba_ativa == 'observacoes' %} is-active{% endif %}" data-tab-panel="observacoes" {% if aba_ativa != 'observacoes' %}hidden{% endif %}>
+        <nav class="regulariza-subtab-nav" aria-label="Subabas de observações">
+          <button class="regulariza-subtab-trigger{% if subaba_observacoes_ativa == 'observacoes' %} is-active{% endif %}" type="button" data-subtab-target="observacoes">Observações</button>
+          <button class="regulariza-subtab-trigger{% if subaba_observacoes_ativa == 'timeline' %} is-active{% endif %}" type="button" data-subtab-target="timeline">Timeline</button>
+        </nav>
+
+        <section class="regulariza-subtab-panel{% if subaba_observacoes_ativa == 'observacoes' %} is-active{% endif %}" data-subtab-panel="observacoes" {% if subaba_observacoes_ativa != 'observacoes' %}hidden{% endif %}>
+          <form method="post" action="{% url 'regulariza_sgi:observacao_create' imovel.pk %}" class="regulariza-inline-form">
+            {% csrf_token %}
+            <label class="form-label fw-semibold" for="{{ observacao_form.texto.id_for_label }}">Nova observação</label>
+            {{ observacao_form.texto }}
+            {% for error in observacao_form.texto.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            <div class="d-flex justify-content-end mt-3">
+              <button class="btn btn-primary" type="submit">Registrar observação</button>
+            </div>
+          </form>
+
+          <div class="regulariza-timeline-list mt-4">
+            {% for observacao in observacoes_page_obj %}
+              <article class="regulariza-history-item">
+                <div class="regulariza-history-meta">
+                  <strong>{{ observacao.usuario_responsavel }}</strong>
+                  <span>{{ observacao.criado_em|date:"d/m/Y" }} às {{ observacao.criado_em|time:"H:i" }}</span>
+                </div>
+                <p>{{ observacao.texto|linebreaksbr }}</p>
+              </article>
+            {% empty %}
+              <p class="text-muted mb-0">Nenhuma observação registrada.</p>
+            {% endfor %}
+          </div>
+          <div class="regulariza-pagination">
+            {% if observacoes_page_obj.has_previous %}
+              <a href="?aba=observacoes&subaba=observacoes&obs_page={{ observacoes_page_obj.previous_page_number }}">Anterior</a>
+            {% endif %}
+            <span>Página {{ observacoes_page_obj.number }} de {{ observacoes_page_obj.paginator.num_pages }}</span>
+            {% if observacoes_page_obj.has_next %}
+              <a href="?aba=observacoes&subaba=observacoes&obs_page={{ observacoes_page_obj.next_page_number }}">Próxima</a>
+            {% endif %}
+          </div>
+        </section>
+
+        <section class="regulariza-subtab-panel{% if subaba_observacoes_ativa == 'timeline' %} is-active{% endif %}" data-subtab-panel="timeline" {% if subaba_observacoes_ativa != 'timeline' %}hidden{% endif %}>
+          <div class="regulariza-timeline-list">
+            {% for evento in timeline_page_obj %}
+              <article class="regulariza-history-item regulariza-history-item-compact">
+                <div class="regulariza-history-meta">
+                  <strong>{{ evento.get_tipo_display }}</strong>
+                  <span>{{ evento.usuario_responsavel }} • {{ evento.criado_em|date:"d/m/Y" }} às {{ evento.criado_em|time:"H:i" }}</span>
+                </div>
+                <p>{{ evento.descricao }}</p>
+              </article>
+            {% empty %}
+              <p class="text-muted mb-0">Nenhum evento registrado na timeline do imóvel.</p>
+            {% endfor %}
+          </div>
+          <div class="regulariza-pagination">
+            {% if timeline_page_obj.has_previous %}
+              <a href="?aba=observacoes&subaba=timeline&timeline_page={{ timeline_page_obj.previous_page_number }}">Anterior</a>
+            {% endif %}
+            <span>Página {{ timeline_page_obj.number }} de {{ timeline_page_obj.paginator.num_pages }}</span>
+            {% if timeline_page_obj.has_next %}
+              <a href="?aba=observacoes&subaba=timeline&timeline_page={{ timeline_page_obj.next_page_number }}">Próxima</a>
+            {% endif %}
+          </div>
+        </section>
+      </section>
     </section>
 
-  <!-- Modal com histórico completo do imóvel em linguagem de evento, prazo e responsável. -->
-  <div class="modal fade" id="timelineHistoryModal" tabindex="-1" aria-labelledby="timelineHistoryModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2 class="modal-title fs-5" id="timelineHistoryModalLabel">Histórico Completo do Imóvel</h2>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-        </div>
-        <div class="modal-body">
-          <p class="regulariza-history-help">
-            Este histórico reúne os registros efetivos feitos no acompanhamento do imóvel.
-          </p>
-          <div class="table-responsive">
-            <table class="table table-sm align-middle regulariza-history-table">
-              <thead>
-                <tr>
-                  <th>Ciclo</th>
-                  <th>Etapa</th>
-                  <th>Data</th>
-                  <th>Responsável</th>
-                  <th>Observação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for evento in timeline.historico_eventos %}
-                  <tr>
-                    <td>
-                      <strong>{{ evento.ciclo }}</strong>
-                      <span>{{ evento.tipo_ciclo }}</span>
-                    </td>
-                    <td>{{ evento.etapa }}</td>
-                    <td>{% if evento.data %}{{ evento.data|date:"d/m/Y" }}{% else %}-{% endif %}</td>
-                    <td>{{ evento.usuario }}</td>
-                    <td>{{ evento.observacao }}</td>
-                  </tr>
-                {% empty %}
-                  <tr>
-                    <td colspan="5" class="text-center text-muted py-4">Nenhum evento registrado.</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <section class="row g-4 mb-4">
-    <div class="col-xl-7">
-      <article class="card regulariza-content-card h-100">
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h5 mb-0">Processos SEI</h2>
-            <span class="text-muted small">{{ imovel.processos_sei.count }} item(ns)</span>
-          </div>
-          <form method="post" action="{% url 'regulariza_sgi:sei_create' imovel.pk %}" class="row g-3 mb-4">
-            {% csrf_token %}
-            <div class="col-md-4">
-              <label class="form-label fw-semibold" for="{{ sei_form.numero_sei.id_for_label }}">{{ sei_form.numero_sei.label }}</label>
-              {{ sei_form.numero_sei }}
+    <section class="row g-4 mb-4">
+      <div class="col-xl-7">
+        <article class="card regulariza-content-card h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h2 class="h5 mb-0">Processos SEI vinculados</h2>
+              <span class="text-muted small">{{ imovel.processos_sei.count }} item(ns)</span>
             </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold" for="{{ sei_form.link_sei.id_for_label }}">{{ sei_form.link_sei.label }}</label>
-              {{ sei_form.link_sei }}
-            </div>
-            <div class="col-md-2 d-grid">
-              <button class="btn btn-primary align-self-end" type="submit">Adicionar</button>
-            </div>
-          </form>
-          <div class="list-group list-group-flush">
-            {% for processo in imovel.processos_sei.all %}
-              <div class="list-group-item px-0 d-flex justify-content-between align-items-center gap-3">
-                <div>
-                  <div class="fw-semibold">{{ processo.numero_sei }}</div>
-                  <a href="{{ processo.link_sei }}" target="_blank" rel="noopener">{{ processo.link_sei }}</a>
-                </div>
-                <div class="dropdown">
-                  <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" title="Ações do SEI">...</button>
-                  <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="{% url 'regulariza_sgi:sei_update' imovel.pk processo.pk %}">Editar</a></li>
-                    <li><a class="dropdown-item" href="{% url 'regulariza_sgi:sei_delete' imovel.pk processo.pk %}">Excluir</a></li>
-                  </ul>
-                </div>
+            <form method="post" action="{% url 'regulariza_sgi:sei_create' imovel.pk %}" class="row g-3 mb-4">
+              {% csrf_token %}
+              <div class="col-md-4">
+                <label class="form-label fw-semibold" for="{{ sei_form.numero_sei.id_for_label }}">{{ sei_form.numero_sei.label }}</label>
+                {{ sei_form.numero_sei }}
               </div>
-            {% empty %}
-              <div class="text-muted">Nenhum processo SEI cadastrado.</div>
-            {% endfor %}
-          </div>
-        </div>
-      </article>
-    </div>
-    <div class="col-xl-5">
-      <article class="card regulariza-content-card h-100">
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h5 mb-0">Anexos</h2>
-            <span class="text-muted small">{{ imovel.anexos.count }} arquivo(s)</span>
-          </div>
-          <form method="post" enctype="multipart/form-data" action="{% url 'regulariza_sgi:anexo_create' imovel.pk %}" class="row g-3 mb-4">
-            {% csrf_token %}
-            <div class="col-12">
-              <label class="form-label fw-semibold" for="{{ anexo_form.nome_exibicao.id_for_label }}">{{ anexo_form.nome_exibicao.label }}</label>
-              {{ anexo_form.nome_exibicao }}
-            </div>
-            <div class="col-12">
-              <label class="form-label fw-semibold" for="{{ anexo_form.arquivo.id_for_label }}">{{ anexo_form.arquivo.label }}</label>
-              {{ anexo_form.arquivo }}
-            </div>
-            <div class="col-12 d-grid">
-              <button class="btn btn-primary" type="submit">Adicionar anexo</button>
-            </div>
-          </form>
-          <div class="list-group list-group-flush">
-            {% for anexo in imovel.anexos.all %}
-              <div class="list-group-item px-0 d-flex justify-content-between align-items-center gap-3">
-                <div class="fw-semibold">{{ anexo.nome_exibicao }}</div>
-                <div class="dropdown">
-                  <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" title="Ações do anexo">...</button>
-                  <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="{{ anexo.arquivo.url }}" download data-bs-toggle="tooltip" title="Baixar anexo">Baixar</a></li>
-                    <li><a class="dropdown-item" href="{% url 'regulariza_sgi:anexo_update' imovel.pk anexo.pk %}">Editar</a></li>
-                    <li><a class="dropdown-item" href="{% url 'regulariza_sgi:anexo_delete' imovel.pk anexo.pk %}">Excluir</a></li>
-                  </ul>
-                </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold" for="{{ sei_form.link_sei.id_for_label }}">{{ sei_form.link_sei.label }}</label>
+                {{ sei_form.link_sei }}
               </div>
-            {% empty %}
-              <div class="text-muted">Nenhum anexo enviado.</div>
-            {% endfor %}
+              <div class="col-md-2 d-grid">
+                <button class="btn btn-primary align-self-end" type="submit">Adicionar</button>
+              </div>
+            </form>
+            <div class="list-group list-group-flush">
+              {% for processo in imovel.processos_sei.all %}
+                <div class="list-group-item px-0 d-flex justify-content-between align-items-center gap-3">
+                  <div>
+                    <a class="fw-semibold text-decoration-none" href="{{ processo.link_sei }}" target="_blank" rel="noopener">
+                      {{ processo.numero_sei }}
+                    </a>
+                  </div>
+                  <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" title="Ações do SEI">...</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item" href="{% url 'regulariza_sgi:sei_update' imovel.pk processo.pk %}">Editar</a></li>
+                      <li><a class="dropdown-item" href="{% url 'regulariza_sgi:sei_delete' imovel.pk processo.pk %}">Excluir</a></li>
+                    </ul>
+                  </div>
+                </div>
+              {% empty %}
+                <div class="text-muted">Nenhum processo SEI vinculado.</div>
+              {% endfor %}
+            </div>
           </div>
-        </div>
-      </article>
-    </div>
-  </section>
-
-  <section class="card regulariza-content-card">
-    <div class="card-body">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="h5 mb-0">Acompanhamento processual</h2>
-        {% if pode_reiniciar_ciclo %}
-          <form method="post" action="{% url 'regulariza_sgi:reinicio_ciclo' imovel.pk %}">
-            {% csrf_token %}
-            <button class="btn btn-outline-primary" type="submit">
-              {% if proximo_ciclo_tipo == 'renovacao' %}Iniciar ciclo de renovação{% else %}Iniciar novo ciclo de contrarrazão{% endif %}
-            </button>
-          </form>
-        {% endif %}
+        </article>
       </div>
 
-      <div class="row g-4">
-        <div class="col-lg-4">
-          <div class="regulariza-action-card">
-            <h3 class="h6">Registrar protocolo</h3>
-            {% if pode_registrar_protocolo %}
-              <form method="post" action="{% url 'regulariza_sgi:protocolo_create' imovel.pk %}">
-                {% csrf_token %}
-                {{ protocolo_form.as_p }}
-                <button class="btn btn-primary" type="submit">Salvar protocolo</button>
-              </form>
-            {% else %}
-              <p class="text-muted mb-0">O protocolo deste ciclo já foi registrado.</p>
-            {% endif %}
+      <div class="col-xl-5">
+        <article class="card regulariza-content-card h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h2 class="h5 mb-0">Documentos anexos</h2>
+              <span class="text-muted small">{{ imovel.anexos.count }} arquivo(s)</span>
+            </div>
+            <form method="post" enctype="multipart/form-data" action="{% url 'regulariza_sgi:anexo_create' imovel.pk %}" class="row g-3 mb-4">
+              {% csrf_token %}
+              <div class="col-12">
+                <label class="form-label fw-semibold" for="{{ anexo_form.nome_exibicao.id_for_label }}">{{ anexo_form.nome_exibicao.label }}</label>
+                {{ anexo_form.nome_exibicao }}
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold" for="{{ anexo_form.arquivo.id_for_label }}">{{ anexo_form.arquivo.label }}</label>
+                {{ anexo_form.arquivo }}
+              </div>
+              <div class="col-12 d-grid">
+                <button class="btn btn-primary" type="submit">Adicionar anexo</button>
+              </div>
+            </form>
+            <div class="list-group list-group-flush">
+              {% for anexo in imovel.anexos.all %}
+                <div class="list-group-item px-0 d-flex justify-content-between align-items-center gap-3">
+                  <div class="fw-semibold">{{ anexo.nome_exibicao }}</div>
+                  <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" title="Ações do anexo">...</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item" href="{{ anexo.arquivo.url }}" download>Baixar</a></li>
+                      <li><a class="dropdown-item" href="{% url 'regulariza_sgi:anexo_update' imovel.pk anexo.pk %}">Editar</a></li>
+                      <li><a class="dropdown-item" href="{% url 'regulariza_sgi:anexo_delete' imovel.pk anexo.pk %}">Excluir</a></li>
+                    </ul>
+                  </div>
+                </div>
+              {% empty %}
+                <div class="text-muted">Nenhum documento anexado.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="card regulariza-content-card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h2 class="h5 mb-0">Acompanhamento processual</h2>
+          {% if pode_reiniciar_ciclo %}
+            <form method="post" action="{% url 'regulariza_sgi:reinicio_ciclo' imovel.pk %}">
+              {% csrf_token %}
+              <button class="btn btn-outline-primary" type="submit">
+                {% if proximo_ciclo_tipo == 'renovacao' %}Iniciar ciclo de renovação{% else %}Iniciar novo ciclo de contrarrazão{% endif %}
+              </button>
+            </form>
+          {% endif %}
+        </div>
+
+        <div class="row g-4">
+          <div class="col-lg-4">
+            <div class="regulariza-action-card">
+              <h3 class="h6">Registrar protocolo</h3>
+              {% if pode_registrar_protocolo %}
+                <form method="post" action="{% url 'regulariza_sgi:protocolo_create' imovel.pk %}">
+                  {% csrf_token %}
+                  {{ protocolo_form.as_p }}
+                  <button class="btn btn-primary" type="submit">Salvar protocolo</button>
+                </form>
+              {% else %}
+                <p class="text-muted mb-0">O protocolo deste ciclo já foi registrado.</p>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <div class="regulariza-action-card">
+              <h3 class="h6">Registrar prorrogação</h3>
+              {% if pode_registrar_prorrogacao %}
+                <form method="post" action="{% url 'regulariza_sgi:prorrogacao_create' imovel.pk %}">
+                  {% csrf_token %}
+                  {{ prorrogacao_form.as_p }}
+                  <button class="btn btn-outline-primary" type="submit">Salvar prorrogação</button>
+                </form>
+              {% else %}
+                <p class="text-muted mb-0">Disponível após o protocolo e enquanto ainda não houver manifestação final.</p>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <div class="regulariza-action-card">
+              <h3 class="h6">Registrar manifestação</h3>
+              {% if pode_registrar_manifestacao %}
+                <form method="post" action="{% url 'regulariza_sgi:manifestacao_create' imovel.pk %}" id="manifestacao-form">
+                  {% csrf_token %}
+                  {{ manifestacao_form.as_p }}
+                  <button class="btn btn-danger" type="submit">Salvar manifestação</button>
+                </form>
+              {% else %}
+                <p class="text-muted mb-0">Disponível após o protocolo e enquanto ainda não houver manifestação final.</p>
+              {% endif %}
+            </div>
           </div>
         </div>
-        <div class="col-lg-4">
-          <div class="regulariza-action-card">
-            <h3 class="h6">Registrar prorrogação</h3>
-            {% if pode_registrar_prorrogacao %}
-              <form method="post" action="{% url 'regulariza_sgi:prorrogacao_create' imovel.pk %}">
-                {% csrf_token %}
-                {{ prorrogacao_form.as_p }}
-                <button class="btn btn-outline-primary" type="submit">Salvar prorrogação</button>
-              </form>
-            {% else %}
-              <p class="text-muted mb-0">Disponível após o protocolo e antes da manifestação.</p>
-            {% endif %}
+      </div>
+    </section>
+
+    <div class="modal fade" id="timelineHistoryModal" tabindex="-1" aria-labelledby="timelineHistoryModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title fs-5" id="timelineHistoryModalLabel">Histórico Completo do Ciclo</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
           </div>
-        </div>
-        <div class="col-lg-4">
-          <div class="regulariza-action-card">
-            <h3 class="h6">Registrar manifestação</h3>
-            {% if pode_registrar_manifestacao %}
-              <form method="post" action="{% url 'regulariza_sgi:manifestacao_create' imovel.pk %}" id="manifestacao-form">
-                {% csrf_token %}
-                {{ manifestacao_form.as_p }}
-                <button class="btn btn-danger" type="submit">Salvar manifestação</button>
-              </form>
-            {% else %}
-              <p class="text-muted mb-0">Disponível após o protocolo e antes do resultado do ciclo.</p>
-            {% endif %}
+          <div class="modal-body">
+            <p class="regulariza-history-help">Este histórico reúne os registros efetivos feitos no acompanhamento processual do imóvel.</p>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle regulariza-history-table">
+                <thead>
+                  <tr>
+                    <th>Ciclo</th>
+                    <th>Etapa</th>
+                    <th>Data</th>
+                    <th>Responsável</th>
+                    <th>Observação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for evento in timeline.historico_eventos %}
+                    <tr>
+                      <td><strong>{{ evento.ciclo }}</strong> <span>{{ evento.tipo_ciclo }}</span></td>
+                      <td>{{ evento.etapa }}</td>
+                      <td>{% if evento.data %}{{ evento.data|date:"d/m/Y" }}{% else %}-{% endif %}</td>
+                      <td>{{ evento.usuario }}</td>
+                      <td>{{ evento.observacao }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr><td colspan="5" class="text-center text-muted py-4">Nenhum evento registrado.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </section>
   </div>
 {% endblock %}
 {% block extra_js %}
   <script>
     (function () {
+      var tabButtons = document.querySelectorAll('.regulariza-tab-trigger');
+      var tabPanels = document.querySelectorAll('.regulariza-tab-panel');
+      var subtabButtons = document.querySelectorAll('.regulariza-subtab-trigger');
+      var subtabPanels = document.querySelectorAll('.regulariza-subtab-panel');
       var radios = document.querySelectorAll('input[name="resultado"]');
       var prazoWrap = document.getElementById('id_prazo_imunidade_anos');
-      if (!radios.length || !prazoWrap) {
-        return;
+
+      function openTab(target) {
+        tabButtons.forEach(function (button) {
+          button.classList.toggle('is-active', button.dataset.tabTarget === target);
+        });
+        tabPanels.forEach(function (panel) {
+          var isActive = panel.dataset.tabPanel === target;
+          panel.hidden = !isActive;
+          panel.classList.toggle('is-active', isActive);
+        });
       }
-      var fieldWrapper = prazoWrap.closest('p');
+
+      function openSubtab(target) {
+        subtabButtons.forEach(function (button) {
+          button.classList.toggle('is-active', button.dataset.subtabTarget === target);
+        });
+        subtabPanels.forEach(function (panel) {
+          var isActive = panel.dataset.subtabPanel === target;
+          panel.hidden = !isActive;
+          panel.classList.toggle('is-active', isActive);
+        });
+      }
+
       function togglePrazo() {
+        if (!radios.length || !prazoWrap) {
+          return;
+        }
+        var fieldWrapper = prazoWrap.closest('p');
         var selected = document.querySelector('input[name="resultado"]:checked');
         fieldWrapper.style.display = selected && selected.value === 'deferido' ? '' : 'none';
       }
+
+      tabButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+          openTab(button.dataset.tabTarget);
+        });
+      });
+      subtabButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+          openSubtab(button.dataset.subtabTarget);
+        });
+      });
       radios.forEach(function (radio) {
         radio.addEventListener('change', togglePrazo);
       });
+
+      openTab('{{ aba_ativa|default:"dados-iniciais" }}');
+      openSubtab('{{ subaba_observacoes_ativa|default:"observacoes" }}');
       togglePrazo();
     }());
   </script>

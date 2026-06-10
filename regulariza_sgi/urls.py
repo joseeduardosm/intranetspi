@@ -21,6 +21,7 @@ urlpatterns = [
     path('imoveis/<int:imovel_pk>/anexos/novo/', views.AnexoCreateView.as_view(), name='anexo_create'),
     path('imoveis/<int:imovel_pk>/anexos/<int:pk>/editar/', views.AnexoUpdateView.as_view(), name='anexo_update'),
     path('imoveis/<int:imovel_pk>/anexos/<int:pk>/excluir/', views.AnexoDeleteView.as_view(), name='anexo_delete'),
+    path('imoveis/<int:pk>/observacoes/', views.ObservacaoCreateView.as_view(), name='observacao_create'),
     path('imoveis/<int:pk>/protocolo/', views.RegistrarProtocoloView.as_view(), name='protocolo_create'),
     path('imoveis/<int:pk>/prorrogacao/', views.RegistrarProrrogacaoView.as_view(), name='prorrogacao_create'),
     path('imoveis/<int:pk>/manifestacao/', views.RegistrarManifestacaoView.as_view(), name='manifestacao_create'),

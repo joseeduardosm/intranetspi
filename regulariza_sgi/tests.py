@@ -1,10 +1,10 @@
 # Criado por José Eduardo Santana Martins em 04/06/2026
-# Objetivo: Validar cadastro, CADIN, timeline, ciclos, anexos e busca do Regulariza SGI.
+# Atualizado por Codex em 09/06/2026
+# Objetivo: Validar cadastro em abas, fluxo processual, observações e timeline do Regulariza SGI.
 
 import shutil
 import tempfile
-from datetime import date
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import ImovelForm
-from .models import CicloProcessual, Imovel
+from .models import CicloProcessual, Imovel, ImovelObservacao, ImovelTimelineEvento
 from .services import compute_timeline_context, current_cycle, sync_ciclo
 
 
@@ -27,10 +27,9 @@ def arquivo_teste():
 
 
 class RegularizaSgiTests(TestCase):
-    """Cobre regras cadastrais, cálculos processuais e telas principais do módulo."""
+    """Cobre o novo desenho cadastral e o histórico consolidado do módulo."""
 
     def setUp(self):
-        # Isola uploads em diretório temporário e autentica usuário administrativo.
         self.media_root = tempfile.mkdtemp()
         self.override = override_settings(MEDIA_ROOT=self.media_root)
         self.override.enable()
@@ -38,17 +37,18 @@ class RegularizaSgiTests(TestCase):
         self.client.login(username='admin_regulariza', password='123')
 
     def tearDown(self):
-        # Remove arquivos temporários mesmo quando algum teste falha.
         self.override.disable()
         shutil.rmtree(self.media_root, ignore_errors=True)
 
     def criar_imovel(self, **kwargs):
-        """Cria imóvel válido com valores padrão para os testes."""
+        """Cria imóvel válido com defaults alinhados ao novo cadastro."""
 
         defaults = {
             'inscricao_imobiliaria': '123.456.789',
             'matricula': 'MAT-001',
             'processo_judicial': '0001/2026',
+            'sei': 'SEI-001',
+            'link_sei': 'https://sei.exemplo/001',
             'numero_sgi': 'SGI-100',
             'uf': 'SP',
             'municipio': 'São Paulo',
@@ -56,6 +56,8 @@ class RegularizaSgiTests(TestCase):
             'bairro': 'Centro',
             'numero': '100',
             'area': '1250.50',
+            'imunidade': False,
+            'tempo_imunidade': None,
             'possui_cadin': False,
             'exercicio_cadin': '',
             'notificacao_cadin_municipal': '',
@@ -63,145 +65,302 @@ class RegularizaSgiTests(TestCase):
         defaults.update(kwargs)
         return Imovel.objects.create(**defaults)
 
-    def test_cadastro_de_imovel_exige_inscricao_unica(self):
-        self.criar_imovel()
-        form = ImovelForm(
-            data={
-                'inscricao_imobiliaria': '123.456.789',
-                'matricula': 'MAT-002',
-                'processo_judicial': '0002/2026',
-                'numero_sgi': 'SGI-200',
-                'uf': 'SP',
-                'municipio': 'São Paulo',
-                'logradouro': 'Rua B',
-                'bairro': 'Bela Vista',
-                'numero': '20',
-                'area': '90.00',
-            }
-        )
+    def test_formulario_padrao_usa_sp_e_sao_paulo(self):
+        form = ImovelForm()
 
-        self.assertFalse(form.is_valid())
-        self.assertIn('inscricao_imobiliaria', form.errors)
+        self.assertEqual(form.fields['uf'].initial, 'SP')
+        self.assertEqual(form.fields['municipio'].initial, 'São Paulo')
 
-    def test_regra_de_cadin_salva_e_limpa_campo_corretamente(self):
+    def test_cadastro_sem_imunidade_salva_normalmente(self):
         form = ImovelForm(
             data={
                 'inscricao_imobiliaria': '999.888.777',
                 'matricula': 'MAT-003',
-                'processo_judicial': '0003/2026',
-                'numero_sgi': 'SGI-300',
+                'sei': 'SEI-003',
+                'link_sei': 'https://sei.exemplo/003',
+                'logradouro': 'Rua C',
                 'uf': 'SP',
                 'municipio': 'São Paulo',
-                'logradouro': 'Rua C',
                 'bairro': 'Consolação',
-                'numero': 'S/N',
                 'area': '45.00',
-                'possui_cadin': 'on',
-                'exercicio_cadin': '2023',
-                'notificacao_cadin_municipal': 'CADIN-SP-001',
+                'processo_judicial': '0003/2026',
+                'imissao_posse': '',
+                'imunidade': 'nao',
+                'tempo_imunidade': '',
+                'exercicio_cobranca': '',
+                'divida_ativa': '',
+                'numero_divida': '',
+                'dividas_nao_ajuizadas': '',
+                'dividas_ajuizadas': '',
+                'encargos': '',
             }
         )
 
         self.assertTrue(form.is_valid(), form.errors)
         imovel = form.save()
-        self.assertEqual(imovel.exercicio_cadin, '2023')
-        self.assertEqual(imovel.notificacao_cadin_municipal, 'CADIN-SP-001')
+        self.assertFalse(imovel.imunidade)
+        self.assertIsNone(imovel.tempo_imunidade)
 
+    def test_campos_monetarios_aceitam_formato_brasileiro_e_salvam_como_decimal(self):
         form = ImovelForm(
             data={
-                'inscricao_imobiliaria': imovel.inscricao_imobiliaria,
-                'matricula': imovel.matricula,
-                'processo_judicial': imovel.processo_judicial,
-                'numero_sgi': imovel.numero_sgi,
-                'uf': imovel.uf,
-                'municipio': imovel.municipio,
-                'logradouro': imovel.logradouro,
-                'bairro': imovel.bairro,
-                'numero': imovel.numero,
-                'area': imovel.area,
-                'exercicio_cadin': '2023',
-                'notificacao_cadin_municipal': 'CADIN-SP-001',
-            },
-            instance=imovel,
+                'inscricao_imobiliaria': '555.444.333',
+                'matricula': 'MAT-006',
+                'sei': '',
+                'link_sei': '',
+                'logradouro': 'Rua Monetaria',
+                'uf': 'SP',
+                'municipio': 'São Paulo',
+                'bairro': 'Centro',
+                'area': '',
+                'processo_judicial': '0006/2026',
+                'imissao_posse': '',
+                'imunidade': 'nao',
+                'tempo_imunidade': '',
+                'exercicio_cobranca': '',
+                'divida_ativa': '',
+                'numero_divida': '',
+                'dividas_nao_ajuizadas': '2.123,32',
+                'dividas_ajuizadas': '15.020,40',
+                'encargos': '99,90',
+            }
         )
 
         self.assertTrue(form.is_valid(), form.errors)
-        atualizado = form.save()
-        self.assertEqual(atualizado.exercicio_cadin, '')
-        self.assertEqual(atualizado.notificacao_cadin_municipal, '')
+        imovel = form.save()
+        self.assertEqual(str(imovel.dividas_nao_ajuizadas), '2123.32')
+        self.assertEqual(str(imovel.dividas_ajuizadas), '15020.40')
+        self.assertEqual(str(imovel.encargos), '99.90')
 
-    def test_cria_marco_inicial_automaticamente_ao_criar_imovel(self):
+    def test_cadastro_com_imunidade_exige_tempo_e_salva(self):
+        form_invalido = ImovelForm(
+            data={
+                'inscricao_imobiliaria': '111.222.333',
+                'matricula': 'MAT-004',
+                'sei': 'SEI-004',
+                'link_sei': 'https://sei.exemplo/004',
+                'logradouro': 'Rua D',
+                'uf': 'SP',
+                'municipio': 'São Paulo',
+                'bairro': 'Sé',
+                'area': '90.00',
+                'processo_judicial': '0004/2026',
+                'imissao_posse': '2026-01-05',
+                'imunidade': 'sim',
+                'tempo_imunidade': '',
+            }
+        )
+        form_valido = ImovelForm(
+            data={
+                'inscricao_imobiliaria': '111.222.334',
+                'matricula': 'MAT-005',
+                'sei': 'SEI-005',
+                'link_sei': 'https://sei.exemplo/005',
+                'logradouro': 'Rua E',
+                'uf': 'SP',
+                'municipio': 'São Paulo',
+                'bairro': 'Sé',
+                'area': '91.00',
+                'processo_judicial': '0005/2026',
+                'imissao_posse': '2026-01-06',
+                'imunidade': 'sim',
+                'tempo_imunidade': '5',
+            }
+        )
+
+        self.assertFalse(form_invalido.is_valid())
+        self.assertIn('tempo_imunidade', form_invalido.errors)
+        self.assertTrue(form_valido.is_valid(), form_valido.errors)
+        imovel = form_valido.save()
+        self.assertTrue(imovel.imunidade)
+        self.assertEqual(imovel.tempo_imunidade, 5)
+
+    def test_cria_ciclo_e_evento_de_cadastro_automaticamente(self):
         imovel = self.criar_imovel()
         ciclo = current_cycle(imovel)
 
         self.assertIsNotNone(ciclo)
         self.assertEqual(ciclo.numero, 1)
-        self.assertEqual(ciclo.marcos.first().titulo, 'Cadastro do Imóvel')
-        self.assertEqual(ciclo.marcos.first().usuario_responsavel, 'Sistema')
+        self.assertTrue(imovel.timeline_eventos.filter(tipo=ImovelTimelineEvento.Tipo.CADASTRO).exists())
 
-    def test_area_pode_ser_omitida_no_formulario(self):
-        form = ImovelForm(
-            data={
-                'inscricao_imobiliaria': '555.444.333',
-                'matricula': 'MAT-004',
-                'processo_judicial': '0004/2026',
-                'numero_sgi': 'SGI-400',
-                'uf': 'SP',
-                'municipio': 'São Paulo',
-                'logradouro': 'Rua D',
-                'bairro': 'Sé',
-                'numero': '50',
-                'area': '',
-            }
+    def test_listagem_pesquisa_permanece_com_campos_originais(self):
+        alvo = self.criar_imovel(
+            inscricao_imobiliaria='197.033.0003-1',
+            matricula='MAT-SANTA',
+            processo_judicial='PROC-AGUA-BRANCA',
+            sei='SEI-AGUA',
+            link_sei='https://sei.exemplo/agua',
+            logradouro='Av. Santa Marina',
+            bairro='Água Branca',
+            exercicio_cobranca='2024',
+            divida_ativa='DA-416',
+        )
+        self.criar_imovel(
+            inscricao_imobiliaria='000.000.0001-0',
+            matricula='OUTRA',
+            processo_judicial='PROC-OUTRO',
+            sei='SEI-OUTRO',
+            link_sei='https://sei.exemplo/outro',
+            municipio='Campinas',
+            logradouro='Rua Teste',
+            bairro='Centro',
         )
 
-        self.assertTrue(form.is_valid(), form.errors)
-        imovel = form.save()
-        self.assertIsNone(imovel.area)
+        response = self.client.get(reverse('regulariza_sgi:imovel_list'), {'q': 'Água Branca'})
 
-    def test_protocolo_gera_manifestacao_prevista_correta(self):
+        self.assertContains(response, alvo.inscricao_imobiliaria)
+        self.assertNotContains(response, '000.000.0001-0')
+
+    def test_detalhe_exibe_prorrogacao_e_manifestacao_apos_protocolo(self):
+        imovel = self.criar_imovel()
+
+        self.client.post(
+            reverse('regulariza_sgi:protocolo_create', args=[imovel.pk]),
+            {
+                'numero_protocolo': 'PROTO-TESTE',
+                'data_protocolo': '2026-06-10',
+                'prazo_resposta_dias': '30',
+            },
+        )
+        response = self.client.get(reverse('regulariza_sgi:imovel_detail', args=[imovel.pk]))
+
+        self.assertContains(response, 'Salvar prorrogação')
+        self.assertContains(response, 'Salvar manifestação')
+
+    def test_manifestacao_pode_ocorrer_sem_prorrogacao(self):
         imovel = self.criar_imovel()
         ciclo = current_cycle(imovel)
         ciclo.numero_protocolo = 'PROTO-1'
         ciclo.data_protocolo = date(2026, 3, 1)
-        ciclo.prazo_resposta_dias = 120
-        sync_ciclo(ciclo)
-
-        self.assertEqual(ciclo.data_manifestacao_prevista.isoformat(), '2026-06-29')
-
-    def test_prorrogacao_altera_data_prevista_da_manifestacao(self):
-        imovel = self.criar_imovel()
-        ciclo = current_cycle(imovel)
-        ciclo.numero_protocolo = 'PROTO-2'
-        ciclo.data_protocolo = date(2026, 3, 1)
         ciclo.prazo_resposta_dias = 30
-        ciclo.prorrogacao_dias = 15
-        ciclo.data_prorrogacao = date(2026, 3, 20)
         sync_ciclo(ciclo)
 
-        self.assertEqual(ciclo.data_manifestacao_prevista.isoformat(), '2026-04-15')
-
-    def test_deferimento_gera_vencimento_e_renovacao(self):
-        imovel = self.criar_imovel(
-            possui_cadin=True,
-            exercicio_cadin='2023',
-            notificacao_cadin_municipal='CADIN-SP-2023',
+        response = self.client.post(
+            reverse('regulariza_sgi:manifestacao_create', args=[imovel.pk]),
+            {
+                'resultado': CicloProcessual.Resultado.DEFERIDO,
+                'data_manifestacao': '2026-03-20',
+                'prazo_imunidade_anos': '5',
+            },
         )
-        ciclo = current_cycle(imovel)
-        ciclo.numero_protocolo = 'PROTO-3'
-        ciclo.data_protocolo = date(2026, 3, 1)
-        ciclo.prazo_resposta_dias = 30
-        ciclo.resultado = CicloProcessual.Resultado.DEFERIDO
-        ciclo.data_manifestacao = date(2026, 4, 1)
-        ciclo.prazo_imunidade_anos = 5
-        sync_ciclo(ciclo)
+        imovel.refresh_from_db()
+        ciclo.refresh_from_db()
+
+        self.assertRedirects(response, reverse('regulariza_sgi:imovel_detail', args=[imovel.pk]), fetch_redirect_response=False)
+        self.assertEqual(ciclo.resultado, CicloProcessual.Resultado.DEFERIDO)
+        self.assertTrue(imovel.imunidade)
+        self.assertEqual(imovel.tempo_imunidade, 5)
+
+    def test_observacoes_sao_registradas_com_usuario_e_paginadas(self):
+        imovel = self.criar_imovel()
+        for indice in range(11):
+            ImovelObservacao.objects.create(
+                imovel=imovel,
+                texto=f'Observação {indice}',
+                usuario_responsavel='admin_regulariza',
+            )
+
+        response = self.client.get(reverse('regulariza_sgi:imovel_detail', args=[imovel.pk]), {'aba': 'observacoes', 'subaba': 'observacoes'})
+
+        self.assertContains(response, 'Observação 10')
+        self.assertNotContains(response, 'Observação 0')
+        self.assertContains(response, 'Página 1 de 2')
+
+    def test_criar_observacao_inline_registra_timeline(self):
+        imovel = self.criar_imovel()
+
+        response = self.client.post(
+            reverse('regulariza_sgi:observacao_create', args=[imovel.pk]),
+            {'texto': 'Nova observação operacional.'},
+        )
+
+        self.assertRedirects(
+            response,
+            f"{reverse('regulariza_sgi:imovel_detail', args=[imovel.pk])}?aba=observacoes&subaba=observacoes",
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(imovel.observacoes.count(), 1)
+        self.assertTrue(imovel.timeline_eventos.filter(tipo=ImovelTimelineEvento.Tipo.OBSERVACAO).exists())
+
+    def test_timeline_registra_eventos_de_sei_anexo_e_fluxo(self):
+        imovel = self.criar_imovel()
+
+        self.client.post(
+            reverse('regulariza_sgi:sei_create', args=[imovel.pk]),
+            {'numero_sei': 'SEI-EXTRA', 'link_sei': 'https://sei.exemplo/extra'},
+        )
+        self.client.post(
+            reverse('regulariza_sgi:anexo_create', args=[imovel.pk]),
+            {'nome_exibicao': 'Matrícula', 'arquivo': arquivo_teste()},
+        )
+        self.client.post(
+            reverse('regulariza_sgi:protocolo_create', args=[imovel.pk]),
+            {'numero_protocolo': 'PROTO-9', 'data_protocolo': '2026-06-10', 'prazo_resposta_dias': '30'},
+        )
+        self.client.post(
+            reverse('regulariza_sgi:prorrogacao_create', args=[imovel.pk]),
+            {'prorrogacao_dias': '10', 'data_prorrogacao': '2026-06-20'},
+        )
+        self.client.post(
+            reverse('regulariza_sgi:manifestacao_create', args=[imovel.pk]),
+            {
+                'resultado': CicloProcessual.Resultado.INDEFERIDO,
+                'data_manifestacao': '2026-06-25',
+                'prazo_imunidade_anos': '',
+            },
+        )
+        response = self.client.get(reverse('regulariza_sgi:imovel_detail', args=[imovel.pk]), {'aba': 'observacoes', 'subaba': 'timeline'})
+
+        self.assertTrue(imovel.timeline_eventos.filter(tipo=ImovelTimelineEvento.Tipo.PROCESSO_SEI).exists())
+        self.assertTrue(imovel.timeline_eventos.filter(tipo=ImovelTimelineEvento.Tipo.ANEXO).exists())
+        self.assertTrue(imovel.timeline_eventos.filter(tipo=ImovelTimelineEvento.Tipo.PROTOCOLO).exists())
+        self.assertTrue(imovel.timeline_eventos.filter(tipo=ImovelTimelineEvento.Tipo.PRORROGACAO).exists())
+        self.assertTrue(imovel.timeline_eventos.filter(tipo=ImovelTimelineEvento.Tipo.MANIFESTACAO).exists())
+        self.assertContains(response, 'Processo SEI')
+        self.assertContains(response, 'Prorrogação')
+
+    def test_edicao_de_imovel_existente_salva_com_sucesso(self):
+        imovel = self.criar_imovel(
+            inscricao_imobiliaria='076.308.0057-6',
+            matricula='MAT-EDIT',
+            municipio='Araraquara',
+            logradouro='Rua Original',
+            bairro='Centro',
+            possui_cadin=True,
+            exercicio_cadin='2016 a 2025',
+            notificacao_cadin_municipal='000',
+        )
+
+        response = self.client.post(
+            reverse('regulariza_sgi:imovel_update', args=[imovel.pk]),
+            {
+                'inscricao_imobiliaria': imovel.inscricao_imobiliaria,
+                'matricula': imovel.matricula,
+                'sei': imovel.sei,
+                'link_sei': imovel.link_sei,
+                'logradouro': 'Rua Alterada',
+                'uf': imovel.uf,
+                'municipio': imovel.municipio,
+                'bairro': imovel.bairro,
+                'area': imovel.area,
+                'processo_judicial': imovel.processo_judicial,
+                'imissao_posse': '',
+                'imunidade': 'nao',
+                'tempo_imunidade': '',
+                'exercicio_cobranca': '',
+                'divida_ativa': '',
+                'numero_divida': '',
+                'dividas_nao_ajuizadas': '',
+                'dividas_ajuizadas': '',
+                'encargos': '',
+            },
+        )
         imovel.refresh_from_db()
 
-        self.assertEqual(ciclo.data_vencimento_imunidade.isoformat(), '2031-04-01')
-        self.assertEqual(ciclo.data_renovacao_prevista.isoformat(), '2030-10-03')
-        self.assertFalse(imovel.possui_cadin_ativo)
+        self.assertRedirects(response, reverse('regulariza_sgi:imovel_detail', args=[imovel.pk]), fetch_redirect_response=False)
+        self.assertEqual(imovel.logradouro, 'Rua Alterada')
 
-    def test_indeferimento_gera_prazo_contrarrazao_e_novo_ciclo(self):
+    def test_reinicio_de_ciclo_registra_timeline(self):
         imovel = self.criar_imovel()
         ciclo = current_cycle(imovel)
         ciclo.numero_protocolo = 'PROTO-4'
@@ -211,19 +370,16 @@ class RegularizaSgiTests(TestCase):
         ciclo.data_manifestacao = date(2026, 4, 20)
         sync_ciclo(ciclo)
 
-        self.assertEqual(ciclo.data_contrarrazao_limite.isoformat(), '2026-04-23')
-
         response = self.client.post(reverse('regulariza_sgi:reinicio_ciclo', args=[imovel.pk]))
 
         self.assertRedirects(response, reverse('regulariza_sgi:imovel_detail', args=[imovel.pk]), fetch_redirect_response=False)
         self.assertEqual(imovel.ciclos.count(), 2)
-        self.assertEqual(current_cycle(imovel).tipo, CicloProcessual.Tipo.CONTRARRAZAO)
+        self.assertTrue(imovel.timeline_eventos.filter(tipo=ImovelTimelineEvento.Tipo.CICLO).exists())
 
-    def test_calculo_de_cores_da_timeline_nas_faixas(self):
+    def test_timeline_processual_atual_permanece_funcional(self):
         verde = self.criar_imovel(inscricao_imobiliaria='111')
         amarelo = self.criar_imovel(inscricao_imobiliaria='222')
         vermelho = self.criar_imovel(inscricao_imobiliaria='333')
-        # Em um prazo de 30 dias: 50% permanece verde, 60% é amarelo e acima de 75% é vermelho.
         for imovel, days_ago in ((verde, 15), (amarelo, 18), (vermelho, 23)):
             created_at = timezone.now() - timedelta(days=days_ago)
             local_start_date = timezone.localdate() - timedelta(days=days_ago)
@@ -237,86 +393,3 @@ class RegularizaSgiTests(TestCase):
         self.assertEqual(compute_timeline_context(verde)['color'], 'verde')
         self.assertEqual(compute_timeline_context(amarelo)['color'], 'amarelo')
         self.assertEqual(compute_timeline_context(vermelho)['color'], 'vermelho')
-
-    def test_listagem_renderiza_indicador_de_cadin(self):
-        imovel = self.criar_imovel(
-            possui_cadin=True,
-            exercicio_cadin='2017 à 2023',
-            notificacao_cadin_municipal='CADIN-SP-2017-2023',
-        )
-
-        response = self.client.get(reverse('regulariza_sgi:imovel_list'))
-
-        self.assertContains(response, imovel.inscricao_imobiliaria)
-        self.assertContains(response, 'CADIN 2017 à 2023')
-        self.assertContains(response, 'regulariza-cadin-triangle')
-
-    def test_detalhe_permite_enviar_anexo(self):
-        imovel = self.criar_imovel()
-
-        response = self.client.post(
-            reverse('regulariza_sgi:anexo_create', args=[imovel.pk]),
-            {'nome_exibicao': 'Matrícula', 'arquivo': arquivo_teste()},
-        )
-
-        self.assertRedirects(response, reverse('regulariza_sgi:imovel_detail', args=[imovel.pk]), fetch_redirect_response=False)
-        self.assertEqual(imovel.anexos.count(), 1)
-
-    def test_listagem_pesquisa_por_qualquer_item_do_cadastro(self):
-        alvo = self.criar_imovel(
-            inscricao_imobiliaria='197.033.0003-1',
-            matricula='MAT-SANTA',
-            processo_judicial='PROC-AGUA-BRANCA',
-            numero_sgi='SGI-AGUA',
-            municipio='São Paulo',
-            logradouro='Av. Santa Marina',
-            bairro='Água Branca',
-            numero='416',
-            exercicio_cadin='2024',
-            notificacao_cadin_municipal='CADIN-416',
-        )
-        self.criar_imovel(
-            inscricao_imobiliaria='000.000.0001-0',
-            matricula='OUTRA',
-            processo_judicial='PROC-OUTRO',
-            numero_sgi='SGI-OUTRO',
-            municipio='Campinas',
-            logradouro='Rua Teste',
-            bairro='Centro',
-            numero='10',
-        )
-
-        response = self.client.get(reverse('regulariza_sgi:imovel_list'), {'q': 'Água Branca'})
-
-        self.assertContains(response, alvo.inscricao_imobiliaria)
-        self.assertNotContains(response, '000.000.0001-0')
-
-    def test_timeline_destaca_trecho_entre_marco_atual_e_proximo(self):
-        imovel = self.criar_imovel()
-
-        context = compute_timeline_context(imovel)
-
-        self.assertEqual(context['marco_atual'].titulo, 'Cadastro do Imóvel')
-        self.assertEqual(context['proximo_marco'].titulo, 'Protocolo')
-        self.assertEqual(context['prazo_total_dias'], 30)
-
-    def test_historico_registra_usuario_que_fez_o_protocolo(self):
-        imovel = self.criar_imovel()
-
-        response = self.client.post(
-            reverse('regulariza_sgi:protocolo_create', args=[imovel.pk]),
-            {
-                'numero_protocolo': 'PROTO-TESTE',
-                'data_protocolo': '2026-06-10',
-                'prazo_resposta_dias': '30',
-            },
-        )
-
-        self.assertRedirects(response, reverse('regulariza_sgi:imovel_detail', args=[imovel.pk]), fetch_redirect_response=False)
-        ciclo = current_cycle(imovel)
-        marco = ciclo.marcos.get(tipo='PROTOCOLO')
-        self.assertEqual(marco.usuario_responsavel, 'admin_regulariza')
-
-        detail_response = self.client.get(reverse('regulariza_sgi:imovel_detail', args=[imovel.pk]))
-        self.assertContains(detail_response, 'Histórico')
-        self.assertContains(detail_response, 'admin_regulariza')

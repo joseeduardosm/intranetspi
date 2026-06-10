@@ -3,6 +3,7 @@
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
@@ -10,9 +11,9 @@ from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
-from .forms import ImovelAnexoForm, ImovelForm, ManifestacaoForm, ProcessoSEIForm, ProtocoloForm, ProrrogacaoForm
+from .forms import ImovelAnexoForm, ImovelForm, ImovelObservacaoForm, ManifestacaoForm, ProcessoSEIForm, ProtocoloForm, ProrrogacaoForm
 from .models import CicloProcessual, Imovel, ImovelAnexo, ImovelProcessoSEI
-from .services import MUNICIPIOS_POR_UF, compute_timeline_context, create_followup_cycle, current_cycle, sync_ciclo
+from .services import MUNICIPIOS_POR_UF, compute_timeline_context, create_followup_cycle, current_cycle, registrar_evento_timeline, sync_ciclo
 
 
 class RegularizaSgiAccessMixin(LoginRequiredMixin):
@@ -75,6 +76,10 @@ class ImovelCreateView(RegularizaSgiAccessMixin, CreateView):
     form_class = ImovelForm
     template_name = 'regulariza_sgi/imovel_form.html'
 
+    def form_valid(self, form):
+        form.instance._timeline_user = self.request.user.username
+        return super().form_valid(form)
+
     def get_success_url(self):
         messages.success(self.request, 'Imóvel cadastrado.')
         return reverse('regulariza_sgi:imovel_detail', args=[self.object.pk])
@@ -83,6 +88,7 @@ class ImovelCreateView(RegularizaSgiAccessMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context['form_title'] = 'Novo imóvel'
         context['municipios_json'] = MUNICIPIOS_POR_UF
+        context['exibir_campos_sei'] = False
         return context
 
 
@@ -93,6 +99,10 @@ class ImovelUpdateView(RegularizaSgiAccessMixin, UpdateView):
     form_class = ImovelForm
     template_name = 'regulariza_sgi/imovel_form.html'
 
+    def form_valid(self, form):
+        form.instance._timeline_user = self.request.user.username
+        return super().form_valid(form)
+
     def get_success_url(self):
         messages.success(self.request, 'Imóvel atualizado.')
         return reverse('regulariza_sgi:imovel_detail', args=[self.object.pk])
@@ -101,6 +111,7 @@ class ImovelUpdateView(RegularizaSgiAccessMixin, UpdateView):
         context = super().get_context_data(**kwargs)
         context['form_title'] = 'Editar imóvel'
         context['municipios_json'] = MUNICIPIOS_POR_UF
+        context['exibir_campos_sei'] = True
         return context
 
 
@@ -133,6 +144,7 @@ class ImovelDetailView(RegularizaSgiAccessMixin, DetailView):
         context['ciclo_atual'] = ciclo
         context['sei_form'] = kwargs.get('sei_form') or ProcessoSEIForm()
         context['anexo_form'] = kwargs.get('anexo_form') or ImovelAnexoForm()
+        context['observacao_form'] = kwargs.get('observacao_form') or ImovelObservacaoForm()
         context['protocolo_form'] = kwargs.get('protocolo_form') or ProtocoloForm()
         context['prorrogacao_form'] = kwargs.get('prorrogacao_form') or ProrrogacaoForm()
         context['manifestacao_form'] = kwargs.get('manifestacao_form') or ManifestacaoForm()
@@ -141,6 +153,10 @@ class ImovelDetailView(RegularizaSgiAccessMixin, DetailView):
         context['pode_registrar_manifestacao'] = bool(ciclo and ciclo.data_protocolo and not ciclo.data_manifestacao)
         context['pode_reiniciar_ciclo'] = bool(ciclo and ciclo.resultado in CicloProcessual.Resultado.values)
         context['proximo_ciclo_tipo'] = self._proximo_ciclo_tipo(ciclo)
+        context['aba_ativa'] = kwargs.get('aba_ativa') or self.request.GET.get('aba', 'dados-iniciais')
+        context['subaba_observacoes_ativa'] = kwargs.get('subaba_observacoes_ativa') or self.request.GET.get('subaba', 'observacoes')
+        context['observacoes_page_obj'] = Paginator(imovel.observacoes.all(), 10).get_page(self.request.GET.get('obs_page'))
+        context['timeline_page_obj'] = Paginator(imovel.timeline_eventos.all(), 10).get_page(self.request.GET.get('timeline_page'))
         return context
 
     def _proximo_ciclo_tipo(self, ciclo):
@@ -183,6 +199,7 @@ class ProcessoSEICreateView(ImovelChildMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.imovel = self.imovel
+        form.instance._timeline_user = self.request.user.username
         messages.success(self.request, 'Processo SEI adicionado.')
         return super().form_valid(form)
 
@@ -203,6 +220,7 @@ class ProcessoSEIUpdateView(ImovelChildMixin, UpdateView):
         return ImovelProcessoSEI.objects.filter(imovel=self.imovel)
 
     def form_valid(self, form):
+        form.instance._timeline_user = self.request.user.username
         messages.success(self.request, 'Processo SEI atualizado.')
         return super().form_valid(form)
 
@@ -225,6 +243,11 @@ class ProcessoSEIDeleteView(ImovelChildMixin, DeleteView):
         messages.success(self.request, 'Processo SEI excluído.')
         return reverse('regulariza_sgi:imovel_detail', args=[self.imovel.pk])
 
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        self.object._timeline_user = request.user.username
+        return super().delete(request, *args, **kwargs)
+
 
 class AnexoCreateView(ImovelChildMixin, CreateView):
     """Adiciona um anexo ao imóvel."""
@@ -235,6 +258,7 @@ class AnexoCreateView(ImovelChildMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.imovel = self.imovel
+        form.instance._timeline_user = self.request.user.username
         messages.success(self.request, 'Anexo adicionado.')
         return super().form_valid(form)
 
@@ -255,6 +279,7 @@ class AnexoUpdateView(ImovelChildMixin, UpdateView):
         return ImovelAnexo.objects.filter(imovel=self.imovel)
 
     def form_valid(self, form):
+        form.instance._timeline_user = self.request.user.username
         messages.success(self.request, 'Anexo atualizado.')
         return super().form_valid(form)
 
@@ -276,6 +301,38 @@ class AnexoDeleteView(ImovelChildMixin, DeleteView):
     def get_success_url(self):
         messages.success(self.request, 'Anexo excluído.')
         return reverse('regulariza_sgi:imovel_detail', args=[self.imovel.pk])
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        self.object._timeline_user = request.user.username
+        return super().delete(request, *args, **kwargs)
+
+
+class ObservacaoCreateView(RegularizaSgiAccessMixin, View):
+    """Adiciona observações textuais ao histórico funcional do imóvel."""
+
+    def post(self, request, pk):
+        imovel = get_object_or_404(Imovel, pk=pk)
+        form = ImovelObservacaoForm(request.POST)
+        if form.is_valid():
+            observacao = form.save(commit=False)
+            observacao.imovel = imovel
+            observacao.usuario_responsavel = request.user.username
+            observacao.save()
+            messages.success(request, 'Observação registrada.')
+            detail_url = reverse('regulariza_sgi:imovel_detail', args=[imovel.pk])
+            return redirect(f'{detail_url}?aba=observacoes&subaba=observacoes')
+
+        detail_view = ImovelDetailView()
+        detail_view.request = request
+        detail_view.object = imovel
+        return detail_view.render_to_response(
+            detail_view.get_context_data(
+                observacao_form=form,
+                aba_ativa='observacoes',
+                subaba_observacoes_ativa='observacoes',
+            )
+        )
 
 
 class CurrentCycleMutationView(RegularizaSgiAccessMixin, View):
@@ -317,6 +374,13 @@ class RegistrarProtocoloView(CurrentCycleMutationView):
         self.ciclo.data_protocolo = form.cleaned_data['data_protocolo']
         self.ciclo.prazo_resposta_dias = form.cleaned_data['prazo_resposta_dias']
         sync_ciclo(self.ciclo, usuario=self.request.user.username, tipo_evento='PROTOCOLO')
+        registrar_evento_timeline(
+            self.imovel,
+            'protocolo',
+            f'Protocolo {self.ciclo.numero_protocolo} registrado para o ciclo {self.ciclo.numero}.',
+            usuario=self.request.user.username,
+            ciclo=self.ciclo,
+        )
         messages.success(self.request, 'Protocolo registrado.')
         return redirect('regulariza_sgi:imovel_detail', pk=self.imovel.pk)
 
@@ -329,11 +393,18 @@ class RegistrarProrrogacaoView(CurrentCycleMutationView):
 
     def form_valid(self, form):
         if not self.ciclo.data_protocolo or self.ciclo.data_manifestacao:
-            messages.error(self.request, 'A prorrogação só pode ser registrada após o protocolo e antes da manifestação.')
+            messages.error(self.request, 'A prorrogação só pode ser registrada após o protocolo e antes da manifestação final do ciclo.')
             return redirect('regulariza_sgi:imovel_detail', pk=self.imovel.pk)
         self.ciclo.prorrogacao_dias += form.cleaned_data['prorrogacao_dias']
         self.ciclo.data_prorrogacao = form.cleaned_data['data_prorrogacao']
         sync_ciclo(self.ciclo, usuario=self.request.user.username, tipo_evento='PRORROGACAO')
+        registrar_evento_timeline(
+            self.imovel,
+            'prorrogacao',
+            f'Prorrogação de {form.cleaned_data["prorrogacao_dias"]} dia(s) registrada no ciclo {self.ciclo.numero}.',
+            usuario=self.request.user.username,
+            ciclo=self.ciclo,
+        )
         messages.success(self.request, 'Prorrogação registrada.')
         return redirect('regulariza_sgi:imovel_detail', pk=self.imovel.pk)
 
@@ -346,13 +417,25 @@ class RegistrarManifestacaoView(CurrentCycleMutationView):
 
     def form_valid(self, form):
         if not self.ciclo.data_protocolo or self.ciclo.data_manifestacao:
-            messages.error(self.request, 'A manifestação só pode ser registrada após o protocolo.')
+            messages.error(self.request, 'A manifestação só pode ser registrada após o protocolo e antes da manifestação final do ciclo.')
             return redirect('regulariza_sgi:imovel_detail', pk=self.imovel.pk)
         self.ciclo.resultado = form.cleaned_data['resultado']
         self.ciclo.data_manifestacao = form.cleaned_data['data_manifestacao']
         self.ciclo.prazo_imunidade_anos = form.cleaned_data['prazo_imunidade_anos']
         tipo_evento = 'DEFERIMENTO' if self.ciclo.resultado == CicloProcessual.Resultado.DEFERIDO else 'INDEFERIMENTO'
         sync_ciclo(self.ciclo, usuario=self.request.user.username, tipo_evento=tipo_evento)
+        # A manifestação processual atualiza o estado visível da imunidade do imóvel.
+        self.imovel.imunidade = self.ciclo.resultado == CicloProcessual.Resultado.DEFERIDO
+        self.imovel.tempo_imunidade = self.ciclo.prazo_imunidade_anos if self.imovel.imunidade else None
+        self.imovel._skip_timeline_event = True
+        self.imovel.save(update_fields=['imunidade', 'tempo_imunidade', 'atualizado_em'])
+        registrar_evento_timeline(
+            self.imovel,
+            'manifestacao',
+            f'Manifestação {self.ciclo.get_resultado_display().lower()} registrada no ciclo {self.ciclo.numero}.',
+            usuario=self.request.user.username,
+            ciclo=self.ciclo,
+        )
         messages.success(self.request, 'Manifestação registrada.')
         return redirect('regulariza_sgi:imovel_detail', pk=self.imovel.pk)
 
@@ -367,6 +450,13 @@ class ReiniciarCicloView(RegularizaSgiAccessMixin, View):
             messages.error(request, 'Ainda não há resultado para reiniciar o fluxo.')
             return redirect('regulariza_sgi:imovel_detail', pk=imovel.pk)
         tipo = CicloProcessual.Tipo.RENOVACAO if ciclo.resultado == CicloProcessual.Resultado.DEFERIDO else CicloProcessual.Tipo.CONTRARRAZAO
-        create_followup_cycle(imovel, tipo, usuario=request.user.username)
+        novo_ciclo = create_followup_cycle(imovel, tipo, usuario=request.user.username)
+        registrar_evento_timeline(
+            imovel,
+            'ciclo',
+            f'Novo ciclo {novo_ciclo.numero} criado como {novo_ciclo.get_tipo_display().lower()}.',
+            usuario=request.user.username,
+            ciclo=novo_ciclo,
+        )
         messages.success(request, 'Novo ciclo criado. Registre o protocolo para continuar.')
         return redirect('regulariza_sgi:imovel_detail', pk=imovel.pk)

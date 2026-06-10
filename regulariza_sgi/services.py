@@ -225,6 +225,34 @@ def usuario_display(usuario):
     return usuario or 'Sistema'
 
 
+def registrar_evento_timeline(
+    imovel,
+    tipo,
+    descricao,
+    *,
+    usuario=None,
+    ciclo=None,
+    anexo=None,
+    processo_sei=None,
+    observacao=None,
+):
+    """Persiste um evento legível da timeline geral do imóvel."""
+
+    # Import local evita ciclo de import entre models e services.
+    from .models import ImovelTimelineEvento
+
+    return ImovelTimelineEvento.objects.create(
+        imovel=imovel,
+        tipo=tipo,
+        descricao=descricao,
+        usuario_responsavel=usuario_display(usuario),
+        ciclo=ciclo,
+        anexo=anexo,
+        processo_sei=processo_sei,
+        observacao=observacao,
+    )
+
+
 def historico_evento_display(marco):
     """Traduz marcos técnicos em eventos legíveis para o histórico completo do imóvel."""
 

@@ -1,45 +1,161 @@
 {% extends "base.html" %}
 {% load static %}
 <!-- Criado por José Eduardo Santana Martins em 04/06/2026 -->
-<!-- Objetivo: Exibir o formulário de cadastro e edição de imóveis. -->
+<!-- Atualizado por Codex em 09/06/2026 -->
+<!-- Objetivo: Exibir o cadastro do imóvel em abas de dados iniciais, dívida e observações. -->
 {% block title %}{{ form_title }} | RegulaSGI{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'regulariza_sgi/css/regulariza_sgi.css' %}">{% endblock %}
 {% block content %}
-  <!-- Formulário principal com dados cadastrais, endereço e bloco CADIN. -->
   <div class="regulariza-shell">
     <div class="d-flex justify-content-between align-items-center gap-3 mb-4">
       <div class="spi-page-title mb-0">
         <h1>{{ form_title }}</h1>
-        <p>Cadastro de imóvel para controle de imunidade tributária e regularização imobiliária.</p>
+        <p>Cadastro do imóvel organizado por abas para dados iniciais, dívida e histórico funcional.</p>
       </div>
       <a class="btn btn-outline-secondary" href="{% url 'regulariza_sgi:imovel_list' %}">Voltar</a>
     </div>
 
     <form method="post" class="card shadow-sm border-0 regulariza-form-card">
-      <div class="card-body p-4">
-        {% csrf_token %}
-        <div class="row g-4">
-          {% for field in form %}
-            <div class="{% if field.name == 'possui_cadin' %}col-12{% elif field.name == 'exercicio_cadin' or field.name == 'notificacao_cadin_municipal' %}col-lg-6 cadin-dependent-field{% elif field.name == 'logradouro' %}col-lg-6{% elif field.name == 'bairro' %}col-lg-4 col-md-6{% elif field.name == 'numero' %}col-lg-2 col-md-6{% else %}col-md-6{% endif %}" {% if field.name == 'exercicio_cadin' %}id="cadin-field-wrap"{% endif %}>
-              {% if field.field.widget.input_type == 'checkbox' %}
-                <div class="form-check mt-4 pt-2">
-                  {{ field }}
-                  <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                </div>
-              {% else %}
-                <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-              {% endif %}
-              {% if field.help_text %}
-                <div class="form-text">{{ field.help_text }}</div>
-              {% endif %}
-              {% for error in field.errors %}
-                <div class="text-danger small mt-1">{{ error }}</div>
-              {% endfor %}
-            </div>
-          {% endfor %}
-        </div>
+      {% csrf_token %}
+      <div class="card-header bg-white border-0 pt-4 px-4">
+        <nav class="regulariza-tab-nav" aria-label="Abas do cadastro do imóvel">
+          <button class="regulariza-tab-trigger is-active" type="button" data-tab-target="dados-iniciais">Dados Iniciais</button>
+          <button class="regulariza-tab-trigger" type="button" data-tab-target="divida">Dívida</button>
+          <button class="regulariza-tab-trigger" type="button" data-tab-target="observacoes">Observações</button>
+        </nav>
       </div>
+
+      <div class="card-body p-4">
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">
+            {% for error in form.non_field_errors %}
+              <div>{{ error }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <section class="regulariza-tab-panel is-active" data-tab-panel="dados-iniciais">
+          <div class="row g-4">
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.inscricao_imobiliaria.id_for_label }}">{{ form.inscricao_imobiliaria.label }}</label>
+              {{ form.inscricao_imobiliaria }}
+              {% for error in form.inscricao_imobiliaria.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.matricula.id_for_label }}">{{ form.matricula.label }}</label>
+              {{ form.matricula }}
+              {% for error in form.matricula.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.numero_sgi.id_for_label }}">{{ form.numero_sgi.label }}</label>
+              {{ form.numero_sgi }}
+              {% for error in form.numero_sgi.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            {% if exibir_campos_sei %}
+              <div class="col-lg-4 col-md-6">
+                <label class="form-label fw-semibold" for="{{ form.sei.id_for_label }}">{{ form.sei.label }}</label>
+                {{ form.sei }}
+                {% for error in form.sei.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold" for="{{ form.link_sei.id_for_label }}">{{ form.link_sei.label }}</label>
+                {{ form.link_sei }}
+                {% for error in form.link_sei.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+              </div>
+            {% endif %}
+            <div class="col-lg-6">
+              <label class="form-label fw-semibold" for="{{ form.logradouro.id_for_label }}">{{ form.logradouro.label }}</label>
+              {{ form.logradouro }}
+              {% for error in form.logradouro.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-3 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.uf.id_for_label }}">{{ form.uf.label }}</label>
+              {{ form.uf }}
+              {% for error in form.uf.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-3 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.municipio.id_for_label }}">{{ form.municipio.label }}</label>
+              {{ form.municipio }}
+              {% for error in form.municipio.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.bairro.id_for_label }}">{{ form.bairro.label }}</label>
+              {{ form.bairro }}
+              {% for error in form.bairro.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.area.id_for_label }}">{{ form.area.label }}</label>
+              {{ form.area }}
+              {% for error in form.area.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.imissao_posse.id_for_label }}">{{ form.imissao_posse.label }}</label>
+              {{ form.imissao_posse }}
+              {% for error in form.imissao_posse.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-6">
+              <label class="form-label fw-semibold" for="{{ form.processo_judicial.id_for_label }}">{{ form.processo_judicial.label }}</label>
+              {{ form.processo_judicial }}
+              {% for error in form.processo_judicial.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-6">
+              <span class="form-label fw-semibold d-block mb-2">{{ form.imunidade.label }}</span>
+              <div class="regulariza-inline-radios" id="regulariza-imunidade-radios">
+                {% for choice in form.imunidade %}
+                  <label class="regulariza-inline-radio" for="{{ choice.id_for_label }}">
+                    {{ choice.tag }}
+                    <span>{{ choice.choice_label }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+              {% for error in form.imunidade.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-4" id="tempo-imunidade-wrap" {% if not form.imunidade.value or form.imunidade.value != 'sim' %}hidden{% endif %}>
+              <label class="form-label fw-semibold" for="{{ form.tempo_imunidade.id_for_label }}">{{ form.tempo_imunidade.label }}</label>
+              {{ form.tempo_imunidade }}
+              {% if form.tempo_imunidade.help_text %}<div class="form-text">{{ form.tempo_imunidade.help_text }}</div>{% endif %}
+              {% for error in form.tempo_imunidade.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+          </div>
+        </section>
+
+        <section class="regulariza-tab-panel" data-tab-panel="divida" hidden>
+          <div class="row g-4">
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.exercicio_cobranca.id_for_label }}">{{ form.exercicio_cobranca.label }}</label>
+              {{ form.exercicio_cobranca }}
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.divida_ativa.id_for_label }}">{{ form.divida_ativa.label }}</label>
+              {{ form.divida_ativa }}
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.numero_divida.id_for_label }}">{{ form.numero_divida.label }}</label>
+              {{ form.numero_divida }}
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.dividas_nao_ajuizadas.id_for_label }}">{{ form.dividas_nao_ajuizadas.label }}</label>
+              {{ form.dividas_nao_ajuizadas }}
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.dividas_ajuizadas.id_for_label }}">{{ form.dividas_ajuizadas.label }}</label>
+              {{ form.dividas_ajuizadas }}
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.encargos.id_for_label }}">{{ form.encargos.label }}</label>
+              {{ form.encargos }}
+            </div>
+          </div>
+        </section>
+
+        <section class="regulariza-tab-panel" data-tab-panel="observacoes" hidden>
+          <div class="regulariza-form-placeholder">
+            <h2>Observações e timeline</h2>
+            <p>Salve o imóvel primeiro para registrar observações e consultar a timeline consolidada no detalhe.</p>
+          </div>
+        </section>
+      </div>
+
       <div class="card-footer bg-white d-flex justify-content-end gap-2 p-4">
         <a class="btn btn-outline-secondary" href="{% url 'regulariza_sgi:imovel_list' %}">Cancelar</a>
         <button class="btn btn-primary" type="submit">Salvar imóvel</button>
@@ -51,18 +167,20 @@
 {% block extra_js %}
   <script>
     (function () {
-      // Atualiza municípios por UF e exibe campos CADIN somente quando necessário.
       var municipios = JSON.parse(document.getElementById('regulariza-sgi-municipios').textContent);
       var ufSelect = document.getElementById('id_uf');
       var municipioSelect = document.getElementById('id_municipio');
-      var cadinCheckbox = document.getElementById('id_possui_cadin');
-      var cadinFields = document.querySelectorAll('.cadin-dependent-field');
+      var imunidadeRadios = document.querySelectorAll('input[name="imunidade"]');
+      var tempoImunidadeWrap = document.getElementById('tempo-imunidade-wrap');
+      var tabButtons = document.querySelectorAll('.regulariza-tab-trigger');
+      var tabPanels = document.querySelectorAll('.regulariza-tab-panel');
+      var moneyInputs = document.querySelectorAll('[data-money-field="true"]');
 
       function rebuildMunicipios() {
         if (!ufSelect || !municipioSelect) {
           return;
         }
-        var current = municipioSelect.value;
+        var current = municipioSelect.value || 'São Paulo';
         var options = municipios[ufSelect.value] || [];
         municipioSelect.innerHTML = '<option value="">Selecione</option>';
         options.forEach(function (nome) {
@@ -76,19 +194,64 @@
         });
       }
 
-      function toggleCadinField() {
-        if (!cadinCheckbox || !cadinFields.length) {
+      function toggleTempoImunidade() {
+        if (!tempoImunidadeWrap) {
           return;
         }
-        cadinFields.forEach(function (field) {
-          field.style.display = cadinCheckbox.checked ? '' : 'none';
+        var selected = document.querySelector('input[name="imunidade"]:checked');
+        tempoImunidadeWrap.hidden = !(selected && selected.value === 'sim');
+      }
+
+      function openTab(target) {
+        tabButtons.forEach(function (button) {
+          button.classList.toggle('is-active', button.dataset.tabTarget === target);
+        });
+        tabPanels.forEach(function (panel) {
+          var isActive = panel.dataset.tabPanel === target;
+          panel.hidden = !isActive;
+          panel.classList.toggle('is-active', isActive);
         });
       }
 
+      function formatMoneyValue(rawValue) {
+        var digits = (rawValue || '').replace(/\D/g, '');
+        if (!digits) {
+          return '';
+        }
+        while (digits.length < 3) {
+          digits = '0' + digits;
+        }
+        var cents = digits.slice(-2);
+        var whole = digits.slice(0, -2).replace(/^0+(\d)/, '$1');
+        if (!whole) {
+          whole = '0';
+        }
+        whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        return whole + ',' + cents;
+      }
+
       ufSelect && ufSelect.addEventListener('change', rebuildMunicipios);
-      cadinCheckbox && cadinCheckbox.addEventListener('change', toggleCadinField);
+      imunidadeRadios.forEach(function (radio) {
+        radio.addEventListener('change', toggleTempoImunidade);
+      });
+      moneyInputs.forEach(function (input) {
+        input.addEventListener('input', function () {
+          input.value = formatMoneyValue(input.value);
+        });
+        input.addEventListener('blur', function () {
+          input.value = formatMoneyValue(input.value);
+        });
+        input.value = formatMoneyValue(input.value);
+      });
+      tabButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+          openTab(button.dataset.tabTarget);
+        });
+      });
+
       rebuildMunicipios();
-      toggleCadinField();
+      toggleTempoImunidade();
+      openTab('dados-iniciais');
     }());
   </script>
 {% endblock %}
