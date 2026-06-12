@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Formulário de decisão do fiscal com deferimento ou indeferimento. -->
+
+{% block title %}Analisar solicitação{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Analisar viagem #{{ reserva.pk }}</h1>
+    <p>Defina a decisão fiscal e, se deferida, a janela operacional da viagem.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-detail-card mb-4">
+    <p><strong>Solicitante:</strong> {{ solicitante_payload.nome|default:reserva.solicitante.username }}</p>
+    <p><strong>Saída planejada:</strong> {{ reserva.saida_planejada_em|date:"d/m/Y H:i" }}</p>
+    <p><strong>Retorno planejado:</strong> {{ reserva.retorno_planejado_em|date:"d/m/Y H:i" }}</p>
+    <p><strong>Destino:</strong> {{ reserva.destino_endereco }}</p>
+    <p><strong>Permanência:</strong> {{ reserva.get_modo_destino_display }}</p>
+    <p><strong>Motivo:</strong> {{ reserva.motivo_viagem|linebreaksbr }}</p>
+  </section>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <form method="post" class="row g-4" id="fila-fiscal-form">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="col-12">
+          <div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div>
+        </div>
+      {% endif %}
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.decisao.id_for_label }}">Decisão</label>
+        {{ form.decisao }}
+        {{ form.decisao.errors }}
+      </div>
+      <div class="col-lg-4 decisao-deferimento">
+        <label class="form-label" for="{{ form.deslocamento_ida_minutos.id_for_label }}">Deslocamento de ida (min)</label>
+        {{ form.deslocamento_ida_minutos }}
+        {{ form.deslocamento_ida_minutos.errors }}
+      </div>
+      <div class="col-lg-4 decisao-deferimento">
+        <label class="form-label" for="{{ form.deslocamento_retorno_minutos.id_for_label }}">Deslocamento de retorno (min)</label>
+        {{ form.deslocamento_retorno_minutos }}
+        {{ form.deslocamento_retorno_minutos.errors }}
+      </div>
+      <div class="col-lg-6 decisao-deferimento">
+        <label class="form-label" for="{{ form.carro.id_for_label }}">Carro</label>
+        {{ form.carro }}
+        {{ form.carro.errors }}
+      </div>
+      <div class="col-lg-6 decisao-deferimento">
+        <label class="form-label" for="{{ form.motorista.id_for_label }}">Motorista</label>
+        {{ form.motorista }}
+        {{ form.motorista.errors }}
+      </div>
+      <div class="col-12 decisao-indeferimento">
+        <label class="form-label" for="{{ form.justificativa_indeferimento.id_for_label }}">Justificativa do indeferimento</label>
+        {{ form.justificativa_indeferimento }}
+        {{ form.justificativa_indeferimento.errors }}
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Salvar decisão</button>
+        <a class="btn btn-light" href="{% url 'reserva_carros:fila_fiscal' %}">Cancelar</a>
+      </div>
+    </form>
+  </section>
+
+  <script>
+    const decisaoSelect = document.getElementById("id_decisao");
+    const updateDecisionVisibility = () => {
+      const isDeferir = decisaoSelect?.value === "DEFERIR";
+      document.querySelectorAll(".decisao-deferimento").forEach((element) => {
+        element.style.display = isDeferir ? "block" : "none";
+      });
+      document.querySelectorAll(".decisao-indeferimento").forEach((element) => {
+        element.style.display = isDeferir ? "none" : "block";
+      });
+    };
+    decisaoSelect?.addEventListener("change", updateDecisionVisibility);
+    updateDecisionVisibility();
+  </script>
+{% endblock %}
+

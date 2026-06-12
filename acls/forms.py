@@ -3,8 +3,11 @@
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+
+from setores.services import user_display_name
+
 from .models import RegraAcesso, Recurso
-from usuarios.services import SYSTEM_USERNAMES
+from usuarios.services import visible_users_queryset
 
 User = get_user_model()
 
@@ -27,9 +30,8 @@ class RegraAcessoForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Limita a seleção a usuários humanos ativos e grupos cadastrados no sistema.
-        self.fields['usuarios'].queryset = User.objects.filter(is_active=True).exclude(
-            username__in=SYSTEM_USERNAMES
-        ).order_by('first_name', 'username')
+        self.fields['usuarios'].queryset = visible_users_queryset().order_by('first_name', 'username')
+        self.fields['usuarios'].label_from_instance = user_display_name
         self.fields['grupos'].queryset = Group.objects.all().order_by('name')
 
     def clean(self):

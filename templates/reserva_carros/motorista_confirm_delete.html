@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Confirma a exclusão manual de um motorista do cadastro base. -->
+
+{% block title %}Excluir motorista{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Excluir motorista</h1>
+    <p>Revise o cadastro antes de remover o motorista da lista operacional.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <p class="mb-4">
+      Você tem certeza que deseja excluir o motorista <strong>{{ object.nome_completo }}</strong>?
+    </p>
+
+    <form method="post" class="d-flex gap-2 flex-wrap">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Excluir motorista</button>
+      <a class="btn btn-light" href="{% url 'reserva_carros:motorista_list' %}">Cancelar</a>
+    </form>
+  </section>
+{% endblock %}

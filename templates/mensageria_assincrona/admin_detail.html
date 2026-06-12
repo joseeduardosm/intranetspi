@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Exibe o detalhamento administrativo da mensagem, audiência e eventos. -->
+{% block title %}{{ mensagem.assunto }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'mensageria_assincrona/css/mensageria.css' %}">{% endblock %}
+{% block content %}
+  <div class="mensageria-shell">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+      <div class="spi-page-title mb-0">
+        <h1>{{ mensagem.assunto }}</h1>
+        <p>Status {{ mensagem.get_status_envio_display }} • Origem pública {{ mensagem.get_origem_tipo_display }}</p>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'mensageria:admin_list' %}">Voltar</a>
+        {% if mensagem.pode_editar %}
+          <a class="btn btn-primary" href="{% url 'mensageria:admin_update' mensagem.pk %}">Editar</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <section class="mensageria-summary-grid mb-4">
+      <article class="mensageria-summary-card">
+        <span>Prioridade</span>
+        <strong>{{ mensagem.get_prioridade_display }}</strong>
+        <p>Expira em {{ mensagem.expira_em|date:"d/m/Y H:i"|default:"sem prazo" }}</p>
+      </article>
+      <article class="mensageria-summary-card">
+        <span>Publicação</span>
+        <strong>{{ mensagem.publicada_em|date:"d/m/Y H:i"|default:"Não publicada" }}</strong>
+        <p>Agendada para {{ mensagem.publicar_em|date:"d/m/Y H:i"|default:"-" }}</p>
+      </article>
+      <article class="mensageria-summary-card">
+        <span>Ciências</span>
+        <strong>{{ mensagem.destinos_cientes }}/{{ mensagem.destinos_total }}</strong>
+        <p>Destinatários efetivos com confirmação.</p>
+      </article>
+    </section>
+
+    <div class="row g-4">
+      <div class="col-xl-7">
+        <section class="card border-0 shadow-sm h-100">
+          <div class="card-body p-4">
+            <h2 class="h4">Conteúdo</h2>
+            <p class="text-muted mb-2">Assunto entregue ao usuário</p>
+            <p class="fw-semibold">{{ mensagem.assunto }}</p>
+            <div class="mensageria-body-copy">{{ mensagem.corpo|linebreaksbr }}</div>
+          </div>
+        </section>
+      </div>
+      <div class="col-xl-5">
+        <section class="card border-0 shadow-sm mb-4">
+          <div class="card-body p-4">
+            <h2 class="h5">Audiência original</h2>
+            <div class="mensageria-chip-group">
+              {% for alvo in mensagem.audiencia_usuarios.all %}
+                <span class="mensageria-chip">{{ alvo.usuario.get_full_name|default:alvo.usuario.username }}</span>
+              {% empty %}
+                <span class="text-muted">Nenhum usuário selecionado diretamente.</span>
+              {% endfor %}
+            </div>
+            <hr>
+            <div class="mensageria-chip-group">
+              {% for alvo in mensagem.audiencia_setores.all %}
+                <span class="mensageria-chip is-sector">{{ alvo.setor.group.name }}</span>
+              {% empty %}
+                <span class="text-muted">Nenhum setor selecionado.</span>
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+        <section class="card border-0 shadow-sm">
+          <div class="card-body p-4">
+            <h2 class="h5">Eventos</h2>
+            <div class="mensageria-event-list">
+              {% for evento in mensagem.eventos.all %}
+                <article class="mensageria-event-item">
+                  <strong>{{ evento.get_tipo_acao_display }}</strong>
+                  <span>{{ evento.created_at|date:"d/m/Y H:i" }}</span>
+                  <p>{{ evento.usuario|default:"Sistema" }}</p>
+                </article>
+              {% empty %}
+                <p class="text-muted mb-0">Nenhum evento registrado.</p>
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <section class="card border-0 shadow-sm mt-4">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h5 mb-0">Destinatários efetivos</h2>
+          {% if mensagem.status_envio != mensagem.StatusEnvio.PUBLICADA and mensagem.status_envio != mensagem.StatusEnvio.CANCELADA %}
+            <form method="post" action="{% url 'mensageria:admin_cancel' mensagem.pk %}">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-danger" type="submit">Cancelar mensagem</button>
+            </form>
+          {% endif %}
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Usuário</th>
+                <th>Status</th>
+                <th>Entrega</th>
+                <th>Visualização</th>
+                <th>Ciência</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for destino in mensagem.destinos.all %}
+                <tr>
+                  <td>{{ destino.usuario.get_full_name|default:destino.usuario.username }}</td>
+                  <td><span class="badge text-bg-{% if destino.status_destinatario == 'CIENTE' %}success{% else %}warning{% endif %}">{{ destino.get_status_destinatario_display }}</span></td>
+                  <td>{{ destino.entregue_em|date:"d/m/Y H:i"|default:"-" }}</td>
+                  <td>{{ destino.visualizada_em|date:"d/m/Y H:i"|default:"-" }}</td>
+                  <td>{{ destino.ciente_em|date:"d/m/Y H:i"|default:"-" }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5" class="text-center text-muted py-4">A mensagem ainda não gerou destinatários efetivos.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+{% endblock %}
+

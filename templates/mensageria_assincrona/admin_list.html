@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Lista as mensagens administrativas com filtros e ações principais. -->
+{% block title %}Gestão de mensagens{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'mensageria_assincrona/css/mensageria.css' %}">{% endblock %}
+{% block content %}
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div class="spi-page-title mb-0">
+      <h1>Mensageria</h1>
+      <p>Gerencie comunicados internos, agendamentos e confirmações de ciência.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'mensageria:minhas' %}">Minhas mensagens</a>
+      <a class="btn btn-primary" href="{% url 'mensageria:admin_create' %}">Nova mensagem</a>
+    </div>
+  </div>
+
+  <form method="get" class="card border-0 shadow-sm mb-3">
+    <div class="card-body d-flex flex-wrap gap-2 align-items-end">
+      <div>
+        <label class="form-label" for="status">Status</label>
+        <select class="form-select" id="status" name="status">
+          <option value="">Todos</option>
+          {% for value, label in status_opcoes %}
+            <option value="{{ value }}" {% if status_atual == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-outline-primary" type="submit">Filtrar</button>
+      {% if status_atual %}<a class="btn btn-light" href="{% url 'mensageria:admin_list' %}">Limpar</a>{% endif %}
+    </div>
+  </form>
+
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Assunto</th>
+            <th>Status</th>
+            <th>Prioridade</th>
+            <th>Publicação</th>
+            <th>Ciência</th>
+            <th class="text-end">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for mensagem in mensagens %}
+            <tr>
+              <td>{{ mensagem.pk }}</td>
+              <td>
+                <a class="text-decoration-none fw-semibold" href="{% url 'mensageria:admin_detail' mensagem.pk %}">{{ mensagem.assunto }}</a>
+              </td>
+              <td><span class="badge text-bg-secondary">{{ mensagem.get_status_envio_display }}</span></td>
+              <td><span class="badge mensageria-prioridade prioridade-{{ mensagem.prioridade|lower }}">{{ mensagem.get_prioridade_display }}</span></td>
+              <td>
+                {% if mensagem.publicada_em %}
+                  {{ mensagem.publicada_em|date:"d/m/Y H:i" }}
+                {% elif mensagem.publicar_em %}
+                  {{ mensagem.publicar_em|date:"d/m/Y H:i" }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td>{{ mensagem.destinos_cientes }}/{{ mensagem.destinos_total }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'mensageria:admin_detail' mensagem.pk %}">Ver</a>
+                {% if mensagem.pode_editar %}
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'mensageria:admin_update' mensagem.pk %}">Editar</a>
+                {% endif %}
+                {% if mensagem.status_envio != mensagem.StatusEnvio.PUBLICADA and mensagem.status_envio != mensagem.StatusEnvio.CANCELADA %}
+                  <form class="d-inline" method="post" action="{% url 'mensageria:admin_cancel' mensagem.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Cancelar</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="text-center text-muted py-5">Nenhuma mensagem cadastrada.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
+

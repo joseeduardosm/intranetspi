@@ -17,8 +17,54 @@
     <p><strong>Data:</strong> {{ reserva.data|date:"d/m/Y" }} · {{ reserva.hora_inicio|time:"H:i" }} - {{ reserva.hora_fim|time:"H:i" }}</p>
     <p><strong>Objeto:</strong> {{ reserva.objeto.nome }}</p>
     <p><strong>Localização:</strong> {{ reserva.objeto.localizacao|default:"-" }}</p>
-    <p><strong>Responsável:</strong> {{ reserva.responsavel }}</p>
-    <p><strong>Reservado por:</strong> {{ criador.nome|default:"-" }}{% if criador.ramal %} · {{ criador.ramal }}{% endif %}{% if criador.email %} · {{ criador.email }}{% endif %}</p>
+    <p>
+      <strong>Responsável:</strong>
+      {% if criador.nome %}
+        <button
+          class="btn btn-link p-0 reserva-espacos-contact-trigger"
+          type="button"
+          data-bs-toggle="modal"
+          data-bs-target="#ramalContactModal"
+          data-name="{{ criador.nome }}"
+          data-cargo="{{ criador.cargo }}"
+          data-setor="{{ criador.setor }}"
+          data-email="{{ criador.email }}"
+          data-ramal="{{ criador.ramal }}"
+          data-celular="{{ criador.celular }}"
+          data-whatsapp="{{ criador.whatsapp }}"
+          data-local="{{ criador.localizacao }}"
+          data-photo="{{ criador.foto_url }}"
+          aria-label="Abrir contato de {{ criador.nome }}"
+        >{{ reserva.responsavel }}</button>
+      {% else %}
+        {{ reserva.responsavel }}
+      {% endif %}
+    </p>
+    <p>
+      <strong>Reservado por:</strong>
+      {% if criador.nome %}
+        <button
+          class="btn btn-link p-0 reserva-espacos-contact-trigger"
+          type="button"
+          data-bs-toggle="modal"
+          data-bs-target="#ramalContactModal"
+          data-name="{{ criador.nome }}"
+          data-cargo="{{ criador.cargo }}"
+          data-setor="{{ criador.setor }}"
+          data-email="{{ criador.email }}"
+          data-ramal="{{ criador.ramal }}"
+          data-celular="{{ criador.celular }}"
+          data-whatsapp="{{ criador.whatsapp }}"
+          data-local="{{ criador.localizacao }}"
+          data-photo="{{ criador.foto_url }}"
+          aria-label="Abrir contato de {{ criador.nome }}"
+        >{{ criador.nome }}</button>
+      {% else %}
+        {{ criador.nome|default:"-" }}
+      {% endif %}
+      {% if criador.ramal %} · {{ criador.ramal }}{% endif %}
+      {% if criador.email %} · {{ criador.email }}{% endif %}
+    </p>
     <p><strong>Criada em:</strong> {{ reserva.criado_em|date:"d/m/Y H:i" }}</p>
     <p><strong>Última atualização:</strong> {{ reserva.atualizado_em|date:"d/m/Y H:i" }}</p>
     <p><strong>Série recorrente:</strong> {% if reserva.serie_id %}{{ serie_count }} ocorrência(s){% else %}Reserva avulsa{% endif %}</p>
@@ -32,4 +78,126 @@
       <a class="btn btn-light" href="{% url 'reserva_espacos:reserva_list' %}">Voltar</a>
     </div>
   </section>
+
+  <div class="modal fade" id="ramalContactModal" tabindex="-1" aria-labelledby="ramalContactModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered ramal-contact-dialog">
+      <div class="modal-content ramal-contact-modal">
+        <button class="btn-close ramal-contact-close" type="button" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        <div class="ramal-contact-card">
+          <div class="ramal-contact-photo">
+            <img id="ramalContactPhoto" src="" alt="">
+          </div>
+          <div class="ramal-contact-data">
+            <section class="ramal-contact-field ramal-contact-field-name">
+              <span>Nome</span>
+              <h2 id="ramalContactModalTitle"></h2>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-cargo">
+              <span>Cargo</span>
+              <p id="ramalContactCargo"></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-setor">
+              <span>Setor</span>
+              <p id="ramalContactSetor"></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-email">
+              <span>E-mail</span>
+              <button id="ramalContactEmail" class="ramal-contact-email ramal-email-trigger" type="button" data-email=""></button>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-ramal">
+              <span>Ramal</span>
+              <p id="ramalContactRamal"></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-celular" id="ramalContactCelularWrapper" style="display: none;">
+              <span>Celular</span>
+              <p><a id="ramalContactCelular" href="" target="_blank" rel="noopener" style="color: #198754; text-decoration: none; font-weight: bold;"></a></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-local">
+              <span>Localização</span>
+              <p id="ramalContactLocal"></p>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ramal-email-popover" id="ramalEmailPopover" role="tooltip" hidden>
+    <div class="ramal-email-popover-address" id="ramalEmailPopoverAddress"></div>
+    <div class="ramal-email-popover-actions">
+      <a class="ramal-email-action" id="ramalEmailTeams" href="#" target="_blank" rel="noopener"><span>Teams</span></a>
+      <a class="ramal-email-action" id="ramalEmailOutlook" href="#" target="_blank" rel="noopener"><span>Outlook</span></a>
+      <button class="ramal-email-action" id="ramalEmailCopy" type="button"><span id="ramalEmailCopyText">Copiar</span></button>
+    </div>
+  </div>
+
+  <script>
+    const ramalContactModal = document.getElementById("ramalContactModal");
+    if (ramalContactModal) {
+      ramalContactModal.addEventListener("show.bs.modal", (event) => {
+        const trigger = event.relatedTarget;
+        if (!trigger) return;
+        const photo = trigger.dataset.photo || "";
+        document.getElementById("ramalContactModalTitle").textContent = trigger.dataset.name || "-";
+        document.getElementById("ramalContactCargo").textContent = trigger.dataset.cargo || "-";
+        document.getElementById("ramalContactSetor").textContent = trigger.dataset.setor || "-";
+        const emailButton = document.getElementById("ramalContactEmail");
+        emailButton.textContent = trigger.dataset.email || "-";
+        emailButton.dataset.email = trigger.dataset.email || "";
+        document.getElementById("ramalContactRamal").textContent = trigger.dataset.ramal || "-";
+        document.getElementById("ramalContactLocal").textContent = trigger.dataset.local || "-";
+        const photoElement = document.getElementById("ramalContactPhoto");
+        photoElement.src = photo || "";
+        photoElement.alt = trigger.dataset.name || "";
+        const celularWrapper = document.getElementById("ramalContactCelularWrapper");
+        const celularElement = document.getElementById("ramalContactCelular");
+        if (trigger.dataset.celular) {
+          celularWrapper.style.display = "block";
+          celularElement.textContent = trigger.dataset.celular;
+          celularElement.href = trigger.dataset.whatsapp || "#";
+        } else {
+          celularWrapper.style.display = "none";
+          celularElement.textContent = "";
+          celularElement.href = "#";
+        }
+      });
+    }
+
+    const emailPopover = document.getElementById("ramalEmailPopover");
+    const emailAddress = document.getElementById("ramalEmailPopoverAddress");
+    const teamsLink = document.getElementById("ramalEmailTeams");
+    const outlookLink = document.getElementById("ramalEmailOutlook");
+    const copyButton = document.getElementById("ramalEmailCopy");
+    const copyText = document.getElementById("ramalEmailCopyText");
+    let activeEmailTrigger = null;
+
+    const hideEmailPopover = () => {
+      if (emailPopover) emailPopover.hidden = true;
+      activeEmailTrigger = null;
+    };
+
+    document.addEventListener("click", async (event) => {
+      const trigger = event.target.closest(".ramal-email-trigger");
+      if (!trigger) {
+        if (emailPopover && !emailPopover.contains(event.target)) hideEmailPopover();
+        return;
+      }
+      const email = trigger.dataset.email || "";
+      if (!emailPopover || !email) return;
+      activeEmailTrigger = trigger;
+      emailAddress.textContent = email;
+      teamsLink.href = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`;
+      outlookLink.href = `mailto:${email}`;
+      const rect = trigger.getBoundingClientRect();
+      emailPopover.style.position = "fixed";
+      emailPopover.style.top = `${rect.bottom + 8}px`;
+      emailPopover.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
+      emailPopover.hidden = false;
+      if (event.target.closest("#ramalEmailCopy")) {
+        await navigator.clipboard.writeText(email);
+        copyText.textContent = "Copiado";
+        setTimeout(() => { copyText.textContent = "Copiar"; }, 1500);
+      }
+    });
+  </script>
 {% endblock %}

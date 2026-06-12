@@ -40,9 +40,11 @@ urlpatterns = [
     path('contratos-v2/', include('contratos_v2.urls')),
     path('', include('usuarios.urls')),
     path('licitacoes/', include('licitacoes.urls')),
+    path('mensageria/', include('mensageria_assincrona.urls')),
     path('navbar/', include('navbar.urls')),
     path('noticias/', include('noticias.urls')),
     path('regulariza-sgi/', include('regulariza_sgi.urls')),
+    path('reserva-carros/', include('reserva_carros.urls')),
     # Mantém compatibilidade com links antigos enquanto o módulo passa a usar
     # a URL oficial /reserva-espacos/.
     path('reservas-recursos/', RedirectView.as_view(pattern_name='reserva_espacos:agenda', permanent=False)),

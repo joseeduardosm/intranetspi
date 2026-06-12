@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Exibe uma mensagem do histórico do usuário após a abertura da linha na caixa de entrada. -->
+{% block title %}{{ destino.assunto_snapshot }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'mensageria_assincrona/css/mensageria.css' %}">{% endblock %}
+{% block content %}
+  <div class="mensageria-shell">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+      <div class="spi-page-title mb-0">
+        <h1>{{ destino.assunto_snapshot }}</h1>
+        <p>Mensagem recebida em {{ destino.entregue_em|date:"d/m/Y H:i"|default:"-" }}</p>
+      </div>
+      <a class="btn btn-outline-secondary" href="{% url 'mensageria:minhas' %}">Voltar</a>
+    </div>
+
+    <article class="card border-0 shadow-sm mensageria-message-card {% if destino.status_destinatario == 'PENDENTE' and not destino.esta_expirada %}is-pending{% endif %}">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <span class="badge text-bg-{% if destino.status_destinatario == 'CIENTE' %}success{% else %}warning{% endif %}">{{ destino.get_status_destinatario_display }}</span>
+          <span class="badge mensageria-prioridade prioridade-{{ destino.mensagem.prioridade|lower }}">{{ destino.mensagem.get_prioridade_display }}</span>
+          <span class="badge text-bg-light border">Remetente: {{ destino.mensagem.get_origem_tipo_display }}</span>
+          {% if destino.esta_expirada %}<span class="badge text-bg-dark">Expirada</span>{% endif %}
+        </div>
+        <div class="mensageria-body-copy">{{ destino.corpo_snapshot|linebreaksbr }}</div>
+      </div>
+    </article>
+  </div>
+{% endblock %}

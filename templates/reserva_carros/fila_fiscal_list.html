@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Lista operacional usada pelos fiscais para decisão das solicitações. -->
+
+{% block title %}Fila fiscal{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>Fila fiscal</h1>
+      <p>Solicitações aguardando decisão do grupo fiscal do módulo.</p>
+      {% if grupo_fiscais %}<small class="text-muted">Grupo configurado: {{ grupo_fiscais.name }}</small>{% endif %}
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-light" href="{% url 'reserva_carros:solicitacao_list' %}">Solicitações</a>
+      {% if pode_gerenciar_base %}
+        <a class="btn btn-outline-secondary" href="{% url 'reserva_carros:configuracao' %}">Configuração</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <section class="reserva-espacos-surface">
+    <form method="get" class="row g-3 align-items-end mb-4">
+      <div class="col-lg-4">
+        <label class="form-label" for="status">Status</label>
+        <select class="form-select form-select-lg" id="status" name="status">
+          {% for value, label in status_opcoes %}
+            <option value="{{ value }}" {% if status_atual == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-lg-8 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Filtrar</button>
+      </div>
+    </form>
+
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Solicitante</th>
+            <th>Saída</th>
+            <th>Retorno</th>
+            <th>Destino</th>
+            <th>Status</th>
+            <th class="text-end">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for reserva in reservas %}
+            <tr>
+              <td>#{{ reserva.pk }}</td>
+              <td>{{ reserva.solicitante.get_full_name|default:reserva.solicitante.username }}</td>
+              <td>{{ reserva.saida_planejada_em|date:"d/m/Y H:i" }}</td>
+              <td>{{ reserva.retorno_planejado_em|date:"d/m/Y H:i" }}</td>
+              <td>{{ reserva.destino_endereco }}</td>
+              <td><span class="badge reserva-carros-status status-{{ reserva.status|lower }}">{{ reserva.get_status_display }}</span></td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'reserva_carros:solicitacao_detail' reserva.pk %}">Ver</a>
+                {% if reserva.status == 'AGUARDANDO_APROVACAO' %}
+                  <a class="btn btn-sm btn-primary" href="{% url 'reserva_carros:fila_fiscal_analise' reserva.pk %}">Analisar</a>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="text-center text-muted py-4">Nenhuma solicitação na fila.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}
+

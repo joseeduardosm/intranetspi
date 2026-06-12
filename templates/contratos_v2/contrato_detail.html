@@ -360,23 +360,18 @@
               <div><small>Sugerido</small><strong>R$ {{ competencia.valor_liberado_sugerido|brl }}</strong></div>
             </div>
           </div>
-          <div class="contratos-v2-steps mt-3">
-            {% for etapa, estado in competencia.etapas %}
-              <span class="contratos-v2-step{% if estado == 'done' %} is-done{% elif estado == 'pending' %} is-pending{% endif %}">{{ etapa }}</span>
-            {% endfor %}
-          </div>
           <div class="d-flex flex-wrap gap-2 mt-3">
             {% if usuario_pode_checklist %}
-              <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos_v2:competencia_checklist' competencia.pk %}">Checklist</a>
+              <a class="btn btn-sm contratos-v2-stage-btn{% if competencia.checklist_estado == 'done' %} is-done{% else %} is-idle{% endif %}" href="{% url 'contratos_v2:competencia_checklist' competencia.pk %}">Checklist</a>
             {% endif %}
             {% if usuario_pode_medicao %}
-              <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos_v2:competencia_medicao' competencia.pk %}">Medição</a>
+              <a class="btn btn-sm contratos-v2-stage-btn{% if competencia.medicao_estado == 'done' %} is-done{% else %} is-idle{% endif %}" href="{% url 'contratos_v2:competencia_medicao' competencia.pk %}">Medição</a>
             {% endif %}
             {% if competencia.exige_avaliacao and usuario_pode_avaliacao %}
-              <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos_v2:competencia_avaliacao' competencia.pk %}">Avaliação</a>
+              <a class="btn btn-sm contratos-v2-stage-btn{% if competencia.avaliacao_estado == 'done' %} is-done{% elif competencia.avaliacao_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos_v2:competencia_avaliacao' competencia.pk %}">Avaliação</a>
             {% endif %}
             {% if usuario_pode_gerir %}
-              <a class="btn btn-sm btn-primary{% if not competencia.pode_pagar %} disabled{% endif %}" href="{% url 'contratos_v2:competencia_pagamento' competencia.pk %}">Pagamento</a>
+              <a class="btn btn-sm contratos-v2-stage-btn{% if competencia.pagamento_estado == 'done' %} is-done{% elif competencia.pagamento_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}{% if not competencia.pode_pagar %} disabled{% endif %}" href="{% url 'contratos_v2:competencia_pagamento' competencia.pk %}">Pagamento</a>
             {% endif %}
           </div>
         </article>

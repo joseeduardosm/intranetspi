@@ -130,6 +130,19 @@
   background: #fffefc;
 }
 
+.reserva-espacos-clickable-day {
+  cursor: pointer;
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+}
+
+.reserva-espacos-clickable-day:hover,
+.reserva-espacos-clickable-day:focus-visible {
+  border-color: rgba(31, 75, 153, .45);
+  box-shadow: 0 .45rem 1.1rem rgba(24, 49, 83, .08);
+  transform: translateY(-1px);
+  outline: none;
+}
+
 .reserva-espacos-day-cell.is-muted {
   opacity: .7;
 }

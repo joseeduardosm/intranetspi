@@ -29,8 +29,13 @@ def sync_local_apps_as_recursos(sender, **kwargs):
                     slug=slug,
                     defaults={
                         'nome': nome,
-                        'descricao': f"Aplicativo local auto-detectado: {nome}"
+                        'descricao': f"Aplicativo local auto-detectado: {nome}",
+                        'url_base': getattr(app_config, 'acl_url_base', ''),
                     }
                 )
+                url_base = getattr(app_config, 'acl_url_base', '')
+                if not created and url_base and recurso.url_base != url_base:
+                    recurso.url_base = url_base
+                    recurso.save(update_fields=['url_base'])
                 if created:
                     print(f"ACL: Novo app local '{nome}' auto-detectado e cadastrado como recurso.")

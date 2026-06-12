@@ -11,6 +11,7 @@ class Recurso(models.Model):
     nome = models.CharField("Nome do App/Recurso", max_length=100, unique=True)
     slug = models.SlugField("Slug identificador", max_length=100, unique=True, help_text="Nome da pasta do app (ex: 'licitacoes')")
     descricao = models.TextField("Descrição", blank=True)
+    url_base = models.CharField("URL base", max_length=160, blank=True, help_text="Opcional. Quando preenchida, substitui a URL derivada do slug.")
 
     class Meta:
         verbose_name = "App/Recurso Protegido"

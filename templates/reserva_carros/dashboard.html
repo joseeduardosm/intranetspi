@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Dashboard de uso do módulo de carros no mesmo espírito visual do app de espaços. -->
+
+{% block title %}Dashboard de reserva de carros{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div>
+      <h1>Dashboard de reserva de carros</h1>
+      <p>Painel gerencial das solicitações e viagens do período.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-light" href="{% url 'reserva_carros:agenda' %}">Calendário</a>
+      <a class="btn btn-light" href="{% url 'reserva_carros:solicitacao_list' %}">Solicitações</a>
+    </div>
+  </div>
+
+  <section class="reserva-espacos-dashboard-grid">
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Total de solicitações no mês</small>
+      <strong>{{ total_viagens_mes }}</strong>
+      <span>Referência: {{ mes_referencia }}</span>
+    </article>
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Viagens deferidas</small>
+      <strong>{{ viagens_deferidas_mes }}</strong>
+      <span>Com carro e motorista alocados</span>
+    </article>
+  </section>
+
+  <section class="reserva-espacos-chart-grid">
+    <article class="reserva-espacos-surface">
+      <h2>Carros mais utilizados</h2>
+      <div id="chart-carros-top" class="reserva-espacos-chart"></div>
+    </article>
+    <article class="reserva-espacos-surface">
+      <h2>Destinos mais frequentes</h2>
+      <div id="chart-destinos-top" class="reserva-espacos-chart"></div>
+    </article>
+  </section>
+
+  <section class="reserva-espacos-surface">
+    <h2>Quem mais solicita</h2>
+    <div id="chart-usuarios-top" class="reserva-espacos-chart"></div>
+  </section>
+
+  <section class="reserva-espacos-surface mt-4">
+    <h2>Status do período</h2>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in status_periodo %}
+            <tr>
+              <td>{{ item.status }}</td>
+              <td>{{ item.total }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="2" class="text-center text-muted py-4">Sem dados para o período.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {{ grafico_carros_top|json_script:"grafico-carros-top" }}
+  {{ grafico_destinos_top|json_script:"grafico-destinos-top" }}
+  {{ grafico_usuarios_top|json_script:"grafico-usuarios-top" }}
+
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script>
+    const carrosTop = JSON.parse(document.getElementById("grafico-carros-top")?.textContent || "{}");
+    const destinosTop = JSON.parse(document.getElementById("grafico-destinos-top")?.textContent || "{}");
+    const usuariosTop = JSON.parse(document.getElementById("grafico-usuarios-top")?.textContent || "{}");
+
+    Plotly.newPlot("chart-carros-top", [
+      {
+        x: carrosTop.values || [],
+        y: carrosTop.labels || [],
+        type: "bar",
+        orientation: "h",
+        marker: { color: "#1f4b99" },
+      }
+    ], {
+      margin: { l: 180, r: 10, t: 10, b: 35 },
+      paper_bgcolor: "#fff",
+      plot_bgcolor: "#fff",
+      xaxis: { title: "Viagens", rangemode: "tozero" },
+      yaxis: { automargin: true },
+    }, { responsive: true, displaylogo: false });
+
+    Plotly.newPlot("chart-destinos-top", [
+      {
+        x: destinosTop.labels || [],
+        y: destinosTop.values || [],
+        type: "scatter",
+        mode: "lines+markers",
+        line: { color: "#0b6e4f", width: 3 },
+        marker: { size: 8 },
+      }
+    ], {
+      margin: { l: 40, r: 10, t: 10, b: 110 },
+      paper_bgcolor: "#fff",
+      plot_bgcolor: "#fff",
+      xaxis: { tickangle: -30 },
+      yaxis: { title: "Total", rangemode: "tozero" },
+    }, { responsive: true, displaylogo: false });
+
+    Plotly.newPlot("chart-usuarios-top", [
+      {
+        x: usuariosTop.labels || [],
+        y: usuariosTop.values || [],
+        type: "bar",
+        marker: { color: "#a64b00" },
+      }
+    ], {
+      margin: { l: 40, r: 10, t: 10, b: 60 },
+      paper_bgcolor: "#fff",
+      plot_bgcolor: "#fff",
+      yaxis: { title: "Solicitações", rangemode: "tozero" },
+    }, { responsive: true, displaylogo: false });
+  </script>
+{% endblock %}
+

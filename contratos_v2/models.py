@@ -432,7 +432,21 @@ class CompetenciaPagamentoV2(models.Model):
             return None
 
     @property
-    def etapas(self):
+    def checklist_estado(self):
+        """Estado visual do botão de checklist no card da competência."""
+
+        return 'done' if (not self.checklist_itens.filter(obrigatorio=True, concluido=False).exists() and self.checklist_itens.exists()) else 'idle'
+
+    @property
+    def medicao_estado(self):
+        """Estado visual do botão de medição no card da competência."""
+
+        return 'done' if self.medicao_concluida_em else 'idle'
+
+    @property
+    def avaliacao_estado(self):
+        """Estado visual do botão de avaliação no card da competência."""
+
         avaliacao = self.avaliacao_qualidade_segura
         avaliacao_iniciada = bool(
             avaliacao
@@ -443,18 +457,33 @@ class CompetenciaPagamentoV2(models.Model):
             ).exists()
         )
 
+        if not self.exige_avaliacao:
+            return 'idle'
+        if getattr(avaliacao, 'concluida_em', None):
+            return 'done'
+        if avaliacao_iniciada:
+            return 'pending'
+        return 'idle'
+
+    @property
+    def pagamento_estado(self):
+        """Estado visual do botão de pagamento no card da competência."""
+
+        if self.status == self.Status.PAGA:
+            return 'done'
+        if self.status == self.Status.PAGAMENTO_PENDENTE:
+            return 'pending'
+        return 'idle'
+
+    @property
+    def etapas(self):
+        """Mantém a estrutura textual para usos internos e testes existentes."""
+
         return [
-            ('Checklist', 'done' if (not self.checklist_itens.filter(obrigatorio=True, concluido=False).exists() and self.checklist_itens.exists()) else 'idle'),
-            ('Medição', 'done' if self.medicao_concluida_em else 'idle'),
-            (
-                'Avaliação',
-                'done'
-                if ((not self.exige_avaliacao) or bool(getattr(avaliacao, 'concluida_em', None)))
-                else 'pending'
-                if avaliacao_iniciada
-                else 'idle'
-            ),
-            ('Pagamento', 'done' if self.status == self.Status.PAGA else 'idle'),
+            ('Checklist', self.checklist_estado),
+            ('Medição', self.medicao_estado),
+            ('Avaliação', self.avaliacao_estado),
+            ('Pagamento', self.pagamento_estado),
         ]
 
     def save(self, *args, **kwargs):
@@ -608,10 +637,44 @@ class AvaliacaoCompetenciaItemRespostaV2(models.Model):
     item_descricao = models.TextField('Descrição do item')
     item_peso_percentual = models.DecimalField('Peso do item', max_digits=8, decimal_places=2, default=Decimal('100.00'))
     item_observacoes_padrao = models.TextField('Observações padrão', blank=True)
+    nota_fiscal_valor = models.DecimalField('Nota do fiscal', max_digits=8, decimal_places=2, null=True, blank=True)
+    nota_fiscal_preenchida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='avaliacoes_v2_notas_fiscais',
+    )
+    nota_fiscal_preenchida_em = models.DateTimeField('Nota do fiscal preenchida em', null=True, blank=True)
+    nota_gestor_valor = models.DecimalField('Nota do gestor', max_digits=8, decimal_places=2, null=True, blank=True)
+    nota_gestor_preenchida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='avaliacoes_v2_notas_gestor',
+    )
+    nota_gestor_preenchida_em = models.DateTimeField('Nota do gestor preenchida em', null=True, blank=True)
     nota_valor = models.DecimalField('Nota atribuída', max_digits=8, decimal_places=2, null=True, blank=True)
     nota_legenda = models.CharField('Legenda da nota', max_length=120, blank=True)
     justificativa_fiscal = models.TextField('Justificativa do fiscal', blank=True)
+    justificativa_fiscal_preenchida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='avaliacoes_v2_justificativas_fiscais',
+    )
+    justificativa_fiscal_preenchida_em = models.DateTimeField('Justificativa do fiscal preenchida em', null=True, blank=True)
     manifestacao_gestor_item = models.TextField('Manifestação do gestor no item', blank=True)
+    manifestacao_gestor_item_preenchida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='avaliacoes_v2_manifestacoes_gestor',
+    )
+    manifestacao_gestor_item_preenchida_em = models.DateTimeField('Manifestação do gestor preenchida em', null=True, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -622,6 +685,16 @@ class AvaliacaoCompetenciaItemRespostaV2(models.Model):
 
     def __str__(self):
         return self.item_descricao[:80]
+
+    @property
+    def nota_vigente(self):
+        """Nota que prevalece no cálculo: a do gestor, quando existir, ou a do fiscal."""
+
+        if self.nota_gestor_valor is not None:
+            return self.nota_gestor_valor
+        if self.nota_fiscal_valor is not None:
+            return self.nota_fiscal_valor
+        return self.nota_valor
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)

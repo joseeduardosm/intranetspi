@@ -317,7 +317,7 @@ class CompetenciaMedicaoLoteV2Form(forms.Form):
 
 
 class AvaliacaoCompetenciaV2Form(forms.Form):
-    """Formulário dinâmico para preencher notas, justificativas e manifestação do gestor."""
+    """Formulário dinâmico para preencher avaliação do fiscal e do gestor por item."""
 
     observacoes = forms.CharField(
         label='Observações gerais',
@@ -326,6 +326,8 @@ class AvaliacaoCompetenciaV2Form(forms.Form):
     )
 
     def __init__(self, *args, avaliacao=None, **kwargs):
+        self.pode_preencher_fiscal = kwargs.pop('pode_preencher_fiscal', False)
+        self.pode_preencher_gestor = kwargs.pop('pode_preencher_gestor', False)
         super().__init__(*args, **kwargs)
         self.avaliacao = avaliacao
         self.respostas = list(avaliacao.itens.order_by('grupo_ordem', 'item_ordem', 'id') if avaliacao is not None else [])
@@ -338,19 +340,33 @@ class AvaliacaoCompetenciaV2Form(forms.Form):
             self.fields['observacoes'].initial = avaliacao.observacoes
 
         for resposta in self.respostas:
-            self.fields[f'nota_{resposta.pk}'] = forms.TypedChoiceField(
-                label=f'Nota do item {resposta.item_ordem}',
-                required=True,
+            self.fields[f'nota_fiscal_{resposta.pk}'] = forms.TypedChoiceField(
+                label='Nota do fiscal',
+                required=False,
                 choices=choices,
                 coerce=Decimal,
-                initial=resposta.nota_valor,
+                initial=resposta.nota_fiscal_valor if resposta.nota_fiscal_valor is not None else resposta.nota_valor,
                 widget=forms.Select(attrs={'class': 'form-select form-select-lg'}),
             )
-            self.fields[f'justificativa_{resposta.pk}'] = forms.CharField(
+            self.fields[f'justificativa_fiscal_{resposta.pk}'] = forms.CharField(
                 label='Justificativa do fiscal',
                 required=False,
                 initial=resposta.justificativa_fiscal,
                 widget=forms.Textarea(attrs={'class': BOOTSTRAP_TEXTAREA, 'rows': 2}),
+            )
+            self.fields[f'nota_gestor_{resposta.pk}'] = forms.TypedChoiceField(
+                label='Nota do gestor',
+                required=False,
+                choices=choices,
+                coerce=Decimal,
+                initial=(
+                    resposta.nota_gestor_valor
+                    if resposta.nota_gestor_valor is not None
+                    else resposta.nota_valor
+                    if resposta.nota_valor is not None
+                    else resposta.nota_fiscal_valor
+                ),
+                widget=forms.Select(attrs={'class': 'form-select form-select-lg'}),
             )
             self.fields[f'manifestacao_gestor_item_{resposta.pk}'] = forms.CharField(
                 label='Manifestação do gestor',
@@ -359,16 +375,44 @@ class AvaliacaoCompetenciaV2Form(forms.Form):
                 widget=forms.Textarea(attrs={'class': BOOTSTRAP_TEXTAREA, 'rows': 2}),
             )
 
+            if not self.pode_preencher_fiscal:
+                self.fields[f'nota_fiscal_{resposta.pk}'].disabled = True
+                self.fields[f'justificativa_fiscal_{resposta.pk}'].disabled = True
+            if not self.pode_preencher_gestor:
+                self.fields[f'nota_gestor_{resposta.pk}'].disabled = True
+                self.fields[f'manifestacao_gestor_item_{resposta.pk}'].disabled = True
+
     def clean(self):
         cleaned = super().clean()
+
+        def normalizar_nota(valor):
+            """Garante comparação numérica mesmo quando o dado ainda vier como texto."""
+
+            if valor in (None, ''):
+                return None
+            if isinstance(valor, Decimal):
+                return valor
+            try:
+                return Decimal(str(valor))
+            except Exception:
+                return None
+
         for resposta in self.respostas:
-            nota = cleaned.get(f'nota_{resposta.pk}')
-            justificativa = (cleaned.get(f'justificativa_{resposta.pk}') or '').strip()
-            if nota is None:
-                continue
-            if nota < self.max_nota:
-                if not justificativa:
-                    self.add_error(f'justificativa_{resposta.pk}', 'Informe a justificativa do fiscal para notas abaixo da máxima.')
+            nota_fiscal = normalizar_nota(cleaned.get(f'nota_fiscal_{resposta.pk}'))
+            justificativa_fiscal = (cleaned.get(f'justificativa_fiscal_{resposta.pk}') or '').strip()
+            nota_gestor = normalizar_nota(cleaned.get(f'nota_gestor_{resposta.pk}'))
+            manifestacao_gestor = (cleaned.get(f'manifestacao_gestor_item_{resposta.pk}') or '').strip()
+
+            if self.pode_preencher_fiscal and nota_fiscal is not None and nota_fiscal < self.max_nota and not justificativa_fiscal:
+                self.add_error(
+                    f'justificativa_fiscal_{resposta.pk}',
+                    'Informe a justificativa do fiscal para notas abaixo da máxima.',
+                )
+            if self.pode_preencher_gestor and nota_gestor is not None and nota_gestor < self.max_nota and not manifestacao_gestor:
+                self.add_error(
+                    f'manifestacao_gestor_item_{resposta.pk}',
+                    'Informe a manifestação do gestor para notas abaixo da máxima.',
+                )
         return cleaned
 
 

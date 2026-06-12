@@ -11,12 +11,27 @@ User = get_user_model()
 
 PROFILE_FIELDS = ("nome_completo", "ramal", "cargo", "setor", "andar", "bloco")
 SYSTEM_USERNAMES = {"root"}
+HIDDEN_SELECTOR_USERNAMES = SYSTEM_USERNAMES | {
+    "adminx",
+    "adminy",
+    "joaox",
+    "joaoy",
+    "u1",
+    "u2",
+    "u10",
+}
 
 
 def is_system_user(user):
     """Identifica usuários técnicos que não entram nos fluxos comuns de perfil."""
 
     return bool(user and getattr(user, "username", "").lower() in SYSTEM_USERNAMES)
+
+
+def visible_users_queryset():
+    """Retorna usuários humanos ativos, ocultando contas técnicas e de teste dos seletores gerais."""
+
+    return User.objects.filter(is_active=True).exclude(username__in=HIDDEN_SELECTOR_USERNAMES)
 
 
 def is_system_admin(user):

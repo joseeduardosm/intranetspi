@@ -66,7 +66,10 @@
 
             <!-- Coluna de grupos/setores com seleção múltipla. -->
             <div class="col-lg-6">
-              <label class="form-label fw-semibold" for="acl-groups-search">Grupos/Setores</label>
+              <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                <label class="form-label fw-semibold mb-0" for="acl-groups-search">Grupos/Setores</label>
+                <button class="btn btn-sm btn-outline-primary" type="button" id="acl-groups-select-all">Todos</button>
+              </div>
               <input type="text" class="form-control mb-3" id="acl-groups-search" placeholder="Buscar grupo/setor...">
               {{ form.grupos }}
               <div class="setores-picker">
@@ -98,11 +101,12 @@
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     // Constrói um picker pesquisável de seleção múltipla mantendo o select original para o Django.
-    function setupMultiPicker(selectId, searchId, availableId, selectedId) {
+    function setupMultiPicker(selectId, searchId, availableId, selectedId, selectAllButtonId = null) {
       const select = document.getElementById(selectId);
       const search = document.getElementById(searchId);
       const availableList = document.getElementById(availableId);
       const selectedList = document.getElementById(selectedId);
+      const selectAllButton = selectAllButtonId ? document.getElementById(selectAllButtonId) : null;
 
       if (!select || !search || !availableList || !selectedList) return;
 
@@ -150,12 +154,22 @@
       };
 
       search.addEventListener('input', () => render(search.value));
+      if (selectAllButton) {
+        // Marca rapidamente todos os grupos disponíveis no select original.
+        selectAllButton.addEventListener('click', () => {
+          Array.from(select.options).forEach(option => {
+            if (!option.value) return;
+            option.selected = true;
+          });
+          render(search.value);
+        });
+      }
       render('');
     }
 
     // Inicializa usuários e grupos de forma independente para permitir múltiplos alvos.
     setupMultiPicker('{{ form.usuarios.id_for_label }}', 'acl-users-search', 'acl-users-available', 'acl-users-selected');
-    setupMultiPicker('{{ form.grupos.id_for_label }}', 'acl-groups-search', 'acl-groups-available', 'acl-groups-selected');
+    setupMultiPicker('{{ form.grupos.id_for_label }}', 'acl-groups-search', 'acl-groups-available', 'acl-groups-selected', 'acl-groups-select-all');
   });
 </script>
 {% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Formulário administrativo da frota. -->
+
+{% block title %}{% if object %}Editar carro{% else %}Novo carro{% endif %}{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{% if object %}Editar carro{% else %}Novo carro{% endif %}</h1>
+    <p>Cadastre o veículo que poderá ser vinculado às viagens deferidas.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <form method="post" class="row g-4">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.marca.id_for_label }}">Marca</label>
+        {{ form.marca }}
+        {{ form.marca.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.modelo.id_for_label }}">Modelo</label>
+        {{ form.modelo }}
+        {{ form.modelo.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.placa.id_for_label }}">Placa</label>
+        {{ form.placa }}
+        {{ form.placa.errors }}
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label" for="{{ form.cor.id_for_label }}">Cor</label>
+        {{ form.cor }}
+        {{ form.cor.errors }}
+      </div>
+      <div class="col-lg-2 d-flex align-items-end">
+        <div class="form-check form-switch">
+          {{ form.ativo }}
+          <label class="form-check-label" for="{{ form.ativo.id_for_label }}">Ativo</label>
+        </div>
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Salvar</button>
+        <a class="btn btn-light" href="{% url 'reserva_carros:carro_list' %}">Cancelar</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}
+

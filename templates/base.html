@@ -10,6 +10,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
     <link rel="stylesheet" href="{% static 'usuarios/css/ramais.css' %}">
+    <link rel="stylesheet" href="{% static 'mensageria_assincrona/css/mensageria.css' %}">
     {% block extra_css %}{% endblock %}
   </head>
   <body class="spi-body{% if request.user.is_authenticated %} spi-authenticated-body{% endif %}">
@@ -80,27 +81,37 @@
         <div class="spi-layout">
           <!-- Topbar de contexto e ações do usuário autenticado. -->
           <header class="spi-topbar">
-            <a class="spi-topbar-home" href="{% url 'root' %}">Home</a>
-            <div class="spi-user-menu dropdown">
-              <button class="spi-user-button" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                <span class="spi-user-meta">
-                  <span class="spi-user-name">{{ request.user.get_full_name|default:request.user.username }}</span>
-                  <span class="spi-user-login">{{ request.user.username }}</span>
-                </span>
-                <span class="spi-user-avatar" aria-hidden="true">{{ request.user.username|first|upper }}</span>
-              </button>
-              <div class="dropdown-menu dropdown-menu-end spi-user-dropdown">
-                <div class="spi-user-dropdown-header">
-                  <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
-                  <span>{{ request.user.email|default:"Sem e-mail cadastrado" }}</span>
-                </div>
-                {% if request.user.perfil.pk %}
-                  <a class="dropdown-item" href="{% url 'usuarios:update' request.user.perfil.pk %}">Meu perfil</a>
+            <div class="spi-topbar-start">
+              <a class="spi-topbar-home" href="{% url 'root' %}">Home</a>
+            </div>
+            <div class="spi-topbar-end">
+              <a class="mensageria-topbar-link" href="{% url 'mensageria:minhas' %}">
+                <span>Mensagens</span>
+                {% if mensageria_pendentes_count %}
+                  <span class="mensageria-topbar-badge">{{ mensageria_pendentes_count }}</span>
                 {% endif %}
-                <form method="post" action="{% url 'logout' %}">
-                  {% csrf_token %}
-                  <button class="dropdown-item" type="submit">Sair</button>
-                </form>
+              </a>
+              <div class="spi-user-menu dropdown">
+                <button class="spi-user-button" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  <span class="spi-user-meta">
+                    <span class="spi-user-name">{{ request.user.get_full_name|default:request.user.username }}</span>
+                    <span class="spi-user-login">{{ request.user.username }}</span>
+                  </span>
+                  <span class="spi-user-avatar" aria-hidden="true">{{ request.user.username|first|upper }}</span>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end spi-user-dropdown">
+                  <div class="spi-user-dropdown-header">
+                    <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+                    <span>{{ request.user.email|default:"Sem e-mail cadastrado" }}</span>
+                  </div>
+                  {% if request.user.perfil.pk %}
+                    <a class="dropdown-item" href="{% url 'usuarios:update' request.user.perfil.pk %}">Meu perfil</a>
+                  {% endif %}
+                  <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button class="dropdown-item" type="submit">Sair</button>
+                  </form>
+                </div>
               </div>
             </div>
           </header>
@@ -392,6 +403,55 @@
           </div>
         </div>
       {% endif %}
+
+      {% if mensageria_pendentes_count and not mensageria_modal_skip %}
+        <div
+          class="modal fade"
+          id="mensageriaPendenciaModal"
+          tabindex="-1"
+          aria-labelledby="mensageriaPendenciaModalTitle"
+          aria-hidden="true"
+          data-bs-backdrop="static"
+          data-bs-keyboard="false"
+        >
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+              {% if mensageria_modal_modo == 'consolidado' %}
+                <div class="modal-header border-0 pb-0">
+                  <div>
+                    <p class="mensageria-modal-eyebrow">Mensageria institucional</p>
+                    <h2 class="modal-title h4" id="mensageriaPendenciaModalTitle">Mensagens pendentes de ciência</h2>
+                  </div>
+                </div>
+                <div class="modal-body mensageria-modal-body">
+                  Você possui {{ mensageria_pendentes_count }} mensagens pendentes de ciência. Para prosseguir, acesse sua caixa de entrada e confirme as leituras pendentes.
+                </div>
+                <div class="modal-footer border-0">
+                  <a class="btn btn-primary" href="{% url 'mensageria:minhas' %}">Ir para minha caixa de entrada</a>
+                </div>
+              {% elif mensageria_primeira_pendente %}
+                <div class="modal-header border-0 pb-0">
+                  <div>
+                    <p class="mensageria-modal-eyebrow">Mensagem obrigatória</p>
+                    <h2 class="modal-title h4" id="mensageriaPendenciaModalTitle">{{ mensageria_primeira_pendente.assunto_snapshot }}</h2>
+                  </div>
+                </div>
+                <div class="modal-body mensageria-modal-body">
+                  {{ mensageria_primeira_pendente.corpo_snapshot|linebreaksbr }}
+                </div>
+                <div class="modal-footer border-0">
+                  <form method="post" action="{% url 'mensageria:ciente' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="destino_id" value="{{ mensageria_primeira_pendente.pk }}">
+                    <input type="hidden" name="next_url" value="{{ request.get_full_path }}">
+                    <button class="btn btn-primary" type="submit">Ciente</button>
+                  </form>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endif %}
     {% endif %}
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -443,6 +503,30 @@
               collapseSidebar();
             }
           });
+        }
+
+        // Abre automaticamente o modal bloqueante da mensageria e registra a primeira visualização.
+        const mensageriaModalEl = document.getElementById('mensageriaPendenciaModal');
+        if (mensageriaModalEl) {
+          const mensageriaModal = new bootstrap.Modal(mensageriaModalEl);
+          mensageriaModal.show();
+
+          const visualizacaoDestino = '{{ mensageria_primeira_pendente.pk|default:"" }}';
+          if (visualizacaoDestino && '{{ mensageria_modal_modo }}' === 'individual') {
+            const csrfCookie = document.cookie
+              .split('; ')
+              .find((cookie) => cookie.startsWith('csrftoken='));
+            const csrfToken = csrfCookie ? decodeURIComponent(csrfCookie.split('=').slice(1).join('=')) : '';
+
+            fetch('{% url "mensageria:visualizada" %}', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': csrfToken
+              },
+              body: new URLSearchParams({ destino_id: visualizacaoDestino })
+            }).catch(() => {});
+          }
         }
 
         // Controla a exibição diária da barra de aniversariantes por usuário.

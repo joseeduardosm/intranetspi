@@ -53,6 +53,15 @@ class RegraAcessoFormTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn('Você deve selecionar pelo menos um Usuário ou um Grupo/Setor.', form.non_field_errors())
 
+    def test_formulario_exibe_nome_completo_no_picker_de_usuarios(self):
+        self.usuario_1.first_name = 'Ana'
+        self.usuario_1.last_name = 'Souza'
+        self.usuario_1.save(update_fields=['first_name', 'last_name'])
+
+        form = RegraAcessoForm()
+
+        self.assertEqual(form.fields['usuarios'].label_from_instance(self.usuario_1), 'Ana Souza')
+
 
 class ObterNivelAcessoTests(TestCase):
     """Garante que a apuração de permissão considere os novos relacionamentos múltiplos."""

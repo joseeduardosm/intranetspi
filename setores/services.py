@@ -9,6 +9,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Prefetch
 
+from usuarios.services import visible_users_queryset as base_visible_users_queryset
+
 from .models import SetorNode, UserSetorMembership
 
 
@@ -18,7 +20,7 @@ User = get_user_model()
 def visible_users_queryset():
     """Retorna usuários ativos em ordem amigável para seletores."""
 
-    return User.objects.filter(is_active=True).order_by('first_name', 'username')
+    return base_visible_users_queryset().order_by('first_name', 'username')
 
 
 def user_display_name(user):

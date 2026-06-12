@@ -53,6 +53,33 @@ def usuario_pode_preencher_avaliacao_v2(user, contrato):
     return usuario_pode_preencher_checklist_v2(user, contrato)
 
 
+def usuario_pode_preencher_avaliacao_fiscal_v2(user, contrato):
+    """Fiscal administrativo, fiscal técnico e administradores podem preencher a parte do fiscal."""
+
+    return bool(
+        user
+        and user.is_authenticated
+        and (
+            usuario_eh_admin_sistema(user)
+            or user.pk == contrato.fiscal_administrativo_id
+            or user.pk == contrato.fiscal_tecnico_id
+        )
+    )
+
+
+def usuario_pode_preencher_avaliacao_gestor_v2(user, contrato):
+    """Gestor do contrato e administradores podem preencher a parte do gestor."""
+
+    return bool(
+        user
+        and user.is_authenticated
+        and (
+            usuario_eh_admin_sistema(user)
+            or user.pk == contrato.gestor_contrato_id
+        )
+    )
+
+
 def usuario_pode_preencher_medicao_v2(user, contrato):
     """Nesta primeira fase a medição fica com gestor e administradores."""
 

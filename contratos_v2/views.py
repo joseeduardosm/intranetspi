@@ -49,6 +49,8 @@ from .services import (
     criar_avaliacao_shell_competencia_v2,
     recalcular_avaliacao_v2,
     recalcular_competencia_v2,
+    usuario_pode_preencher_avaliacao_fiscal_v2,
+    usuario_pode_preencher_avaliacao_gestor_v2,
     usuario_pode_gerir_contrato_v2,
 )
 
@@ -1022,6 +1024,8 @@ class CompetenciaAvaliacaoUpdateView(ContratosV2WriteMixin, ContractOperatePermi
             return self.deny(self.competencia.contrato, 'Esta competência não exige avaliação de qualidade.')
         if self.competencia.status in {self.competencia.Status.PAGA, self.competencia.Status.CANCELADA}:
             return self.deny(self.competencia.contrato, 'A competência já foi encerrada.')
+        self.pode_preencher_fiscal = usuario_pode_preencher_avaliacao_fiscal_v2(request.user, self.competencia.contrato)
+        self.pode_preencher_gestor = usuario_pode_preencher_avaliacao_gestor_v2(request.user, self.competencia.contrato)
         self.avaliacao = self.competencia.avaliacao_qualidade_segura
         if self.avaliacao is None and self.competencia.contrato.formulario_avaliacao_ativo:
             self.avaliacao = criar_avaliacao_shell_competencia_v2(self.competencia, self.competencia.contrato.formulario_avaliacao_ativo)
@@ -1030,6 +1034,8 @@ class CompetenciaAvaliacaoUpdateView(ContratosV2WriteMixin, ContractOperatePermi
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['avaliacao'] = self.avaliacao
+        kwargs['pode_preencher_fiscal'] = self.pode_preencher_fiscal
+        kwargs['pode_preencher_gestor'] = self.pode_preencher_gestor
         return kwargs
 
     def form_valid(self, form):
@@ -1037,23 +1043,54 @@ class CompetenciaAvaliacaoUpdateView(ContratosV2WriteMixin, ContractOperatePermi
             Decimal(item['valor']): item['legenda']
             for item in self.avaliacao.formulario_snapshot.get('escala', [])
         }
+        agora = timezone.now()
         for resposta in form.respostas:
-            nota = form.cleaned_data.get(f'nota_{resposta.pk}')
-            justificativa = form.cleaned_data.get(f'justificativa_{resposta.pk}') or ''
-            manifestacao_item = form.cleaned_data.get(f'manifestacao_gestor_item_{resposta.pk}') or ''
-            resposta.nota_valor = nota
-            resposta.nota_legenda = escala_mapa.get(nota, '')
-            resposta.justificativa_fiscal = justificativa
-            resposta.manifestacao_gestor_item = manifestacao_item
-            resposta.save(
-                update_fields=[
-                    'nota_valor',
-                    'nota_legenda',
+            update_fields = []
+            campo_nota_fiscal = f'nota_fiscal_{resposta.pk}'
+            campo_justificativa_fiscal = f'justificativa_fiscal_{resposta.pk}'
+            campo_nota_gestor = f'nota_gestor_{resposta.pk}'
+            campo_manifestacao_gestor = f'manifestacao_gestor_item_{resposta.pk}'
+
+            if self.pode_preencher_fiscal and campo_nota_fiscal in form.data:
+                nota_fiscal = form.cleaned_data.get(campo_nota_fiscal)
+                justificativa_fiscal = form.cleaned_data.get(campo_justificativa_fiscal) or ''
+                resposta.nota_fiscal_valor = nota_fiscal
+                resposta.nota_fiscal_preenchida_por = self.request.user
+                resposta.nota_fiscal_preenchida_em = agora
+                resposta.justificativa_fiscal = justificativa_fiscal
+                resposta.justificativa_fiscal_preenchida_por = self.request.user
+                resposta.justificativa_fiscal_preenchida_em = agora
+                update_fields.extend([
+                    'nota_fiscal_valor',
+                    'nota_fiscal_preenchida_por',
+                    'nota_fiscal_preenchida_em',
                     'justificativa_fiscal',
+                    'justificativa_fiscal_preenchida_por',
+                    'justificativa_fiscal_preenchida_em',
+                ])
+
+            if self.pode_preencher_gestor and campo_nota_gestor in form.data:
+                nota_gestor = form.cleaned_data.get(campo_nota_gestor)
+                manifestacao_gestor = form.cleaned_data.get(campo_manifestacao_gestor) or ''
+                resposta.nota_gestor_valor = nota_gestor
+                resposta.nota_gestor_preenchida_por = self.request.user
+                resposta.nota_gestor_preenchida_em = agora
+                resposta.manifestacao_gestor_item = manifestacao_gestor
+                resposta.manifestacao_gestor_item_preenchida_por = self.request.user
+                resposta.manifestacao_gestor_item_preenchida_em = agora
+                update_fields.extend([
+                    'nota_gestor_valor',
+                    'nota_gestor_preenchida_por',
+                    'nota_gestor_preenchida_em',
                     'manifestacao_gestor_item',
-                    'atualizado_em',
-                ]
-            )
+                    'manifestacao_gestor_item_preenchida_por',
+                    'manifestacao_gestor_item_preenchida_em',
+                ])
+
+            resposta.nota_valor = resposta.nota_vigente
+            resposta.nota_legenda = escala_mapa.get(resposta.nota_valor, '')
+            update_fields.extend(['nota_valor', 'nota_legenda', 'atualizado_em'])
+            resposta.save(update_fields=sorted(set(update_fields)))
         self.avaliacao.observacoes = form.cleaned_data.get('observacoes') or ''
         self.avaliacao.preenchido_por = self.request.user
         # Mantém a competência em avaliação pendente até o gestor preencher as manifestações exigidas.

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Detalhe completo da solicitação com dados planejados, operacionais e auditoria. -->
+
+{% block title %}Viagem #{{ reserva.pk }}{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div>
+      <h1>Viagem #{{ reserva.pk }}</h1>
+      <p>{{ reserva.get_status_display }} • {{ reserva.saida_planejada_em|date:"d/m/Y H:i" }} até {{ reserva.retorno_planejado_em|date:"d/m/Y H:i" }}</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      {% if pode_editar %}
+        <a class="btn btn-primary" href="{% url 'reserva_carros:solicitacao_update' reserva.pk %}">Editar</a>
+        <a class="btn btn-outline-danger" href="{% url 'reserva_carros:solicitacao_cancel' reserva.pk %}">Cancelar</a>
+      {% endif %}
+      {% if pode_analisar %}
+        <a class="btn btn-dark" href="{% url 'reserva_carros:fila_fiscal_analise' reserva.pk %}">Analisar</a>
+      {% endif %}
+      <a class="btn btn-light" href="{% url 'reserva_carros:solicitacao_list' %}">Voltar</a>
+    </div>
+  </div>
+
+  <section class="reserva-espacos-dashboard-grid">
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Status</small>
+      <strong>{{ reserva.get_status_display }}</strong>
+      <span>Solicitada em {{ reserva.criado_em|date:"d/m/Y H:i" }}</span>
+    </article>
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Janela operacional</small>
+      <strong>{{ reserva.janela_operacional_display }}</strong>
+      <span>Usada para bloquear carro e motorista</span>
+    </article>
+  </section>
+
+  <section class="reserva-espacos-surface reserva-espacos-detail-card">
+    <p><strong>Solicitante:</strong> {{ solicitante_payload.nome|default:reserva.solicitante.username }}</p>
+    <p><strong>Local de saída:</strong> {{ reserva.saida_local_display }}</p>
+    <p><strong>Saída planejada:</strong> {{ reserva.saida_planejada_em|date:"d/m/Y H:i" }}</p>
+    <p><strong>Retorno planejado:</strong> {{ reserva.retorno_planejado_em|date:"d/m/Y H:i" }}</p>
+    <p><strong>Destino:</strong> {{ reserva.destino_endereco }}</p>
+    <p><strong>Permanência:</strong> {{ reserva.get_modo_destino_display }}</p>
+    <p><strong>Motivo:</strong> {{ reserva.motivo_viagem|linebreaksbr }}</p>
+    <p><strong>Observações:</strong> {{ reserva.observacoes_solicitante|default:"Sem observações."|linebreaksbr }}</p>
+    <p><strong>Passageiros:</strong>
+      {% for vinculo in reserva.passageiros_vinculos.all %}
+        {{ vinculo.usuario.get_full_name|default:vinculo.usuario.username }}{% if not forloop.last %}, {% endif %}
+      {% empty %}
+        Nenhum passageiro adicional.
+      {% endfor %}
+    </p>
+    <hr>
+    <p><strong>Fiscal responsável:</strong> {{ fiscal_payload.nome|default:"-" }}</p>
+    <p><strong>Carro:</strong> {{ reserva.carro.nome_exibicao|default:"-" }}</p>
+    <p><strong>Motorista:</strong> {{ reserva.motorista.nome_completo|default:"-" }}</p>
+    <p><strong>Deslocamento de ida:</strong> {{ reserva.deslocamento_ida_minutos|default:"-" }} min</p>
+    <p><strong>Deslocamento de retorno:</strong> {{ reserva.deslocamento_retorno_minutos|default:"-" }} min</p>
+    {% if reserva.justificativa_indeferimento %}
+      <p><strong>Justificativa do indeferimento:</strong> {{ reserva.justificativa_indeferimento|linebreaksbr }}</p>
+    {% endif %}
+  </section>
+
+  <section class="reserva-espacos-surface mt-4">
+    <h2>Histórico da solicitação</h2>
+    <div class="reserva-carros-history-list">
+      {% for evento in reserva.eventos.all %}
+        <article class="reserva-carros-history-item">
+          <strong>{{ evento.get_acao_display }}</strong>
+          <span>{{ evento.criado_em|date:"d/m/Y H:i" }}</span>
+          <p>{{ evento.usuario|default:"Sistema" }}</p>
+        </article>
+      {% empty %}
+        <p class="text-muted mb-0">Nenhum evento registrado.</p>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}
+

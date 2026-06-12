@@ -2,6 +2,35 @@
 
 Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
+## [0.3.5] - 2026-06-12
+- Criado e integrado o novo módulo transversal `mensageria_assincrona`:
+  - caixa `Minhas mensagens` para todo usuário autenticado ativo;
+  - painel administrativo com rascunho, publicação imediata, agendamento e cancelamento;
+  - persistência de audiência original, destinos com snapshot, auditoria e expiração;
+  - badge global de pendências, modal bloqueante e endpoint interno de indicadores;
+  - command para publicação de mensagens agendadas.
+- Criado e integrado o novo módulo `reserva_carros`:
+  - cadastro de carros, motoristas e configuração do grupo fiscal;
+  - solicitação de viagens com passageiros, regras temporais e cancelamento;
+  - fila fiscal com deferimento, indeferimento, auditoria e bloqueio operacional por carro e motorista;
+  - calendário e dashboard próprios, com integração automática à `mensageria_assincrona`;
+  - renderização de solicitações pendentes em cinza no calendário e ocultação das indeferidas.
+- Refinada a experiência de agenda dos módulos de reserva:
+  - clique em um dia de `reserva_espacos` abre a criação de reserva com a data preenchida;
+  - clique em um dia de `reserva_carros` abre a nova solicitação com data e horários iniciais preenchidos;
+  - removido o título técnico `Viagem #...` da agenda de carros, priorizando apenas dados úteis da reserva.
+- Ajustados seletores gerais de usuários:
+  - ocultadas contas técnicas e de teste dos pickers compartilhados;
+  - exibido nome completo no seletor de passageiros do `reserva_carros`;
+  - exibido nome completo no picker de usuários do módulo `acls`, com tipografia reduzida para diminuir a altura visual do controlador.
+- Evoluído o módulo `contratos_v2`:
+  - ampliado o fluxo de avaliação de competência com justificativa do fiscal, manifestação do gestor e novos estados de preenchimento;
+  - adicionados novos comportamentos em formulários, serviços, detalhe do contrato e templates auxiliares;
+  - criada a migração correspondente para sustentar os novos campos e regras operacionais.
+- Ajustada a infraestrutura de ACL:
+  - adicionado suporte a `url_base` explícita nos recursos para navegação por rota amigável;
+  - preservada a montagem dinâmica do menu lateral conforme o nível de acesso efetivo do usuário.
+
 ## [0.3.4] - 2026-06-12
 - Ajustado o formulário do módulo `reserva_espacos` para exibir conflitos de sobreposição de reserva em modal Bootstrap, substituindo a mensagem inline abaixo do campo de horário.
 - Padronizada a validação de conflito do módulo para retornar erro não associado a campo tanto na criação quanto na edição simples e na edição de séries recorrentes.

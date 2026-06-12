@@ -91,7 +91,7 @@ from .services import (
     render_dfd_sections,
     render_etp_sections,
 )
-from usuarios.services import SYSTEM_USERNAMES
+from usuarios.services import SYSTEM_USERNAMES, visible_users_queryset
 
 
 User = get_user_model()
@@ -356,9 +356,9 @@ def user_can_share_document(user, document):
 
 def shareable_users_for(user):
     return (
-        User.objects.filter(is_active=True, perfil__isnull=False)
+        visible_users_queryset()
+        .filter(perfil__isnull=False)
         .exclude(pk=user.pk)
-        .exclude(username__in=SYSTEM_USERNAMES)
         .order_by('perfil__nome_completo', 'username')
     )
 

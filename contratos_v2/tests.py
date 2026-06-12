@@ -327,8 +327,8 @@ class ContratosV2Tests(TestCase):
         response_invalido = self.client.post(
             reverse('contratos_v2:competencia_avaliacao', args=[competencia.pk]),
             {
-                f'nota_{resposta.pk}': '1.00',
-                f'justificativa_{resposta.pk}': '',
+                f'nota_fiscal_{resposta.pk}': '1.00',
+                f'justificativa_fiscal_{resposta.pk}': '',
                 'observacoes': '',
             },
         )
@@ -337,8 +337,8 @@ class ContratosV2Tests(TestCase):
         response_pendente = self.client.post(
             reverse('contratos_v2:competencia_avaliacao', args=[competencia.pk]),
             {
-                f'nota_{resposta.pk}': '1.00',
-                f'justificativa_{resposta.pk}': 'Serviço parcialmente entregue.',
+                f'nota_fiscal_{resposta.pk}': '1.00',
+                f'justificativa_fiscal_{resposta.pk}': 'Serviço parcialmente entregue.',
                 'observacoes': 'Avaliação mensal',
             },
         )
@@ -349,15 +349,21 @@ class ContratosV2Tests(TestCase):
         self.assertEqual(response_pendente.status_code, 302)
         self.assertEqual(competencia.status, CompetenciaPagamentoV2.Status.AVALIACAO_PENDENTE)
         self.assertIsNone(avaliacao.concluida_em)
+        self.assertEqual(resposta.nota_fiscal_valor, Decimal('1.00'))
+        self.assertIsNone(resposta.nota_gestor_valor)
         self.assertEqual(resposta.justificativa_fiscal, 'Serviço parcialmente entregue.')
         self.assertEqual(resposta.manifestacao_gestor_item, '')
+        self.assertIsNotNone(resposta.justificativa_fiscal_preenchida_por)
+        self.assertIsNotNone(resposta.justificativa_fiscal_preenchida_em)
         self.assertEqual(competencia.etapas[2], ('Avaliação', 'pending'))
+
+        response_form = self.client.get(reverse('contratos_v2:competencia_avaliacao', args=[competencia.pk]))
+        self.assertContains(response_form, 'Preenchido por')
 
         response_valido = self.client.post(
             reverse('contratos_v2:competencia_avaliacao', args=[competencia.pk]),
             {
-                f'nota_{resposta.pk}': '1.00',
-                f'justificativa_{resposta.pk}': 'Serviço parcialmente entregue.',
+                f'nota_gestor_{resposta.pk}': '1.00',
                 f'manifestacao_gestor_item_{resposta.pk}': 'Ciente da justificativa e da retenção neste item.',
                 'observacoes': 'Avaliação mensal',
             },
@@ -371,7 +377,10 @@ class ContratosV2Tests(TestCase):
         self.assertEqual(avaliacao.nota_final, Decimal('1.00'))
         self.assertEqual(avaliacao.percentual_liberacao_sugerido, Decimal('75.00'))
         self.assertEqual(competencia.valor_liberado_sugerido, Decimal('75.00'))
+        self.assertEqual(resposta.nota_gestor_valor, Decimal('1.00'))
         self.assertEqual(resposta.manifestacao_gestor_item, 'Ciente da justificativa e da retenção neste item.')
+        self.assertIsNotNone(resposta.manifestacao_gestor_item_preenchida_por)
+        self.assertIsNotNone(resposta.manifestacao_gestor_item_preenchida_em)
         self.assertEqual(competencia.etapas[2], ('Avaliação', 'done'))
 
     def test_nao_permita_criar_formulario_de_avaliacao_apos_gerar_competencias(self):

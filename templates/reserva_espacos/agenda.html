@@ -68,6 +68,7 @@
     const objectFilter = document.getElementById("calendar-object-filter");
     const actionButtons = document.querySelectorAll("[data-action]");
     const locale = "pt-BR";
+    const novaReservaBaseUrl = "{% url 'reserva_espacos:reserva_create' %}";
     const today = new Date();
     let currentDate = new Date();
     let currentView = "{{ view_atual|escapejs }}";
@@ -91,11 +92,32 @@
 
     const pad = (value) => value.toString().padStart(2, "0");
     const dateKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const buildCreateUrl = (dateObj) => `${novaReservaBaseUrl}?data=${dateKey(dateObj)}`;
     const cloneDate = (value) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
     const startOfWeek = (dateObj) => {
       const d = cloneDate(dateObj);
       d.setDate(d.getDate() - d.getDay());
       return d;
+    };
+
+    const enableDayClick = (element, dateObj) => {
+      {% if pode_criar_reserva %}
+        const targetUrl = buildCreateUrl(dateObj);
+        element.classList.add("reserva-espacos-clickable-day");
+        element.setAttribute("role", "link");
+        element.setAttribute("tabindex", "0");
+        element.setAttribute("aria-label", `Criar reserva em ${dateObj.toLocaleDateString(locale)}`);
+        element.addEventListener("click", (event) => {
+          if (event.target.closest("a")) return;
+          window.location.href = targetUrl;
+        });
+        element.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            window.location.href = targetUrl;
+          }
+        });
+      {% endif %}
     };
 
     const reservasFiltradas = () => reservas.filter((item) => {
@@ -194,6 +216,7 @@
         const inMonth = pointer.getMonth() === currentDate.getMonth();
         cell.className = `reserva-espacos-day-cell${inMonth ? "" : " is-muted"}`;
         if (dateKey(pointer) === dateKey(today)) cell.classList.add("is-today");
+        enableDayClick(cell, pointer);
 
         const dayLabel = document.createElement("div");
         dayLabel.className = "reserva-espacos-day-number";
@@ -232,6 +255,7 @@
         const column = document.createElement("section");
         column.className = "reserva-espacos-range-column";
         if (dateKey(current) === dateKey(today)) column.classList.add("is-today");
+        enableDayClick(column, current);
 
         const head = document.createElement("div");
         head.className = "reserva-espacos-range-head";

@@ -171,6 +171,16 @@ class AgendaDashboardTests(TestCase):
         response = self.client.get(reverse("reserva_espacos:dashboard"))
         self.assertNotContains(response, 'name="categoria"')
 
+    def test_detalhe_renderiza_nomes_clicaveis_para_modal_de_contato(self):
+        """O detalhe deve tornar responsável e reservado por clicáveis para contato."""
+
+        self.client.login(username="agenda", password="123")
+        reserva = ReservaRecurso.objects.get(titulo="Palestra")
+        response = self.client.get(reverse("reserva_espacos:reserva_detail", kwargs={"pk": reserva.pk}))
+        self.assertContains(response, 'data-bs-target="#ramalContactModal"', count=2)
+        self.assertContains(response, 'aria-label="Abrir contato de agenda"')
+        self.assertContains(response, 'id="ramalContactModal"')
+
 
 class ReservaCreateResponsavelTests(TestCase):
     """Garante que o responsável do cadastro novo seja sempre o próprio usuário."""

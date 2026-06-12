@@ -22,31 +22,52 @@
               <h2>{{ grupo.grouper }}</h2>
             </div>
             {% for resposta in grupo.list %}
-              {% item_field form resposta.pk 'nota' as nota_field %}
-              {% item_field form resposta.pk 'justificativa' as justificativa_field %}
+              {% item_field form resposta.pk 'nota_fiscal' as nota_fiscal_field %}
+              {% item_field form resposta.pk 'justificativa_fiscal' as justificativa_fiscal_field %}
+              {% item_field form resposta.pk 'nota_gestor' as nota_gestor_field %}
               {% item_field form resposta.pk 'manifestacao_gestor_item' as manifestacao_item_field %}
-              {% item_field_errors form resposta.pk 'nota' as nota_errors %}
-              {% item_field_errors form resposta.pk 'justificativa' as justificativa_errors %}
+              {% item_field_errors form resposta.pk 'nota_fiscal' as nota_fiscal_errors %}
+              {% item_field_errors form resposta.pk 'justificativa_fiscal' as justificativa_fiscal_errors %}
+              {% item_field_errors form resposta.pk 'nota_gestor' as nota_gestor_errors %}
               {% item_field_errors form resposta.pk 'manifestacao_gestor_item' as manifestacao_item_errors %}
               <article class="contratos-v2-avaliacao-item" data-avaliacao-item data-max-nota="{{ form.max_nota_js }}">
                 <strong>{{ resposta.item_ordem }}. {{ resposta.item_descricao }}</strong>
                 {% if resposta.item_observacoes_padrao %}<p class="text-muted mt-2">{{ resposta.item_observacoes_padrao }}</p>{% endif %}
-                <div class="mt-3">
-                  <label class="form-label" for="{{ nota_field.id_for_label }}">Nota</label>
-                  {{ nota_field.as_widget|safe }}
-                  {% for error in nota_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-                </div>
-                <div class="contratos-v2-avaliacao-context{% if justificativa_errors or manifestacao_item_errors %} is-visible{% endif %}" data-avaliacao-context{% if not justificativa_errors and not manifestacao_item_errors and not justificativa_field.value and not manifestacao_item_field.value %} hidden{% endif %}>
-                  <div class="mt-3 contratos-v2-justificativa-wrap">
-                    <label class="form-label" for="{{ justificativa_field.id_for_label }}">Justificativa do fiscal</label>
-                    {{ justificativa_field }}
-                    {% for error in justificativa_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-                  </div>
-                  <div class="mt-3 contratos-v2-manifestacao-item-wrap">
-                    <label class="form-label" for="{{ manifestacao_item_field.id_for_label }}">Manifestação do gestor</label>
-                    {{ manifestacao_item_field }}
-                    {% for error in manifestacao_item_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-                  </div>
+                <div class="contratos-v2-avaliacao-grid mt-3">
+                  <section class="contratos-v2-avaliacao-role" data-avaliacao-role="fiscal">
+                    <div class="contratos-v2-avaliacao-role-head">
+                      <h3>Fiscal</h3>
+                    </div>
+                    <div class="mt-3">
+                      <label class="form-label" for="{{ nota_fiscal_field.id_for_label }}">Nota do fiscal</label>
+                      {{ nota_fiscal_field.as_widget|safe }}
+                      {% for error in nota_fiscal_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="contratos-v2-avaliacao-textarea-wrap mt-3" data-avaliacao-textarea-wrap>
+                      <label class="form-label" for="{{ justificativa_fiscal_field.id_for_label }}">Justificativa do fiscal - nota <span data-nota-display>{{ nota_fiscal_field.value|default:"-" }}</span></label>
+                      {{ justificativa_fiscal_field }}
+                      {% for error in justificativa_fiscal_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                      {% item_audit_footer resposta 'justificativa_fiscal' as justificativa_footer %}
+                      {% if justificativa_footer %}<div class="form-text contratos-v2-audit-footer">{{ justificativa_footer }}</div>{% endif %}
+                    </div>
+                  </section>
+                  <section class="contratos-v2-avaliacao-role" data-avaliacao-role="gestor">
+                    <div class="contratos-v2-avaliacao-role-head">
+                      <h3>Gestor</h3>
+                    </div>
+                    <div class="mt-3">
+                      <label class="form-label" for="{{ nota_gestor_field.id_for_label }}">Nota do gestor</label>
+                      {{ nota_gestor_field.as_widget|safe }}
+                      {% for error in nota_gestor_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="contratos-v2-avaliacao-textarea-wrap mt-3" data-avaliacao-textarea-wrap>
+                      <label class="form-label" for="{{ manifestacao_item_field.id_for_label }}">Manifestação do gestor - nota <span data-nota-display>{{ nota_gestor_field.value|default:"-" }}</span></label>
+                      {{ manifestacao_item_field }}
+                      {% for error in manifestacao_item_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                      {% item_audit_footer resposta 'manifestacao_gestor_item' as manifestacao_footer %}
+                      {% if manifestacao_footer %}<div class="form-text contratos-v2-audit-footer">{{ manifestacao_footer }}</div>{% endif %}
+                    </div>
+                  </section>
                 </div>
               </article>
             {% endfor %}
@@ -72,30 +93,36 @@
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       function atualizarContextoItem(container) {
-        const notaField = container.querySelector('select');
-        const contextoWrap = container.querySelector('[data-avaliacao-context]');
+        const blocos = container.querySelectorAll('[data-avaliacao-role]');
         const maxNota = Number(container.dataset.maxNota || '0');
 
-        if (!notaField || !contextoWrap) {
-          return;
-        }
+        blocos.forEach(function (bloco) {
+          const notaField = bloco.querySelector('select');
+          const textoWrap = bloco.querySelector('[data-avaliacao-textarea-wrap]');
+          const notaDisplay = bloco.querySelector('[data-nota-display]');
+          if (!notaField || !textoWrap) {
+            return;
+          }
 
-        const notaSelecionada = Number(notaField.value || '0');
-        const mostrarContexto = notaField.value !== '' && !Number.isNaN(notaSelecionada) && notaSelecionada < maxNota;
-
-        contextoWrap.hidden = !mostrarContexto;
-        contextoWrap.classList.toggle('is-visible', mostrarContexto);
+          const notaSelecionada = Number(notaField.value || '0');
+          const mostrarTexto = notaField.value !== '' && !Number.isNaN(notaSelecionada) && notaSelecionada < maxNota;
+          if (notaDisplay) {
+            notaDisplay.textContent = notaField.value || '-';
+          }
+          textoWrap.hidden = !mostrarTexto;
+          textoWrap.classList.toggle('is-visible', mostrarTexto);
+        });
       }
 
       document.querySelectorAll('[data-avaliacao-item]').forEach(function (container) {
-        const notaField = container.querySelector('select');
+        const selects = container.querySelectorAll('select');
 
         atualizarContextoItem(container);
-        if (notaField) {
+        selects.forEach(function (notaField) {
           notaField.addEventListener('change', function () {
             atualizarContextoItem(container);
           });
-        }
+        });
       });
     });
   </script>

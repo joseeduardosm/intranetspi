@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Confirma o cancelamento de uma solicitação ainda pendente. -->
+
+{% block title %}Cancelar solicitação{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Cancelar solicitação</h1>
+    <p>Confirme o cancelamento da viagem #{{ reserva.pk }}.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-detail-card">
+    <p><strong>Saída:</strong> {{ reserva.saida_planejada_em|date:"d/m/Y H:i" }}</p>
+    <p><strong>Retorno:</strong> {{ reserva.retorno_planejado_em|date:"d/m/Y H:i" }}</p>
+    <p><strong>Destino:</strong> {{ reserva.destino_endereco }}</p>
+    <p><strong>Status atual:</strong> {{ reserva.get_status_display }}</p>
+    <form method="post" class="d-flex gap-2 flex-wrap mt-4">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Confirmar cancelamento</button>
+      <a class="btn btn-light" href="{% url 'reserva_carros:solicitacao_detail' reserva.pk %}">Voltar</a>
+    </form>
+  </section>
+{% endblock %}
+

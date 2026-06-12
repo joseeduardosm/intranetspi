@@ -26,7 +26,7 @@ def user_modules(user):
     acessos = []
     for r in recursos:
         if obter_nivel_acesso(user, r.slug) is not None:
-            url = f"/{r.slug.replace('_', '-')}/"
+            url = r.url_base or f"/{r.slug.replace('_', '-')}/"
             acessos.append({
                 'nome': r.nome,
                 'url': url,

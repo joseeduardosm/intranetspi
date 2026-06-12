@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Formulário administrativo do cadastro de motoristas. -->
+
+{% block title %}{% if object %}Editar motorista{% else %}Novo motorista{% endif %}{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{% if object %}Editar motorista{% else %}Novo motorista{% endif %}</h1>
+    <p>Cadastre o motorista que poderá ser selecionado no deferimento.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <form method="post" class="row g-4">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="col-lg-6">
+        <label class="form-label" for="{{ form.nome_completo.id_for_label }}">Nome completo</label>
+        {{ form.nome_completo }}
+        {{ form.nome_completo.errors }}
+      </div>
+      <div class="col-lg-6">
+        <label class="form-label" for="{{ form.contato.id_for_label }}">Contato</label>
+        {{ form.contato }}
+        {{ form.contato.errors }}
+      </div>
+      <div class="col-lg-2 d-flex align-items-end">
+        <div class="form-check form-switch">
+          {{ form.ativo }}
+          <label class="form-check-label" for="{{ form.ativo.id_for_label }}">Ativo</label>
+        </div>
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Salvar</button>
+        <a class="btn btn-light" href="{% url 'reserva_carros:motorista_list' %}">Cancelar</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}
+

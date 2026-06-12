@@ -1,0 +1,44 @@
+/* Criado por OpenAI Codex em 12/06/2026 */
+/* Isola os ajustes visuais do módulo de carros e reaproveita a base do app de espaços. */
+
+@import url("/static/reserva_espacos/css/reserva_espacos.css");
+@import url("/static/mensageria_assincrona/css/mensageria.css");
+
+.reserva-carros-status.status-aguardando_aprovacao {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.reserva-carros-status.status-deferida {
+  background: #ecfdf5;
+  color: #166534;
+}
+
+.reserva-carros-status.status-indeferida {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.reserva-carros-status.status-cancelada {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.reserva-carros-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: .8rem;
+}
+
+.reserva-carros-history-item {
+  border-left: 3px solid rgba(31, 75, 153, .25);
+  padding-left: .9rem;
+}
+
+.reserva-carros-history-item span,
+.reserva-carros-history-item p {
+  display: block;
+  margin: 0;
+  color: #64748b;
+}
+

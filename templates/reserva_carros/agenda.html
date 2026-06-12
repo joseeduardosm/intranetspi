@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Agenda principal das viagens pendentes e deferidas, no mesmo estilo visual do módulo de espaços. -->
+
+{% block title %}Reserva de carros{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div>
+      <h1>Reserva de carros</h1>
+      <p>Agenda das viagens pendentes e deferidas com visões mensal, semanal, quinzenal e diária.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      {% if pode_solicitar_viagem %}
+        <a class="btn btn-primary" href="{% url 'reserva_carros:solicitacao_create' %}">Nova solicitação</a>
+      {% endif %}
+      <a class="btn btn-light" href="{% url 'reserva_carros:solicitacao_list' %}">Solicitações</a>
+      <a class="btn btn-light" href="{% url 'reserva_carros:dashboard' %}">Dashboard</a>
+      {% if pode_analisar_viagens %}
+        <a class="btn btn-outline-secondary" href="{% url 'reserva_carros:fila_fiscal' %}">Fila fiscal</a>
+      {% endif %}
+      {% if pode_gerenciar_base %}
+        <a class="btn btn-outline-secondary" href="{% url 'reserva_carros:carro_list' %}">Carros</a>
+        <a class="btn btn-outline-secondary" href="{% url 'reserva_carros:motorista_list' %}">Motoristas</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-calendar">
+    <div class="reserva-espacos-toolbar">
+      <div class="reserva-espacos-filters">
+        <div class="reserva-espacos-filter">
+          <label for="calendar-car-filter">Filtro por carro</label>
+          <select id="calendar-car-filter" class="form-select form-select-lg">
+            <option value="all">Todos os carros</option>
+            {% for carro in carros %}
+              <option value="{{ carro.pk }}"{% if carro_atual == carro.pk|stringformat:"s" %} selected{% endif %}>{{ carro.nome_exibicao }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="reserva-espacos-view-tabs" role="tablist" aria-label="Visões do calendário">
+        <button class="reserva-espacos-view-tab" type="button" data-view="month">Mensal</button>
+        <button class="reserva-espacos-view-tab" type="button" data-view="week">Semanal</button>
+        <button class="reserva-espacos-view-tab" type="button" data-view="biweek">Quinzenal</button>
+        <button class="reserva-espacos-view-tab" type="button" data-view="day">Diária</button>
+      </div>
+
+      <div class="reserva-espacos-nav">
+        <button class="btn btn-light" type="button" data-action="today">Hoje</button>
+        <button class="btn btn-light reserva-espacos-nav-btn" type="button" data-action="prev" aria-label="Voltar">‹</button>
+        <div class="reserva-espacos-title" id="calendar-title"></div>
+        <button class="btn btn-light reserva-espacos-nav-btn" type="button" data-action="next" aria-label="Avançar">›</button>
+      </div>
+    </div>
+
+    <div id="calendar-weekdays" class="reserva-espacos-weekdays"></div>
+    <div id="calendar-body" class="reserva-espacos-calendar-body"></div>
+  </section>
+
+  {{ viagens_data|json_script:"viagens-data" }}
+
+  <script>
+    const calendarBody = document.getElementById("calendar-body");
+    const calendarTitle = document.getElementById("calendar-title");
+    const weekdaysRow = document.getElementById("calendar-weekdays");
+    const viewTabs = document.querySelectorAll("[data-view]");
+    const carFilter = document.getElementById("calendar-car-filter");
+    const actionButtons = document.querySelectorAll("[data-action]");
+    const locale = "pt-BR";
+    const novaSolicitacaoBaseUrl = "{% url 'reserva_carros:solicitacao_create' %}";
+    const today = new Date();
+    let currentDate = new Date();
+    let currentView = "{{ view_atual|escapejs }}";
+    if (!["month", "week", "biweek", "day"].includes(currentView)) currentView = "month";
+    let activeCar = carFilter?.value || "all";
+
+    const rawViagens = JSON.parse(document.getElementById("viagens-data")?.textContent || "[]");
+    const viagens = rawViagens.map((item) => ({
+      ...item,
+      start: new Date(item.inicio),
+      end: item.fim ? new Date(item.fim) : null,
+    }));
+
+    const escapeHtml = (value) =>
+      String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+    const pad = (value) => value.toString().padStart(2, "0");
+    const dateKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const buildCreateUrl = (dateObj) => `${novaSolicitacaoBaseUrl}?data=${dateKey(dateObj)}`;
+    const cloneDate = (value) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
+    const startOfWeek = (dateObj) => {
+      const d = cloneDate(dateObj);
+      d.setDate(d.getDate() - d.getDay());
+      return d;
+    };
+
+    const enableDayClick = (element, dateObj) => {
+      {% if pode_solicitar_viagem %}
+        const targetUrl = buildCreateUrl(dateObj);
+        element.classList.add("reserva-espacos-clickable-day");
+        element.setAttribute("role", "link");
+        element.setAttribute("tabindex", "0");
+        element.setAttribute("aria-label", `Criar solicitação em ${dateObj.toLocaleDateString(locale)}`);
+        element.addEventListener("click", (event) => {
+          if (event.target.closest("a")) return;
+          window.location.href = targetUrl;
+        });
+        element.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            window.location.href = targetUrl;
+          }
+        });
+      {% endif %}
+    };
+
+    const viagensFiltradas = () => viagens.filter((item) => activeCar === "all" || String(item.carro_id) === String(activeCar));
+
+    const groupedByDate = () => {
+      const groups = {};
+      viagensFiltradas().forEach((item) => {
+        const start = cloneDate(item.start);
+        const end = item.end ? cloneDate(item.end) : cloneDate(item.start);
+        for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+          const key = dateKey(cursor);
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(item);
+        }
+      });
+      Object.values(groups).forEach((group) => group.sort((a, b) => a.start - b.start));
+      return groups;
+    };
+
+    const formatDateTime = (dateObj) =>
+      dateObj.toLocaleString(locale, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+    const buildTooltipHtml = (viagem) => `
+      <span>${formatDateTime(viagem.start)} - ${viagem.end ? formatDateTime(viagem.end) : ""}</span>
+      <span>${escapeHtml(viagem.carro_nome || "-")}</span>
+      <span>Solicitante: ${escapeHtml(viagem.solicitante_nome || "-")}</span>
+      <span>Motorista: ${escapeHtml(viagem.motorista || "-")}</span>
+      <span>Destino: ${escapeHtml(viagem.destino || "-")}</span>
+      <span>${escapeHtml(viagem.modo_destino || "-")}</span>
+      <span>Passageiros: ${escapeHtml((viagem.passageiros || []).join(", ") || "-")}</span>
+      <span>Motivo: ${escapeHtml(viagem.motivo || "-")}</span>
+      <span>Status: ${escapeHtml(viagem.status_label || "-")}</span>
+    `;
+
+    const buildMarker = (viagem) => {
+      const anchor = document.createElement("a");
+      anchor.href = viagem.url;
+      anchor.className = "reserva-espacos-marker";
+      anchor.style.setProperty("--marker-color", viagem.cor || "#1f4b99");
+      anchor.setAttribute("aria-label", viagem.motivo || "Reserva de carro");
+
+      const tooltip = document.createElement("span");
+      tooltip.className = "reserva-espacos-tooltip";
+      tooltip.innerHTML = buildTooltipHtml(viagem);
+      anchor.appendChild(tooltip);
+      return anchor;
+    };
+
+    const buildListEvent = (viagem) => {
+      const anchor = document.createElement("a");
+      anchor.href = viagem.url;
+      anchor.className = "reserva-espacos-event";
+      anchor.style.setProperty("--event-color", viagem.cor || "#1f4b99");
+      anchor.innerHTML = `
+        <div class="reserva-espacos-event-head">
+          <span class="reserva-espacos-event-time">${formatDateTime(viagem.start)}${viagem.end ? ` - ${formatDateTime(viagem.end)}` : ""}</span>
+          <span class="reserva-espacos-event-object">${escapeHtml(viagem.carro_nome || "Carro")}</span>
+        </div>
+        <strong>${escapeHtml(viagem.motivo || "Reserva de carro")}</strong>
+        <small>${escapeHtml(viagem.destino || "Sem destino informado")}</small>
+      `;
+      const tooltip = document.createElement("span");
+      tooltip.className = "reserva-espacos-tooltip reserva-espacos-tooltip-inline";
+      tooltip.innerHTML = buildTooltipHtml(viagem);
+      anchor.appendChild(tooltip);
+      return anchor;
+    };
+
+    const setActiveViewTab = () => {
+      viewTabs.forEach((button) => button.classList.toggle("is-active", button.dataset.view === currentView));
+    };
+
+    const clearCalendar = () => {
+      calendarBody.innerHTML = "";
+      weekdaysRow.innerHTML = "";
+    };
+
+    const buildMonthView = () => {
+      const grouped = groupedByDate();
+      const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      const start = startOfWeek(firstDay);
+      const end = cloneDate(lastDay);
+      end.setDate(end.getDate() + (6 - end.getDay()));
+
+      calendarTitle.textContent = currentDate.toLocaleDateString(locale, { month: "long", year: "numeric" });
+      ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].forEach((day) => {
+        const label = document.createElement("span");
+        label.textContent = day;
+        weekdaysRow.appendChild(label);
+      });
+      calendarBody.className = "reserva-espacos-calendar-body reserva-espacos-calendar-grid";
+
+      const pointer = new Date(start);
+      while (pointer <= end) {
+        const cell = document.createElement("section");
+        const inMonth = pointer.getMonth() === currentDate.getMonth();
+        cell.className = `reserva-espacos-day-cell${inMonth ? "" : " is-muted"}`;
+        if (dateKey(pointer) === dateKey(today)) cell.classList.add("is-today");
+        enableDayClick(cell, pointer);
+
+        const dayLabel = document.createElement("div");
+        dayLabel.className = "reserva-espacos-day-number";
+        dayLabel.textContent = pointer.getDate();
+        cell.appendChild(dayLabel);
+
+        const markers = document.createElement("div");
+        markers.className = "reserva-espacos-marker-row";
+        const eventos = grouped[dateKey(pointer)] || [];
+        if (eventos.length) {
+          eventos.forEach((evento) => markers.appendChild(buildMarker(evento)));
+        } else {
+          const empty = document.createElement("small");
+          empty.className = "reserva-espacos-empty";
+          empty.textContent = "Sem viagens";
+          markers.appendChild(empty);
+        }
+        cell.appendChild(markers);
+        calendarBody.appendChild(cell);
+        pointer.setDate(pointer.getDate() + 1);
+      }
+    };
+
+    const buildRangeView = (days, mode) => {
+      const grouped = groupedByDate();
+      const start = mode === "day" ? cloneDate(currentDate) : startOfWeek(currentDate);
+      const labels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+      const end = cloneDate(start);
+      end.setDate(end.getDate() + days - 1);
+      calendarTitle.textContent = `${start.toLocaleDateString(locale)} - ${end.toLocaleDateString(locale)}`;
+      calendarBody.className = `reserva-espacos-calendar-body reserva-espacos-range reserva-espacos-range-${mode}`;
+
+      for (let offset = 0; offset < days; offset += 1) {
+        const current = cloneDate(start);
+        current.setDate(current.getDate() + offset);
+        const column = document.createElement("section");
+        column.className = "reserva-espacos-range-column";
+        if (dateKey(current) === dateKey(today)) column.classList.add("is-today");
+        enableDayClick(column, current);
+
+        const head = document.createElement("div");
+        head.className = "reserva-espacos-range-head";
+        head.innerHTML = `<strong>${labels[current.getDay()]}</strong><span>${current.toLocaleDateString(locale)}</span>`;
+        column.appendChild(head);
+
+        const list = document.createElement("div");
+        list.className = "reserva-espacos-range-list";
+        const eventos = grouped[dateKey(current)] || [];
+        if (eventos.length) {
+          eventos.forEach((evento) => list.appendChild(buildListEvent(evento)));
+        } else {
+          const empty = document.createElement("small");
+          empty.className = "reserva-espacos-empty";
+          empty.textContent = "Sem viagens";
+          list.appendChild(empty);
+        }
+        column.appendChild(list);
+        calendarBody.appendChild(column);
+      }
+    };
+
+    const renderCalendar = () => {
+      clearCalendar();
+      setActiveViewTab();
+      if (currentView === "month") buildMonthView();
+      if (currentView === "week") buildRangeView(7, "week");
+      if (currentView === "biweek") buildRangeView(14, "biweek");
+      if (currentView === "day") buildRangeView(1, "day");
+    };
+
+    viewTabs.forEach((button) => {
+      button.addEventListener("click", () => {
+        currentView = button.dataset.view;
+        renderCalendar();
+      });
+    });
+
+    actionButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.action === "today") currentDate = new Date();
+        if (button.dataset.action === "prev") {
+          if (currentView === "month") currentDate.setMonth(currentDate.getMonth() - 1);
+          if (currentView === "week") currentDate.setDate(currentDate.getDate() - 7);
+          if (currentView === "biweek") currentDate.setDate(currentDate.getDate() - 14);
+          if (currentView === "day") currentDate.setDate(currentDate.getDate() - 1);
+        }
+        if (button.dataset.action === "next") {
+          if (currentView === "month") currentDate.setMonth(currentDate.getMonth() + 1);
+          if (currentView === "week") currentDate.setDate(currentDate.getDate() + 7);
+          if (currentView === "biweek") currentDate.setDate(currentDate.getDate() + 14);
+          if (currentView === "day") currentDate.setDate(currentDate.getDate() + 1);
+        }
+        renderCalendar();
+      });
+    });
+
+    carFilter?.addEventListener("change", () => {
+      activeCar = carFilter.value || "all";
+      renderCalendar();
+    });
+
+    renderCalendar();
+  </script>
+{% endblock %}

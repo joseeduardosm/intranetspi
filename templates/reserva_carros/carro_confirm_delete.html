@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Confirma a exclusão manual de um carro do cadastro base. -->
+
+{% block title %}Excluir carro{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Excluir carro</h1>
+    <p>Revise o cadastro antes de remover o veículo da frota disponível.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <p class="mb-4">
+      Você tem certeza que deseja excluir o carro <strong>{{ object.nome_exibicao }}</strong>?
+    </p>
+
+    <form method="post" class="d-flex gap-2 flex-wrap">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Excluir carro</button>
+      <a class="btn btn-light" href="{% url 'reserva_carros:carro_list' %}">Cancelar</a>
+    </form>
+  </section>
+{% endblock %}

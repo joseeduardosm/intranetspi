@@ -17,7 +17,7 @@ from setores.models import SetorNode, UserSetorMembership
 from .backends import LDAPBackend
 from .models import LDAPDirectory, UsuarioPerfil
 from .context_processors import usuario_profile_state
-from .services import profile_update_context
+from .services import HIDDEN_SELECTOR_USERNAMES, profile_update_context, visible_users_queryset
 
 
 User = get_user_model()
@@ -78,6 +78,16 @@ class UsuariosTests(TestCase):
         context = profile_update_context(request)
         self.assertFalse(context["usuario_profile_requires_update"])
         self.assertIsNone(context["usuario_perfil"])
+
+    def test_visible_users_queryset_oculta_usuarios_invisiveis_dos_seletores(self):
+        oculto = User.objects.create_user(username="adminx", password="123", email="adminx@example.com")
+        visivel = User.objects.create_user(username="maria", password="123", email="maria@example.com")
+
+        usernames = set(visible_users_queryset().values_list("username", flat=True))
+
+        self.assertIn("maria", usernames)
+        self.assertNotIn(oculto.username, usernames)
+        self.assertTrue({"root", "adminx", "adminy", "joaox", "joaoy", "u1", "u2", "u10"}.issubset(HIDDEN_SELECTOR_USERNAMES))
 
     def test_administrador_do_sistema_nao_fica_bloqueado_por_recadastro(self):
         request = RequestFactory().get("/noticias/")

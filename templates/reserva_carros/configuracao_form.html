@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Formulário de configuração do grupo fiscal do módulo. -->
+
+{% block title %}Configuração da reserva de carros{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Configuração da reserva de carros</h1>
+    <p>Defina o grupo operacional que poderá deferir e indeferir solicitações.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <form method="post" class="row g-4">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="col-lg-6">
+        <label class="form-label" for="{{ form.grupo_fiscais.id_for_label }}">Grupo de fiscais</label>
+        {{ form.grupo_fiscais }}
+        {% if form.grupo_fiscais.help_text %}<div class="form-text">{{ form.grupo_fiscais.help_text }}</div>{% endif %}
+        {{ form.grupo_fiscais.errors }}
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Salvar</button>
+        <a class="btn btn-light" href="{% url 'reserva_carros:fila_fiscal' %}">Voltar</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}
+

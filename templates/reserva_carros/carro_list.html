@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Lista administrativa da frota cadastrada no módulo. -->
+
+{% block title %}Carros{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_carros/css/reserva_carros.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>Carros</h1>
+      <p>Cadastre os veículos utilizados nas viagens deferidas.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-primary" href="{% url 'reserva_carros:carro_create' %}">Novo carro</a>
+      <a class="btn btn-light" href="{% url 'reserva_carros:agenda' %}">Voltar ao calendário</a>
+    </div>
+  </div>
+
+  <section class="reserva-espacos-surface">
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>Marca</th>
+            <th>Modelo</th>
+            <th>Placa</th>
+            <th>Cor</th>
+            <th>Status</th>
+            <th class="text-end">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for carro in carros %}
+            <tr>
+              <td>{{ carro.marca }}</td>
+              <td>{{ carro.modelo }}</td>
+              <td>{{ carro.placa }}</td>
+              <td><span class="reserva-espacos-color-swatch" style="background: {{ carro.cor }};"></span> {{ carro.cor }}</td>
+              <td>{% if carro.ativo %}<span class="badge text-bg-success">Ativo</span>{% else %}<span class="badge text-bg-secondary">Inativo</span>{% endif %}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'reserva_carros:carro_update' carro.pk %}">Editar</a>
+                <a class="btn btn-sm btn-outline-danger" href="{% url 'reserva_carros:carro_delete' carro.pk %}">Excluir</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-4">Nenhum carro cadastrado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

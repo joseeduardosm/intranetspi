@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 12/06/2026 -->
+<!-- Renderiza o formulário administrativo de mensagens com seleção múltipla de audiência. -->
+{% block title %}{{ titulo }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'mensageria_assincrona/css/mensageria.css' %}">{% endblock %}
+{% block content %}
+  <div class="mensageria-shell">
+    <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+      <div>
+        <h1>{{ titulo }}</h1>
+        <p>Cadastre o comunicado, defina a audiência e escolha como a publicação será feita.</p>
+      </div>
+      <a class="btn btn-outline-secondary" href="{{ voltar_url }}">Voltar</a>
+    </div>
+
+    <form method="post" class="card border-0 shadow-sm">
+      <div class="card-body p-4">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="row g-4">
+          <div class="col-xl-6">
+            <label class="form-label fw-semibold" for="{{ form.assunto.id_for_label }}">{{ form.assunto.label }}</label>
+            {{ form.assunto }}
+            {% for error in form.assunto.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-xl-3">
+            <label class="form-label fw-semibold" for="{{ form.prioridade.id_for_label }}">{{ form.prioridade.label }}</label>
+            {{ form.prioridade }}
+            {% for error in form.prioridade.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-xl-3">
+            <label class="form-label fw-semibold" for="{{ form.modo_publicacao.id_for_label }}">{{ form.modo_publicacao.label }}</label>
+            {{ form.modo_publicacao }}
+            {% for error in form.modo_publicacao.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.corpo.id_for_label }}">{{ form.corpo.label }}</label>
+            {{ form.corpo }}
+            {% for error in form.corpo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-xl-6">
+            <label class="form-label fw-semibold" for="{{ form.expira_em.id_for_label }}">{{ form.expira_em.label }}</label>
+            {{ form.expira_em }}
+            <div class="form-text">Opcional. Após essa data, a mensagem sai da fila de pendências, mas permanece no histórico.</div>
+            {% for error in form.expira_em.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-xl-6">
+            <label class="form-label fw-semibold" for="{{ form.publicar_em.id_for_label }}">{{ form.publicar_em.label }}</label>
+            {{ form.publicar_em }}
+            <div class="form-text">Preencha apenas quando a opção de publicação for agendada.</div>
+            {% for error in form.publicar_em.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.payload_email.id_for_label }}">{{ form.payload_email.label }}</label>
+            {{ form.payload_email }}
+            {% if form.payload_email.help_text %}<div class="form-text">{{ form.payload_email.help_text }}</div>{% endif %}
+            {% for error in form.payload_email.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-xl-6">
+            <label class="form-label fw-semibold" for="mensageria-usuarios-search">Usuários</label>
+            <input type="text" class="form-control form-control-lg mb-3" id="mensageria-usuarios-search" placeholder="Buscar usuário...">
+            {{ form.usuarios_alvo }}
+            <div class="mensageria-picker">
+              <div class="mensageria-picker-column">
+                <div class="mensageria-picker-label">Disponíveis</div>
+                <div class="mensageria-picker-list" id="mensageria-users-available"></div>
+              </div>
+              <div class="mensageria-picker-column">
+                <div class="mensageria-picker-label">Selecionados</div>
+                <div class="mensageria-picker-list is-selected" id="mensageria-users-selected"></div>
+              </div>
+            </div>
+            {% for error in form.usuarios_alvo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-xl-6">
+            <label class="form-label fw-semibold" for="mensageria-setores-search">Setores</label>
+            <input type="text" class="form-control form-control-lg mb-3" id="mensageria-setores-search" placeholder="Buscar setor...">
+            {{ form.setores_alvo }}
+            <div class="mensageria-picker">
+              <div class="mensageria-picker-column">
+                <div class="mensageria-picker-label">Disponíveis</div>
+                <div class="mensageria-picker-list" id="mensageria-setores-available"></div>
+              </div>
+              <div class="mensageria-picker-column">
+                <div class="mensageria-picker-label">Selecionados</div>
+                <div class="mensageria-picker-list is-selected" id="mensageria-setores-selected"></div>
+              </div>
+            </div>
+            {% for error in form.setores_alvo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="card-footer bg-white d-flex justify-content-end gap-2 p-3">
+        <a class="btn btn-light" href="{{ voltar_url }}">Cancelar</a>
+        <button class="btn btn-primary" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+{% block extra_js %}
+  <script>
+    // Reaproveita um picker visual de duas colunas para selects múltiplos do Django.
+    function setupDualPicker(selectId, searchId, availableId, selectedId) {
+      const select = document.getElementById(selectId);
+      const search = document.getElementById(searchId);
+      const available = document.getElementById(availableId);
+      const selected = document.getElementById(selectedId);
+      if (!select || !search || !available || !selected) return;
+
+      select.classList.add('mensageria-select-hidden');
+      if (select.disabled) {
+        search.disabled = true;
+      }
+
+      const render = (filterText = '') => {
+        const filter = filterText.trim().toLowerCase();
+        available.innerHTML = '';
+        selected.innerHTML = '';
+
+        Array.from(select.options).forEach((option) => {
+          const label = (option.textContent || '').trim() || option.value;
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'mensageria-picker-item';
+          item.textContent = label;
+          if (select.disabled) {
+            item.disabled = true;
+          }
+
+          if (option.selected) {
+            item.classList.add('is-selected');
+            item.addEventListener('click', () => {
+              if (select.disabled) return;
+              option.selected = false;
+              render(search.value);
+            });
+            selected.appendChild(item);
+            return;
+          }
+
+          if (filter && !label.toLowerCase().includes(filter)) {
+            return;
+          }
+
+          item.addEventListener('click', () => {
+            if (select.disabled) return;
+            option.selected = true;
+            render(search.value);
+          });
+          available.appendChild(item);
+        });
+      };
+
+      search.addEventListener('input', () => render(search.value));
+      render('');
+    }
+
+    setupDualPicker('{{ form.usuarios_alvo.id_for_label }}', 'mensageria-usuarios-search', 'mensageria-users-available', 'mensageria-users-selected');
+    setupDualPicker('{{ form.setores_alvo.id_for_label }}', 'mensageria-setores-search', 'mensageria-setores-available', 'mensageria-setores-selected');
+  </script>
+{% endblock %}
+
