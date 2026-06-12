@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Reserva de espaços{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div>
+      <h1>Reserva de espaços</h1>
+      <p>Agenda geral com visões mensal, semanal, quinzenal e diária.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      {% if pode_criar_reserva %}
+        <a class="btn btn-primary" href="{% url 'reserva_espacos:reserva_create' %}">Nova reserva</a>
+      {% endif %}
+      {% if pode_gerenciar_objetos %}
+        <a class="btn btn-outline-secondary" href="{% url 'reserva_espacos:objeto_list' %}">Objetos</a>
+      {% endif %}
+      <a class="btn btn-light" href="{% url 'reserva_espacos:dashboard' %}">Dashboard</a>
+      <a class="btn btn-light" href="{% url 'reserva_espacos:reserva_list' %}">Ver reservas</a>
+    </div>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-calendar">
+    <div class="reserva-espacos-toolbar">
+      <div class="reserva-espacos-filters">
+        <div class="reserva-espacos-filter">
+          <label for="calendar-object-filter">Filtro por objeto</label>
+          <select id="calendar-object-filter" class="form-select form-select-lg">
+            <option value="all">Todos os objetos</option>
+            {% for objeto in objetos %}
+              <option value="{{ objeto.pk }}"{% if objeto_atual == objeto.pk|stringformat:"s" %} selected{% endif %}>{{ objeto.nome_exibicao }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="reserva-espacos-view-tabs" role="tablist" aria-label="Visões do calendário">
+        <button class="reserva-espacos-view-tab" type="button" data-view="month">Mensal</button>
+        <button class="reserva-espacos-view-tab" type="button" data-view="week">Semanal</button>
+        <button class="reserva-espacos-view-tab" type="button" data-view="biweek">Quinzenal</button>
+        <button class="reserva-espacos-view-tab" type="button" data-view="day">Diária</button>
+      </div>
+
+      <div class="reserva-espacos-nav">
+        <button class="btn btn-light" type="button" data-action="today">Hoje</button>
+        <button class="btn btn-light reserva-espacos-nav-btn" type="button" data-action="prev" aria-label="Voltar">‹</button>
+        <div class="reserva-espacos-title" id="calendar-title"></div>
+        <button class="btn btn-light reserva-espacos-nav-btn" type="button" data-action="next" aria-label="Avançar">›</button>
+      </div>
+    </div>
+
+    <div id="calendar-weekdays" class="reserva-espacos-weekdays"></div>
+    <div id="calendar-body" class="reserva-espacos-calendar-body"></div>
+  </section>
+
+  {{ reservas_data|json_script:"reservas-data" }}
+
+  <script>
+    const calendarBody = document.getElementById("calendar-body");
+    const calendarTitle = document.getElementById("calendar-title");
+    const weekdaysRow = document.getElementById("calendar-weekdays");
+    const viewTabs = document.querySelectorAll("[data-view]");
+    const objectFilter = document.getElementById("calendar-object-filter");
+    const actionButtons = document.querySelectorAll("[data-action]");
+    const locale = "pt-BR";
+    const today = new Date();
+    let currentDate = new Date();
+    let currentView = "{{ view_atual|escapejs }}";
+    if (!["month", "week", "biweek", "day"].includes(currentView)) currentView = "month";
+    let activeObject = objectFilter?.value || "all";
+
+    const rawReservas = JSON.parse(document.getElementById("reservas-data")?.textContent || "[]");
+    const reservas = rawReservas.map((item) => ({
+      ...item,
+      date: new Date(item.inicio),
+      end: item.fim ? new Date(item.fim) : null,
+    }));
+
+    const escapeHtml = (value) =>
+      String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+    const pad = (value) => value.toString().padStart(2, "0");
+    const dateKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const cloneDate = (value) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
+    const startOfWeek = (dateObj) => {
+      const d = cloneDate(dateObj);
+      d.setDate(d.getDate() - d.getDay());
+      return d;
+    };
+
+    const reservasFiltradas = () => reservas.filter((item) => {
+      const objetoOk = activeObject === "all" || String(item.objeto_id) === String(activeObject);
+      return objetoOk;
+    });
+
+    const groupedByDate = () => {
+      const groups = {};
+      reservasFiltradas().forEach((item) => {
+        const key = dateKey(item.date);
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(item);
+      });
+      Object.values(groups).forEach((group) => group.sort((a, b) => a.date - b.date));
+      return groups;
+    };
+
+    const formatHour = (dateObj) =>
+      dateObj.toLocaleTimeString(locale, {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+    const buildTooltipHtml = (reserva) => `
+      <strong>${escapeHtml(reserva.titulo)}</strong>
+      <span>${reserva.date.toLocaleDateString(locale)} · ${formatHour(reserva.date)} - ${reserva.end ? formatHour(reserva.end) : ""}</span>
+      <span>${escapeHtml(reserva.objeto_nome)}</span>
+      <span>${escapeHtml(reserva.objeto_localizacao || "-")}</span>
+      <span>Reservado por ${escapeHtml(reserva.criado_por_nome || "-")}</span>
+      <span>${escapeHtml(reserva.criado_por_ramal || "-")} · ${escapeHtml(reserva.criado_por_email || "-")}</span>
+    `;
+
+    const buildMarker = (reserva) => {
+      const anchor = document.createElement("a");
+      anchor.href = reserva.url;
+      anchor.className = "reserva-espacos-marker";
+      anchor.style.setProperty("--marker-color", reserva.cor || "#1f4b99");
+      anchor.setAttribute("aria-label", reserva.titulo);
+
+      const tooltip = document.createElement("span");
+      tooltip.className = "reserva-espacos-tooltip";
+      tooltip.innerHTML = buildTooltipHtml(reserva);
+      anchor.appendChild(tooltip);
+      return anchor;
+    };
+
+    const buildListEvent = (reserva) => {
+      const anchor = document.createElement("a");
+      anchor.href = reserva.url;
+      anchor.className = "reserva-espacos-event";
+      anchor.style.setProperty("--event-color", reserva.cor || "#1f4b99");
+      anchor.innerHTML = `
+        <div class="reserva-espacos-event-head">
+          <span class="reserva-espacos-event-time">${formatHour(reserva.date)}${reserva.end ? ` - ${formatHour(reserva.end)}` : ""}</span>
+          <span class="reserva-espacos-event-object">${escapeHtml(reserva.objeto_nome)}</span>
+        </div>
+        <strong>${escapeHtml(reserva.titulo)}</strong>
+        <small>${escapeHtml(reserva.objeto_localizacao || "Sem localização")}</small>
+      `;
+      const tooltip = document.createElement("span");
+      tooltip.className = "reserva-espacos-tooltip reserva-espacos-tooltip-inline";
+      tooltip.innerHTML = buildTooltipHtml(reserva);
+      anchor.appendChild(tooltip);
+      return anchor;
+    };
+
+    const setActiveViewTab = () => {
+      viewTabs.forEach((button) => button.classList.toggle("is-active", button.dataset.view === currentView));
+    };
+
+    const clearCalendar = () => {
+      calendarBody.innerHTML = "";
+      weekdaysRow.innerHTML = "";
+    };
+
+    const buildMonthView = () => {
+      const grouped = groupedByDate();
+      const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      const start = startOfWeek(firstDay);
+      const end = cloneDate(lastDay);
+      end.setDate(end.getDate() + (6 - end.getDay()));
+
+      calendarTitle.textContent = currentDate.toLocaleDateString(locale, { month: "long", year: "numeric" });
+      ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].forEach((day) => {
+        const label = document.createElement("span");
+        label.textContent = day;
+        weekdaysRow.appendChild(label);
+      });
+      calendarBody.className = "reserva-espacos-calendar-body reserva-espacos-calendar-grid";
+
+      const pointer = new Date(start);
+      while (pointer <= end) {
+        const cell = document.createElement("section");
+        const inMonth = pointer.getMonth() === currentDate.getMonth();
+        cell.className = `reserva-espacos-day-cell${inMonth ? "" : " is-muted"}`;
+        if (dateKey(pointer) === dateKey(today)) cell.classList.add("is-today");
+
+        const dayLabel = document.createElement("div");
+        dayLabel.className = "reserva-espacos-day-number";
+        dayLabel.textContent = pointer.getDate();
+        cell.appendChild(dayLabel);
+
+        const markers = document.createElement("div");
+        markers.className = "reserva-espacos-marker-row";
+        const eventos = grouped[dateKey(pointer)] || [];
+        if (eventos.length) {
+          eventos.forEach((evento) => markers.appendChild(buildMarker(evento)));
+        } else {
+          const empty = document.createElement("small");
+          empty.className = "reserva-espacos-empty";
+          empty.textContent = "Sem reservas";
+          markers.appendChild(empty);
+        }
+        cell.appendChild(markers);
+        calendarBody.appendChild(cell);
+        pointer.setDate(pointer.getDate() + 1);
+      }
+    };
+
+    const buildRangeView = (days, mode) => {
+      const grouped = groupedByDate();
+      const start = mode === "day" ? cloneDate(currentDate) : startOfWeek(currentDate);
+      const labels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+      const end = cloneDate(start);
+      end.setDate(end.getDate() + days - 1);
+      calendarTitle.textContent = `${start.toLocaleDateString(locale)} - ${end.toLocaleDateString(locale)}`;
+      calendarBody.className = `reserva-espacos-calendar-body reserva-espacos-range reserva-espacos-range-${mode}`;
+
+      for (let offset = 0; offset < days; offset += 1) {
+        const current = cloneDate(start);
+        current.setDate(current.getDate() + offset);
+        const column = document.createElement("section");
+        column.className = "reserva-espacos-range-column";
+        if (dateKey(current) === dateKey(today)) column.classList.add("is-today");
+
+        const head = document.createElement("div");
+        head.className = "reserva-espacos-range-head";
+        head.innerHTML = `<strong>${labels[current.getDay()]}</strong><span>${current.toLocaleDateString(locale)}</span>`;
+        column.appendChild(head);
+
+        const list = document.createElement("div");
+        list.className = "reserva-espacos-range-list";
+        const eventos = grouped[dateKey(current)] || [];
+        if (eventos.length) {
+          eventos.forEach((evento) => list.appendChild(buildListEvent(evento)));
+        } else {
+          const empty = document.createElement("div");
+          empty.className = "reserva-espacos-range-empty";
+          empty.textContent = "Sem reservas";
+          list.appendChild(empty);
+        }
+        column.appendChild(list);
+        calendarBody.appendChild(column);
+      }
+    };
+
+    const renderCalendar = () => {
+      clearCalendar();
+      setActiveViewTab();
+      if (currentView === "month") {
+        buildMonthView();
+      } else if (currentView === "week") {
+        buildRangeView(7, "week");
+      } else if (currentView === "biweek") {
+        buildRangeView(14, "biweek");
+      } else {
+        buildRangeView(1, "day");
+      }
+    };
+
+    viewTabs.forEach((button) => {
+      button.addEventListener("click", () => {
+        currentView = button.dataset.view;
+        renderCalendar();
+      });
+    });
+
+    actionButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.action === "today") {
+          currentDate = new Date();
+        } else {
+          const step = currentView === "day" ? 1 : currentView === "week" ? 7 : currentView === "biweek" ? 14 : 30;
+          currentDate.setDate(currentDate.getDate() + (button.dataset.action === "next" ? step : -step));
+        }
+        renderCalendar();
+      });
+    });
+
+    objectFilter?.addEventListener("change", () => {
+      activeObject = objectFilter.value;
+      renderCalendar();
+    });
+
+    renderCalendar();
+  </script>
+{% endblock %}

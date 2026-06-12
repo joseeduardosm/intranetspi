@@ -21,6 +21,7 @@ from django.contrib import admin
 from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path
+from django.views.generic import RedirectView
 
 from . import views
 
@@ -42,6 +43,10 @@ urlpatterns = [
     path('navbar/', include('navbar.urls')),
     path('noticias/', include('noticias.urls')),
     path('regulariza-sgi/', include('regulariza_sgi.urls')),
+    # Mantém compatibilidade com links antigos enquanto o módulo passa a usar
+    # a URL oficial /reserva-espacos/.
+    path('reservas-recursos/', RedirectView.as_view(pattern_name='reserva_espacos:agenda', permanent=False)),
+    path('reserva-espacos/', include('reserva_espacos.urls')),
     path('setores/', include('setores.urls')),
     path('acls/', include('acls.urls')),
     path('organograma/', include('organograma.urls')),

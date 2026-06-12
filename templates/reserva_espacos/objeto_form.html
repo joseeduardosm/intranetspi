@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if object %}Editar objeto{% else %}Novo objeto{% endif %}{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{% if object %}Editar objeto{% else %}Novo objeto{% endif %}</h1>
+    <p>Cadastre o recurso que será exibido nos filtros e marcadores do calendário.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <form method="post" class="row g-4">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="col-lg-6">
+        <label class="form-label" for="{{ form.nome.id_for_label }}">Nome</label>
+        {{ form.nome }}
+        {{ form.nome.errors }}
+      </div>
+      <div class="col-lg-6">
+        <label class="form-label" for="{{ form.localizacao.id_for_label }}">Localização</label>
+        {{ form.localizacao }}
+        {{ form.localizacao.errors }}
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label" for="{{ form.cor.id_for_label }}">Cor</label>
+        {{ form.cor }}
+        {{ form.cor.errors }}
+      </div>
+      <div class="col-lg-2 d-flex align-items-end">
+        <div class="form-check form-switch">
+          {{ form.ativo }}
+          <label class="form-check-label" for="{{ form.ativo.id_for_label }}">Ativo</label>
+        </div>
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Salvar</button>
+        <a class="btn btn-light" href="{% url 'reserva_espacos:objeto_list' %}">Cancelar</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Excluir objeto{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Excluir objeto</h1>
+    <p>O histórico de reservas ligadas a este recurso também será removido.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-confirm-card">
+    <p>Tem certeza que deseja excluir <strong>{{ object.nome }}</strong>?</p>
+    <p class="text-muted">Reservas relacionadas: {{ reservas_relacionadas }}</p>
+    <form method="post" class="d-flex gap-2 flex-wrap">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Excluir objeto</button>
+      <a class="btn btn-light" href="{% url 'reserva_espacos:objeto_list' %}">Cancelar</a>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if object %}Editar reserva{% else %}Nova reserva{% endif %}{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{% if object %}Editar reserva{% else %}Nova reserva{% endif %}</h1>
+    <p>Escolha o objeto e o intervalo da reserva.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <form method="post" class="row g-4" id="reserva-recurso-form">
+      {% csrf_token %}
+      {% with conflict_message=form.conflict_error_message %}
+        {% for error in form.non_field_errors %}
+          {% if error != conflict_message %}
+            <div class="col-12">
+              <div class="alert alert-danger mb-0">{{ error }}</div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      {% endwith %}
+      <div class="col-lg-6">
+        <label class="form-label" for="{{ form.objeto.id_for_label }}">Objeto</label>
+        {{ form.objeto }}
+        {{ form.objeto.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.data.id_for_label }}">Data</label>
+        {{ form.data }}
+        {{ form.data.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.hora_inicio.id_for_label }}">Hora de início</label>
+        {{ form.hora_inicio }}
+        {{ form.hora_inicio.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.hora_fim.id_for_label }}">Hora de fim</label>
+        {{ form.hora_fim }}
+        {{ form.hora_fim.errors }}
+      </div>
+      {% if not object %}
+        <div class="col-lg-6">
+          <label class="form-label" for="{{ form.recorrencia.id_for_label }}">Recorrência</label>
+          {{ form.recorrencia }}
+          {{ form.recorrencia.errors }}
+        </div>
+        <div class="col-lg-6" id="recorrencia-fim-wrapper">
+          <label class="form-label" for="{{ form.recorrencia_fim.id_for_label }}">Data fim da recorrência</label>
+          {{ form.recorrencia_fim }}
+          {{ form.recorrencia_fim.errors }}
+        </div>
+      {% endif %}
+      <div class="col-lg-6">
+        <label class="form-label" for="{{ form.titulo.id_for_label }}">Título</label>
+        {{ form.titulo }}
+        {{ form.titulo.errors }}
+      </div>
+      <div class="col-lg-6">
+        <label class="form-label" for="{{ form.responsavel.id_for_label }}">Responsável</label>
+        {{ form.responsavel }}
+        {% if form.responsavel.help_text %}<div class="form-text">{{ form.responsavel.help_text }}</div>{% endif %}
+        {{ form.responsavel.errors }}
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="{{ form.observacoes.id_for_label }}">Observações</label>
+        {{ form.observacoes }}
+        {{ form.observacoes.errors }}
+      </div>
+
+      {% if object and object.serie_id and serie_count|default:0 > 1 %}
+        <div class="col-12">
+          <fieldset class="reserva-espacos-inline-fieldset">
+            <legend>Aplicar alteração</legend>
+            <label><input type="radio" name="apply_scope" value="single" checked> Somente esta reserva</label>
+            <label><input type="radio" name="apply_scope" value="all"> Toda a série recorrente</label>
+          </fieldset>
+        </div>
+      {% endif %}
+
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Salvar</button>
+        <a class="btn btn-light" href="{% if object %}{% url 'reserva_espacos:reserva_detail' object.pk %}{% else %}{% url 'reserva_espacos:reserva_list' %}{% endif %}">Cancelar</a>
+      </div>
+    </form>
+  </section>
+
+  {% with conflict_message=form.conflict_error_message %}
+    {% for error in form.non_field_errors %}
+      {% if error == conflict_message %}
+        <div class="modal fade" id="reservaConflitoModal" tabindex="-1" aria-labelledby="reservaConflitoModalTitle" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+              <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold text-dark" id="reservaConflitoModalTitle">Conflito de reserva</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+              </div>
+              <div class="modal-body pt-2">
+                <p class="mb-0">{{ error }}</p>
+              </div>
+              <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-primary px-4" data-bs-dismiss="modal" style="border-radius: 8px;">Ok</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  {% endwith %}
+
+  <script>
+    const recurrenceSelect = document.getElementById("id_recorrencia");
+    const recurrenceWrapper = document.getElementById("recorrencia-fim-wrapper");
+    const conflitoModalElement = document.getElementById("reservaConflitoModal");
+
+    const toggleRecurrence = () => {
+      if (!recurrenceSelect || !recurrenceWrapper) return;
+      recurrenceWrapper.style.display = recurrenceSelect.value ? "block" : "none";
+    };
+    if (recurrenceSelect) {
+      recurrenceSelect.addEventListener("change", toggleRecurrence);
+      toggleRecurrence();
+    }
+
+    if (conflitoModalElement && window.bootstrap?.Modal) {
+      window.addEventListener("load", () => {
+        const conflitoModal = new bootstrap.Modal(conflitoModalElement);
+        conflitoModal.show();
+      });
+    }
+  </script>
+{% endblock %}

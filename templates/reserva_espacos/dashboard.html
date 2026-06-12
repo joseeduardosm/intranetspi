@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Dashboard de reserva de espaços{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div>
+      <div class="reserva-espacos-dashboard-head">
+        <h1 class="mb-0">Dashboard de reserva de espaços</h1>
+      </div>
+      <p>Painel gerencial do uso de recursos no período.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-light" href="{% url 'reserva_espacos:agenda' %}">Calendário</a>
+      <a class="btn btn-light" href="{% url 'reserva_espacos:reserva_list' %}">Reservas</a>
+    </div>
+  </div>
+
+  <section class="reserva-espacos-dashboard-grid">
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Total de reservas no mês</small>
+      <strong>{{ total_reservas_mes }}</strong>
+      <span>Referência: {{ mes_referencia }}</span>
+    </article>
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Objetos ativos no mês</small>
+      <strong>{{ objetos_ativos_mes }}</strong>
+      <span>Com ao menos uma reserva</span>
+    </article>
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Média por dia</small>
+      <strong>{{ media_reservas_por_dia }}</strong>
+      <span>Dias com reservas no mês</span>
+    </article>
+  </section>
+
+  <section class="reserva-espacos-chart-grid">
+    <article class="reserva-espacos-surface">
+      <h2>Reservas por mês</h2>
+      <p class="text-muted small">Clique em um ponto para baixar o detalhamento em XLSX.</p>
+      <div id="chart-reservas-mes" class="reserva-espacos-chart"></div>
+    </article>
+    <article class="reserva-espacos-surface">
+      <h2>Objetos mais utilizados</h2>
+      <p class="text-muted small">Clique em uma barra para baixar o detalhamento em XLSX.</p>
+      <div id="chart-objetos-top" class="reserva-espacos-chart"></div>
+    </article>
+  </section>
+
+  <section class="reserva-espacos-surface">
+    <h2>Quem mais reserva</h2>
+    {% if ranking_pessoas %}
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead>
+            <tr>
+              <th>Usuário</th>
+              <th>Ramal</th>
+              <th>E-mail</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in ranking_pessoas %}
+              <tr>
+                <td>
+                  <button
+                    class="btn btn-link p-0 reserva-espacos-contact-trigger"
+                    type="button"
+                    data-bs-toggle="modal"
+                    data-bs-target="#ramalContactModal"
+                    data-name="{{ item.nome }}"
+                    data-cargo="{{ item.cargo }}"
+                    data-setor="{{ item.setor }}"
+                    data-email="{{ item.email }}"
+                    data-ramal="{{ item.ramal }}"
+                    data-celular="{{ item.celular }}"
+                    data-whatsapp="{{ item.whatsapp }}"
+                    data-local="{{ item.localizacao }}"
+                    data-photo="{{ item.foto_url }}"
+                    aria-label="Abrir contato de {{ item.nome }}"
+                  >{{ item.nome }}</button>
+                </td>
+                <td>{{ item.ramal }}</td>
+                <td>{{ item.email }}</td>
+                <td>{{ item.total }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-muted mb-0">Nenhuma reserva encontrada para o ranking.</p>
+    {% endif %}
+  </section>
+
+  <div class="modal fade" id="ramalContactModal" tabindex="-1" aria-labelledby="ramalContactModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered ramal-contact-dialog">
+      <div class="modal-content ramal-contact-modal">
+        <button class="btn-close ramal-contact-close" type="button" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        <div class="ramal-contact-card">
+          <div class="ramal-contact-photo">
+            <img id="ramalContactPhoto" src="" alt="">
+          </div>
+          <div class="ramal-contact-data">
+            <section class="ramal-contact-field ramal-contact-field-name">
+              <span>Nome</span>
+              <h2 id="ramalContactModalTitle"></h2>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-cargo">
+              <span>Cargo</span>
+              <p id="ramalContactCargo"></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-setor">
+              <span>Setor</span>
+              <p id="ramalContactSetor"></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-email">
+              <span>E-mail</span>
+              <button id="ramalContactEmail" class="ramal-contact-email ramal-email-trigger" type="button" data-email=""></button>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-ramal">
+              <span>Ramal</span>
+              <p id="ramalContactRamal"></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-celular" id="ramalContactCelularWrapper" style="display: none;">
+              <span>Celular</span>
+              <p><a id="ramalContactCelular" href="" target="_blank" rel="noopener" style="color: #198754; text-decoration: none; font-weight: bold;"></a></p>
+            </section>
+            <section class="ramal-contact-field ramal-contact-field-local">
+              <span>Localização</span>
+              <p id="ramalContactLocal"></p>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ramal-email-popover" id="ramalEmailPopover" role="tooltip" hidden>
+    <div class="ramal-email-popover-address" id="ramalEmailPopoverAddress"></div>
+    <div class="ramal-email-popover-actions">
+      <a class="ramal-email-action" id="ramalEmailTeams" href="#" target="_blank" rel="noopener"><span>Teams</span></a>
+      <a class="ramal-email-action" id="ramalEmailOutlook" href="#" target="_blank" rel="noopener"><span>Outlook</span></a>
+      <button class="ramal-email-action" id="ramalEmailCopy" type="button"><span id="ramalEmailCopyText">Copiar</span></button>
+    </div>
+  </div>
+
+  {{ grafico_reservas_meses|json_script:"grafico-reservas-meses" }}
+  {{ grafico_objetos_top|json_script:"grafico-objetos-top" }}
+
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script>
+    const reservasMeses = JSON.parse(document.getElementById("grafico-reservas-meses")?.textContent || "{}");
+    const objetosTop = JSON.parse(document.getElementById("grafico-objetos-top")?.textContent || "{}");
+    const exportarUrl = "{% url 'reserva_espacos:dashboard_exportar' %}";
+    const baixarXlsx = (filtros) => {
+      const query = new URLSearchParams(filtros).toString();
+      window.location.href = query ? `${exportarUrl}?${query}` : exportarUrl;
+    };
+
+    Plotly.newPlot("chart-reservas-mes", [
+      {
+        x: reservasMeses.labels || [],
+        y: reservasMeses.values || [],
+        type: "scatter",
+        mode: "lines+markers",
+        line: { color: "#1f4b99", width: 3 },
+        marker: { size: 8 },
+      }
+    ], {
+      margin: { l: 40, r: 10, t: 10, b: 35 },
+      paper_bgcolor: "#fff",
+      plot_bgcolor: "#fff",
+      xaxis: { title: "Mês" },
+      yaxis: { title: "Reservas", rangemode: "tozero" },
+    }, { responsive: true, displaylogo: false }).then((chart) => {
+      chart.on("plotly_click", (eventData) => {
+        const mesRef = eventData?.points?.[0]?.x;
+        if (mesRef) baixarXlsx({ mes_ref: mesRef });
+      });
+    });
+
+    Plotly.newPlot("chart-objetos-top", [
+      {
+        x: objetosTop.values || [],
+        y: objetosTop.labels || [],
+        type: "bar",
+        orientation: "h",
+        marker: { color: "#0b6e4f" },
+      }
+    ], {
+      margin: { l: 160, r: 10, t: 10, b: 35 },
+      paper_bgcolor: "#fff",
+      plot_bgcolor: "#fff",
+      xaxis: { title: "Reservas", rangemode: "tozero" },
+      yaxis: { automargin: true },
+    }, { responsive: true, displaylogo: false }).then((chart) => {
+      chart.on("plotly_click", (eventData) => {
+        const label = eventData?.points?.[0]?.y;
+        if (label) baixarXlsx({ objeto_label: label });
+      });
+    });
+
+    const ramalContactModal = document.getElementById("ramalContactModal");
+    if (ramalContactModal) {
+      ramalContactModal.addEventListener("show.bs.modal", (event) => {
+        const trigger = event.relatedTarget;
+        if (!trigger) return;
+        const photo = trigger.dataset.photo || "";
+        document.getElementById("ramalContactModalTitle").textContent = trigger.dataset.name || "-";
+        document.getElementById("ramalContactCargo").textContent = trigger.dataset.cargo || "-";
+        document.getElementById("ramalContactSetor").textContent = trigger.dataset.setor || "-";
+        const emailButton = document.getElementById("ramalContactEmail");
+        emailButton.textContent = trigger.dataset.email || "-";
+        emailButton.dataset.email = trigger.dataset.email || "";
+        document.getElementById("ramalContactRamal").textContent = trigger.dataset.ramal || "-";
+        document.getElementById("ramalContactLocal").textContent = trigger.dataset.local || "-";
+        const photoElement = document.getElementById("ramalContactPhoto");
+        photoElement.src = photo || "";
+        photoElement.alt = trigger.dataset.name || "";
+        const celularWrapper = document.getElementById("ramalContactCelularWrapper");
+        const celularElement = document.getElementById("ramalContactCelular");
+        if (trigger.dataset.celular) {
+          celularWrapper.style.display = "block";
+          celularElement.textContent = trigger.dataset.celular;
+          celularElement.href = trigger.dataset.whatsapp || "#";
+        } else {
+          celularWrapper.style.display = "none";
+          celularElement.textContent = "";
+          celularElement.href = "#";
+        }
+      });
+    }
+
+    const emailPopover = document.getElementById("ramalEmailPopover");
+    const emailAddress = document.getElementById("ramalEmailPopoverAddress");
+    const teamsLink = document.getElementById("ramalEmailTeams");
+    const outlookLink = document.getElementById("ramalEmailOutlook");
+    const copyButton = document.getElementById("ramalEmailCopy");
+    const copyText = document.getElementById("ramalEmailCopyText");
+    let activeEmailTrigger = null;
+
+    const hideEmailPopover = () => {
+      if (emailPopover) emailPopover.hidden = true;
+      activeEmailTrigger = null;
+    };
+
+    document.addEventListener("click", async (event) => {
+      const trigger = event.target.closest(".ramal-email-trigger");
+      if (!trigger) {
+        if (emailPopover && !emailPopover.contains(event.target)) hideEmailPopover();
+        return;
+      }
+      const email = trigger.dataset.email || "";
+      if (!emailPopover || !email) return;
+      activeEmailTrigger = trigger;
+      emailAddress.textContent = email;
+      teamsLink.href = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`;
+      outlookLink.href = `mailto:${email}`;
+      const rect = trigger.getBoundingClientRect();
+      emailPopover.style.position = "fixed";
+      emailPopover.style.top = `${rect.bottom + 8}px`;
+      emailPopover.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
+      emailPopover.hidden = false;
+      if (event.target.closest("#ramalEmailCopy")) {
+        await navigator.clipboard.writeText(email);
+        copyText.textContent = "Copiado";
+        setTimeout(() => { copyText.textContent = "Copiar"; }, 1500);
+      }
+    });
+  </script>
+{% endblock %}

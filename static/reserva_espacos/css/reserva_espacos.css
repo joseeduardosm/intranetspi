@@ -1,0 +1,436 @@
+/* Criado por José Eduardo Santana Martins e OpenAI Codex em 11/06/2026 */
+/* Objetivo: Isolar o visual do módulo de reservas genéricas sem reutilizar o CSS do app de salas. */
+
+:root {
+  --reserva-espacos-ink: #183153;
+  --reserva-espacos-accent: #1f4b99;
+  --reserva-espacos-paper: #ffffff;
+  --reserva-espacos-line: rgba(24, 49, 83, 0.14);
+  --reserva-espacos-soft: #f6f8fc;
+  --reserva-espacos-shadow: 0 18px 38px rgba(15, 23, 42, 0.08);
+}
+
+.reserva-espacos-surface {
+  padding: 1.1rem;
+  border: 1px solid var(--reserva-espacos-line);
+  border-radius: 1.35rem;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  box-shadow: var(--reserva-espacos-shadow);
+}
+
+.reserva-espacos-calendar {
+  display: grid;
+  gap: .85rem;
+}
+
+.reserva-espacos-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) auto auto;
+  gap: .8rem;
+  align-items: end;
+}
+
+.reserva-espacos-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: .8rem;
+}
+
+.reserva-espacos-filter {
+  display: grid;
+  gap: .35rem;
+}
+
+.reserva-espacos-filter label,
+.reserva-espacos-inline-fieldset legend {
+  color: var(--reserva-espacos-ink);
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.reserva-espacos-view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+}
+
+.reserva-espacos-view-tab {
+  padding: .58rem .9rem;
+  border: 1px solid rgba(24, 49, 83, .16);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--reserva-espacos-ink);
+  font-size: .8rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.reserva-espacos-view-tab.is-active {
+  border-color: transparent;
+  background: #20365f;
+  color: #fff;
+}
+
+.reserva-espacos-nav {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .35rem .45rem;
+  border-radius: 999px;
+  background: #f4efe4;
+}
+
+.reserva-espacos-nav-btn {
+  min-width: 2.45rem;
+}
+
+.reserva-espacos-title {
+  min-width: 11.5rem;
+  color: var(--reserva-espacos-ink);
+  font-size: 1.05rem;
+  font-weight: 800;
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.reserva-espacos-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: .65rem;
+  color: var(--reserva-espacos-ink);
+  font-size: .76rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.reserva-espacos-weekdays span {
+  text-align: center;
+}
+
+.reserva-espacos-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: .65rem;
+}
+
+.reserva-espacos-day-cell,
+.reserva-espacos-range-column {
+  min-height: 6.3rem;
+  display: grid;
+  align-content: start;
+  gap: .55rem;
+  padding: .8rem;
+  border: 1px solid rgba(24, 49, 83, .14);
+  border-radius: 1.1rem;
+  background: #fffefc;
+}
+
+.reserva-espacos-day-cell.is-muted {
+  opacity: .7;
+}
+
+.reserva-espacos-day-cell.is-today,
+.reserva-espacos-range-column.is-today {
+  border-color: rgba(234, 88, 12, .7);
+  box-shadow: inset 0 0 0 1px rgba(234, 88, 12, .15);
+}
+
+.reserva-espacos-day-number {
+  color: var(--reserva-espacos-ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.reserva-espacos-marker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  min-height: 1.2rem;
+}
+
+.reserva-espacos-marker {
+  position: relative;
+  width: 1.55rem;
+  height: 1.55rem;
+  flex: 0 0 1.55rem;
+  border-radius: .45rem;
+  background: var(--marker-color, var(--reserva-espacos-accent));
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--marker-color, #1f4b99) 36%, transparent);
+}
+
+.reserva-espacos-empty {
+  color: #667085;
+  font-size: .84rem;
+}
+
+.reserva-espacos-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + .6rem);
+  z-index: 30;
+  width: 15rem;
+  display: grid;
+  gap: .35rem;
+  padding: .8rem .9rem;
+  border-radius: .9rem;
+  background: #1f2d4a;
+  color: #fff;
+  box-shadow: 0 20px 42px rgba(15, 23, 42, .28);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 8px);
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.reserva-espacos-tooltip strong {
+  font-size: .92rem;
+}
+
+.reserva-espacos-tooltip span {
+  font-size: .8rem;
+  line-height: 1.3;
+}
+
+.reserva-espacos-tooltip-inline {
+  left: auto;
+  right: 0;
+  transform: translateY(8px);
+}
+
+.reserva-espacos-marker:hover .reserva-espacos-tooltip,
+.reserva-espacos-marker:focus .reserva-espacos-tooltip,
+.reserva-espacos-event:hover .reserva-espacos-tooltip,
+.reserva-espacos-event:focus .reserva-espacos-tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.reserva-espacos-event:hover .reserva-espacos-tooltip-inline,
+.reserva-espacos-event:focus .reserva-espacos-tooltip-inline {
+  transform: translateY(0);
+}
+
+.reserva-espacos-range {
+  display: grid;
+  gap: .7rem;
+}
+
+@media (min-width: 1200px) and (min-height: 860px) {
+  .reserva-espacos-calendar .spi-page-title,
+  .reserva-espacos-calendar {
+    margin-bottom: 0;
+  }
+}
+
+.reserva-espacos-range-week {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.reserva-espacos-range-biweek {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.reserva-espacos-range-day {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.reserva-espacos-range-head {
+  display: grid;
+  gap: .15rem;
+}
+
+.reserva-espacos-range-head strong {
+  color: var(--reserva-espacos-ink);
+  font-size: .92rem;
+}
+
+.reserva-espacos-range-head span {
+  color: #667085;
+  font-size: .83rem;
+}
+
+.reserva-espacos-range-list {
+  display: grid;
+  gap: .7rem;
+}
+
+.reserva-espacos-range-empty {
+  color: #667085;
+  font-size: .92rem;
+}
+
+.reserva-espacos-event {
+  position: relative;
+  display: grid;
+  gap: .35rem;
+  padding: .75rem .85rem;
+  border-left: 4px solid var(--event-color, var(--reserva-espacos-accent));
+  border-radius: .85rem;
+  background: linear-gradient(180deg, rgba(31, 75, 153, .05), rgba(11, 110, 79, .03));
+  color: var(--reserva-espacos-ink);
+  text-decoration: none;
+}
+
+.reserva-espacos-event strong {
+  color: var(--reserva-espacos-ink);
+}
+
+.reserva-espacos-event:hover,
+.reserva-espacos-event:focus {
+  color: var(--reserva-espacos-ink);
+}
+
+.reserva-espacos-event-head {
+  display: flex;
+  justify-content: space-between;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+
+.reserva-espacos-event-time,
+.reserva-espacos-event-object,
+.reserva-espacos-event small {
+  color: #526071;
+  font-size: .82rem;
+}
+
+.reserva-espacos-form-surface .form-label {
+  font-weight: 700;
+  color: var(--reserva-espacos-ink);
+}
+
+.reserva-espacos-inline-fieldset {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: .9rem 1rem;
+  border: 1px dashed rgba(24, 49, 83, .18);
+  border-radius: 1rem;
+}
+
+.reserva-espacos-inline-fieldset label {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+}
+
+.reserva-espacos-detail-card p:last-of-type {
+  margin-bottom: 0;
+}
+
+.reserva-espacos-confirm-card {
+  display: grid;
+  gap: 1rem;
+  max-width: 38rem;
+}
+
+.reserva-espacos-dashboard-grid,
+.reserva-espacos-chart-grid {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.reserva-espacos-dashboard-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.reserva-espacos-chart-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reserva-espacos-kpi {
+  display: grid;
+  gap: .35rem;
+}
+
+.reserva-espacos-kpi small {
+  color: #526071;
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 800;
+}
+
+.reserva-espacos-kpi strong {
+  color: var(--reserva-espacos-ink);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.reserva-espacos-kpi span {
+  color: #667085;
+}
+
+.reserva-espacos-chart {
+  min-height: 320px;
+}
+
+.reserva-espacos-dashboard-head {
+  display: flex;
+  align-items: center;
+  gap: .9rem;
+  flex-wrap: wrap;
+}
+
+.reserva-espacos-dashboard-filter-form {
+  min-width: min(320px, 100%);
+}
+
+.reserva-espacos-dashboard-filter-form .form-select {
+  min-width: 240px;
+  border-radius: .85rem;
+}
+
+.reserva-espacos-contact-trigger {
+  color: var(--reserva-espacos-accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.reserva-espacos-contact-trigger:hover,
+.reserva-espacos-contact-trigger:focus {
+  color: #153b7d;
+}
+
+.reserva-espacos-color-swatch {
+  width: 1rem;
+  height: 1rem;
+  display: inline-block;
+  margin-right: .35rem;
+  border-radius: .3rem;
+  border: 1px solid rgba(0, 0, 0, .12);
+  vertical-align: middle;
+}
+
+@media (max-width: 1199.98px) {
+  .reserva-espacos-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .reserva-espacos-nav {
+    justify-self: stretch;
+    justify-content: center;
+  }
+
+  .reserva-espacos-chart-grid,
+  .reserva-espacos-dashboard-grid,
+  .reserva-espacos-filters,
+  .reserva-espacos-range-week,
+  .reserva-espacos-range-biweek {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .reserva-espacos-calendar-grid,
+  .reserva-espacos-weekdays {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

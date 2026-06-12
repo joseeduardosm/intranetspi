@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ reserva.titulo }}{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{{ reserva.titulo }}</h1>
+    <p>Detalhes completos da reserva selecionada.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-detail-card">
+    <p><strong>Data:</strong> {{ reserva.data|date:"d/m/Y" }} · {{ reserva.hora_inicio|time:"H:i" }} - {{ reserva.hora_fim|time:"H:i" }}</p>
+    <p><strong>Objeto:</strong> {{ reserva.objeto.nome }}</p>
+    <p><strong>Localização:</strong> {{ reserva.objeto.localizacao|default:"-" }}</p>
+    <p><strong>Responsável:</strong> {{ reserva.responsavel }}</p>
+    <p><strong>Reservado por:</strong> {{ criador.nome|default:"-" }}{% if criador.ramal %} · {{ criador.ramal }}{% endif %}{% if criador.email %} · {{ criador.email }}{% endif %}</p>
+    <p><strong>Criada em:</strong> {{ reserva.criado_em|date:"d/m/Y H:i" }}</p>
+    <p><strong>Última atualização:</strong> {{ reserva.atualizado_em|date:"d/m/Y H:i" }}</p>
+    <p><strong>Série recorrente:</strong> {% if reserva.serie_id %}{{ serie_count }} ocorrência(s){% else %}Reserva avulsa{% endif %}</p>
+    <p><strong>Observações:</strong> {{ reserva.observacoes|default:"Sem observações." }}</p>
+
+    <div class="d-flex gap-2 flex-wrap mt-4">
+      {% if pode_editar %}
+        <a class="btn btn-primary" href="{% url 'reserva_espacos:reserva_update' reserva.pk %}">Editar</a>
+        <a class="btn btn-outline-danger" href="{% url 'reserva_espacos:reserva_delete' reserva.pk %}">Excluir</a>
+      {% endif %}
+      <a class="btn btn-light" href="{% url 'reserva_espacos:reserva_list' %}">Voltar</a>
+    </div>
+  </section>
+{% endblock %}

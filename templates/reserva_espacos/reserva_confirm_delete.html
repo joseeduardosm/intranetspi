@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Excluir reserva{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Excluir reserva</h1>
+    <p>Confirme a remoção da reserva selecionada.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-confirm-card">
+    <p>Tem certeza que deseja excluir <strong>{{ object.titulo }}</strong>?</p>
+    {% if object.serie_id and serie_count|default:0 > 1 %}
+      <fieldset class="reserva-espacos-inline-fieldset">
+        <legend>Escopo da exclusão</legend>
+        <label><input type="radio" name="apply_scope" value="single" form="delete-form" checked> Somente esta reserva</label>
+        <label><input type="radio" name="apply_scope" value="all" form="delete-form"> Toda a série recorrente</label>
+      </fieldset>
+    {% endif %}
+    <form method="post" id="delete-form" class="d-flex gap-2 flex-wrap">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Excluir reserva</button>
+      <a class="btn btn-light" href="{% url 'reserva_espacos:reserva_detail' object.pk %}">Cancelar</a>
+    </form>
+  </section>
+{% endblock %}

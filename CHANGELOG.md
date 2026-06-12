@@ -2,6 +2,11 @@
 
 Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
+## [0.3.4] - 2026-06-12
+- Ajustado o formulário do módulo `reserva_espacos` para exibir conflitos de sobreposição de reserva em modal Bootstrap, substituindo a mensagem inline abaixo do campo de horário.
+- Padronizada a validação de conflito do módulo para retornar erro não associado a campo tanto na criação quanto na edição simples e na edição de séries recorrentes.
+- Ampliada a suíte de testes do `reserva_espacos` para cobrir a renderização do modal de conflito e a nova estratégia de validação.
+
 ## [0.3.3] - 2026-06-09
 - Reestruturado o módulo `regulariza_sgi` com novo cadastro e detalhe do imóvel em abas:
   - `Dados Iniciais`, `Dívida` e `Observações`;
