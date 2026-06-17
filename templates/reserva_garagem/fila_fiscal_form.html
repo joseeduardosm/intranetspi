@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 17/06/2026 -->
+<!-- Tela de análise fiscal da série ou ocorrência de reserva de vaga. -->
+
+{% block title %}Analisar reserva{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_garagem/css/reserva_garagem.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Analisar reserva #{{ reserva.pk }}</h1>
+    <p>Defina a decisão fiscal para a reserva{% if serie_count %} e suas {{ serie_count }} ocorrências da série{% endif %}.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-detail-card mb-4">
+    <p><strong>Solicitante:</strong> {{ solicitante_payload.nome|default:reserva.solicitante.username }}</p>
+    <p><strong>Vaga:</strong> {{ reserva.vaga.nome_exibicao }}</p>
+    <p><strong>Data:</strong> {{ reserva.data|date:"d/m/Y" }}</p>
+    <p><strong>Veículo:</strong> {{ reserva.marca_veiculo }} {{ reserva.modelo_veiculo }} - {{ reserva.cor_veiculo }}</p>
+    <p><strong>Placa:</strong> {{ reserva.placa_veiculo }}</p>
+    <p><strong>Observações:</strong> {{ reserva.observacoes|default:"Sem observações."|linebreaksbr }}</p>
+  </section>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <form method="post" class="row g-4">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="col-12"><div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div></div>
+      {% endif %}
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.decisao.id_for_label }}">Decisão</label>
+        {{ form.decisao }}
+        {{ form.decisao.errors }}
+      </div>
+      <div class="col-12" id="bloco-indeferimento">
+        <label class="form-label" for="{{ form.justificativa_indeferimento.id_for_label }}">Justificativa do indeferimento</label>
+        {{ form.justificativa_indeferimento }}
+        {{ form.justificativa_indeferimento.errors }}
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Salvar decisão</button>
+        <a class="btn btn-light" href="{% url 'reserva_garagem:fila_fiscal' %}">Cancelar</a>
+      </div>
+    </form>
+  </section>
+
+  <script>
+    const decisaoSelect = document.getElementById("id_decisao");
+    const blocoIndeferimento = document.getElementById("bloco-indeferimento");
+    const toggleIndeferimento = () => {
+      blocoIndeferimento.style.display = decisaoSelect.value === "INDEFERIR" ? "block" : "none";
+    };
+    decisaoSelect.addEventListener("change", toggleIndeferimento);
+    toggleIndeferimento();
+  </script>
+{% endblock %}

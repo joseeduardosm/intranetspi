@@ -44,6 +44,7 @@ urlpatterns = [
     path('noticias/', include('noticias.urls')),
     path('regulariza-sgi/', include('regulariza_sgi.urls')),
     path('reserva-carros/', include('reserva_carros.urls')),
+    path('reserva-garagem/', include('reserva_garagem.urls')),
     # Mantém compatibilidade com links antigos enquanto o módulo passa a usar
     # a URL oficial /reserva-espacos/.
     path('reservas-recursos/', RedirectView.as_view(pattern_name='reserva_espacos:agenda', permanent=False)),

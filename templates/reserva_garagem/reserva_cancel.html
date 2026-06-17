@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 17/06/2026 -->
+<!-- Confirma o cancelamento da reserva pendente ou da série inteira. -->
+
+{% block title %}Cancelar reserva{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_garagem/css/reserva_garagem.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Cancelar reserva</h1>
+    <p>Confirme o cancelamento da reserva #{{ reserva.pk }}{% if serie_count %} e da série com {{ serie_count }} ocorrências{% endif %}.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-detail-card">
+    <p><strong>Vaga:</strong> {{ reserva.vaga.nome_exibicao }}</p>
+    <p><strong>Data:</strong> {{ reserva.data|date:"d/m/Y" }}</p>
+    <p><strong>Status atual:</strong> {{ reserva.get_status_display }}</p>
+    <p><strong>Placa:</strong> {{ reserva.placa_veiculo }}</p>
+    <form method="post" class="d-flex gap-2 flex-wrap mt-4">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Confirmar cancelamento</button>
+      <a class="btn btn-light" href="{% url 'reserva_garagem:reserva_detail' reserva.pk %}">Voltar</a>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,295 @@
+"""Centraliza regras operacionais, conflitos e notificações do módulo."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.db.models import Count
+from django.db.models.functions import TruncMonth
+from django.utils import timezone
+
+from mensageria_assincrona.services import criar_mensagem_rascunho, publicar_mensagem
+
+from .models import (
+    ConfiguracaoReservaGaragem,
+    ReservaGaragem,
+    ReservaGaragemEvento,
+    VagaGaragem,
+)
+
+
+def registrar_evento(reserva, acao, usuario=None, payload=None):
+    """Grava a trilha mínima de auditoria da reserva de garagem."""
+
+    return ReservaGaragemEvento.objects.create(
+        reserva=reserva,
+        usuario=usuario,
+        acao=acao,
+        payload=payload or {},
+    )
+
+
+def fiscal_group():
+    """Obtém o grupo operacional configurado para os fiscais."""
+
+    return ConfiguracaoReservaGaragem.singleton().grupo_fiscais
+
+
+def user_is_fiscal(user) -> bool:
+    """Identifica se o usuário faz parte do grupo operacional de análise."""
+
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if user.is_superuser or user.is_staff:
+        return True
+    group = fiscal_group()
+    return bool(group and user.groups.filter(pk=group.pk).exists())
+
+
+def _format_date(value):
+    """Formata datas no padrão brasileiro para mensagens e detalhes."""
+
+    if not value:
+        return "-"
+    return value.strftime("%d/%m/%Y")
+
+
+def _serie_queryset(reserva: ReservaGaragem):
+    """Retorna a série completa quando houver, ou apenas a própria ocorrência."""
+
+    if reserva.serie_id:
+        return ReservaGaragem.objects.filter(serie_id=reserva.serie_id).order_by("data", "id")
+    return ReservaGaragem.objects.filter(pk=reserva.pk)
+
+
+def _datas_serie_display(reservas):
+    """Resume o intervalo da série em texto para notificação."""
+
+    datas = list(reservas.values_list("data", flat=True))
+    if not datas:
+        return "-"
+    return f"{_format_date(datas[0])} a {_format_date(datas[-1])}" if len(datas) > 1 else _format_date(datas[0])
+
+
+def _mensagem_reserva_deferida(reservas):
+    """Monta assunto, corpo e payload para a notificação de deferimento."""
+
+    reserva = reservas.first()
+    assunto = f"Reserva de vaga deferida #{reserva.pk}"
+    intervalo = _datas_serie_display(reservas)
+    corpo = (
+        f"Sua solicitação de reserva de vaga foi deferida.\n\n"
+        f"Vaga: {reserva.vaga.nome_exibicao}\n"
+        f"Período: {intervalo}\n"
+        f"Placa: {reserva.placa_veiculo}\n"
+        f"Veículo: {reserva.marca_veiculo} {reserva.modelo_veiculo} - {reserva.cor_veiculo}\n"
+        f"Observações: {reserva.observacoes or '-'}"
+    )
+    payload = {
+        "tipo": "deferimento_reserva_garagem",
+        "reserva_id": reserva.pk,
+        "serie_id": str(reserva.serie_id or ""),
+        "vaga": reserva.vaga.nome_exibicao,
+        "placa": reserva.placa_veiculo,
+        "marca": reserva.marca_veiculo,
+        "modelo": reserva.modelo_veiculo,
+        "cor": reserva.cor_veiculo,
+        "status": reserva.status,
+        "datas": [data.isoformat() for data in reservas.values_list("data", flat=True)],
+    }
+    return assunto, corpo, payload
+
+
+def _mensagem_reserva_indeferida(reservas):
+    """Monta a notificação textual do indeferimento."""
+
+    reserva = reservas.first()
+    assunto = f"Reserva de vaga indeferida #{reserva.pk}"
+    intervalo = _datas_serie_display(reservas)
+    corpo = (
+        f"Sua solicitação de reserva de vaga foi indeferida.\n\n"
+        f"Vaga: {reserva.vaga.nome_exibicao}\n"
+        f"Período: {intervalo}\n"
+        f"Placa: {reserva.placa_veiculo}\n"
+        f"Justificativa: {reserva.justificativa_indeferimento}"
+    )
+    payload = {
+        "tipo": "indeferimento_reserva_garagem",
+        "reserva_id": reserva.pk,
+        "serie_id": str(reserva.serie_id or ""),
+        "vaga": reserva.vaga.nome_exibicao,
+        "placa": reserva.placa_veiculo,
+        "status": reserva.status,
+        "justificativa": reserva.justificativa_indeferimento,
+        "datas": [data.isoformat() for data in reservas.values_list("data", flat=True)],
+    }
+    return assunto, corpo, payload
+
+
+def notificar_solicitante(reservas, usuario_responsavel=None):
+    """Cria e publica a mensagem assíncrona após decisão fiscal."""
+
+    reserva = reservas.first()
+    if reserva.status == ReservaGaragem.Status.DEFERIDA:
+        assunto, corpo, payload = _mensagem_reserva_deferida(reservas)
+    elif reserva.status == ReservaGaragem.Status.INDEFERIDA:
+        assunto, corpo, payload = _mensagem_reserva_indeferida(reservas)
+    else:
+        return None
+
+    mensagem = criar_mensagem_rascunho(
+        assunto=assunto,
+        corpo=corpo,
+        criada_por=usuario_responsavel,
+        payload_email=payload,
+    )
+    mensagem.usuarios_alvo.add(reserva.solicitante)
+    publicar_mensagem(mensagem, usuario=usuario_responsavel)
+    return mensagem
+
+
+@transaction.atomic
+def deferir_reserva(reserva: ReservaGaragem, *, fiscal):
+    """Aplica a análise positiva à série inteira e cria a notificação correspondente."""
+
+    reservas = list(_serie_queryset(reserva).select_for_update())
+    if not reservas:
+        raise ValidationError("Reserva não encontrada.")
+    for ocorrencia in reservas:
+        if ocorrencia.status != ReservaGaragem.Status.AGUARDANDO_APROVACAO:
+            raise ValidationError("Somente solicitações aguardando aprovação podem ser deferidas.")
+        conflito_vaga = ReservaGaragem.objects.filter(
+            vaga=ocorrencia.vaga,
+            data=ocorrencia.data,
+            status=ReservaGaragem.Status.DEFERIDA,
+        ).exclude(pk=ocorrencia.pk)
+        if conflito_vaga.exists():
+            raise ValidationError("A vaga selecionada já possui reserva deferida em intervalo conflitante.")
+        conflito_placa = ReservaGaragem.objects.filter(
+            placa_veiculo__iexact=ocorrencia.placa_veiculo,
+            data=ocorrencia.data,
+        ).exclude(pk=ocorrencia.pk).exclude(status=ReservaGaragem.Status.CANCELADA)
+        if conflito_placa.exists():
+            raise ValidationError("A placa informada já possui reserva conflitante em uma das datas.")
+        conflito_solicitante = ReservaGaragem.objects.filter(
+            solicitante=ocorrencia.solicitante,
+            data=ocorrencia.data,
+        ).exclude(pk=ocorrencia.pk).exclude(status=ReservaGaragem.Status.CANCELADA)
+        if conflito_solicitante.exists():
+            raise ValidationError("O solicitante já possui reserva conflitante em uma das datas.")
+
+    for ocorrencia in reservas:
+        ocorrencia.status = ReservaGaragem.Status.DEFERIDA
+        ocorrencia.fiscal_responsavel = fiscal
+        ocorrencia.justificativa_indeferimento = ""
+        ocorrencia.save(update_fields=["status", "fiscal_responsavel", "justificativa_indeferimento", "atualizado_em"])
+        registrar_evento(
+            ocorrencia,
+            ReservaGaragemEvento.Acao.DEFERIMENTO,
+            usuario=fiscal,
+            payload={"data": ocorrencia.data.isoformat(), "vaga_id": ocorrencia.vaga_id},
+        )
+    queryset = ReservaGaragem.objects.filter(pk__in=[oc.pk for oc in reservas]).order_by("data", "id")
+    notificar_solicitante(queryset, usuario_responsavel=fiscal)
+    return queryset
+
+
+@transaction.atomic
+def indeferir_reserva(reserva: ReservaGaragem, *, fiscal, justificativa):
+    """Aplica a análise negativa à série inteira e notifica o solicitante."""
+
+    reservas = list(_serie_queryset(reserva).select_for_update())
+    if not reservas:
+        raise ValidationError("Reserva não encontrada.")
+    justificativa = justificativa.strip()
+    for ocorrencia in reservas:
+        if ocorrencia.status != ReservaGaragem.Status.AGUARDANDO_APROVACAO:
+            raise ValidationError("Somente solicitações aguardando aprovação podem ser indeferidas.")
+    for ocorrencia in reservas:
+        ocorrencia.status = ReservaGaragem.Status.INDEFERIDA
+        ocorrencia.fiscal_responsavel = fiscal
+        ocorrencia.justificativa_indeferimento = justificativa
+        ocorrencia.save(update_fields=["status", "fiscal_responsavel", "justificativa_indeferimento", "atualizado_em"])
+        registrar_evento(
+            ocorrencia,
+            ReservaGaragemEvento.Acao.INDEFERIMENTO,
+            usuario=fiscal,
+            payload={"data": ocorrencia.data.isoformat(), "justificativa": justificativa},
+        )
+    queryset = ReservaGaragem.objects.filter(pk__in=[oc.pk for oc in reservas]).order_by("data", "id")
+    notificar_solicitante(queryset, usuario_responsavel=fiscal)
+    return queryset
+
+
+@transaction.atomic
+def cancelar_reserva(reserva: ReservaGaragem, *, usuario):
+    """Permite o cancelamento apenas enquanto a série estiver pendente."""
+
+    reservas = list(_serie_queryset(reserva).select_for_update())
+    if not reservas:
+        raise ValidationError("Reserva não encontrada.")
+    for ocorrencia in reservas:
+        if ocorrencia.status != ReservaGaragem.Status.AGUARDANDO_APROVACAO:
+            raise ValidationError("Somente solicitações aguardando aprovação podem ser canceladas.")
+    for ocorrencia in reservas:
+        ocorrencia.status = ReservaGaragem.Status.CANCELADA
+        ocorrencia.save(update_fields=["status", "atualizado_em"])
+        registrar_evento(ocorrencia, ReservaGaragemEvento.Acao.CANCELAMENTO, usuario=usuario)
+    return reservas
+
+
+def reserva_garagem_dashboard_context():
+    """Produz os indicadores consolidados do dashboard do módulo."""
+
+    base = ReservaGaragem.objects.select_related("solicitante", "solicitante__perfil", "vaga")
+    hoje = timezone.localdate()
+    inicio_mes = hoje.replace(day=1)
+    fim_mes = (inicio_mes + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    ativas = VagaGaragem.objects.filter(ativo=True).count()
+    reservas_mes = base.filter(data__range=(inicio_mes, fim_mes))
+    deferidas_mes = reservas_mes.filter(status=ReservaGaragem.Status.DEFERIDA)
+    dias_mes = (fim_mes - inicio_mes).days + 1
+    ocupacao_por_dia = []
+    for offset in range(dias_mes):
+        dia = inicio_mes + timedelta(days=offset)
+        ocupadas = deferidas_mes.filter(data=dia).values("vaga_id").distinct().count()
+        percentual = round((ocupadas / ativas) * 100, 2) if ativas else 0
+        ocupacao_por_dia.append({"data": dia, "ocupadas": ocupadas, "percentual": percentual})
+    media_ocupacao = round(sum(item["percentual"] for item in ocupacao_por_dia) / dias_mes, 2) if dias_mes else 0
+
+    vagas_top = (
+        deferidas_mes.values("vaga__nome", "vaga__localizacao")
+        .annotate(total=Count("id"))
+        .order_by("-total", "vaga__nome")
+    )[:10]
+    reservas_por_mes = (
+        base.annotate(mes_ref=TruncMonth("data"))
+        .values("mes_ref")
+        .annotate(total=Count("id"))
+        .order_by("mes_ref")
+    )
+
+    return {
+        "total_reservas_mes": reservas_mes.count(),
+        "reservas_deferidas_mes": deferidas_mes.count(),
+        "percentual_medio_ocupacao": media_ocupacao,
+        "mes_referencia": hoje.strftime("%m/%Y"),
+        "ocupacao_por_dia": ocupacao_por_dia,
+        "grafico_ocupacao_media": {
+            "labels": [item["data"].strftime("%d/%m") for item in ocupacao_por_dia],
+            "values": [item["percentual"] for item in ocupacao_por_dia],
+        },
+        "grafico_vagas_top": {
+            "labels": [
+                f"{item['vaga__nome']}" + (f" - {item['vaga__localizacao']}" if item["vaga__localizacao"] else "")
+                for item in vagas_top
+            ],
+            "values": [item["total"] for item in vagas_top],
+        },
+        "grafico_reservas_meses": {
+            "labels": [item["mes_ref"].strftime("%m/%Y") for item in reservas_por_mes if item["mes_ref"]],
+            "values": [item["total"] for item in reservas_por_mes if item["mes_ref"]],
+        },
+    }

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 17/06/2026 -->
+<!-- Confirma a exclusão administrativa de uma vaga de garagem. -->
+
+{% block title %}Excluir vaga{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_garagem/css/reserva_garagem.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Excluir vaga</h1>
+    <p>O histórico vinculado à vaga também será removido.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-confirm-card">
+    <p>Tem certeza que deseja excluir <strong>{{ object.nome_exibicao }}</strong>?</p>
+    <form method="post" class="d-flex gap-2 flex-wrap">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Excluir vaga</button>
+      <a class="btn btn-light" href="{% url 'reserva_garagem:vaga_list' %}">Cancelar</a>
+    </form>
+  </section>
+{% endblock %}

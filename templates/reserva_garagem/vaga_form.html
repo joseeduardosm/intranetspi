@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 17/06/2026 -->
+<!-- Formulário administrativo para cadastro e edição das vagas da garagem. -->
+
+{% block title %}{% if object %}Editar vaga{% else %}Nova vaga{% endif %}{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_garagem/css/reserva_garagem.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{% if object %}Editar vaga{% else %}Nova vaga{% endif %}</h1>
+    <p>Cadastre a vaga que poderá ser escolhida pelos solicitantes no calendário.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <form method="post" class="row g-4">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="col-lg-5">
+        <label class="form-label" for="{{ form.nome.id_for_label }}">Nome</label>
+        {{ form.nome }}
+        {{ form.nome.errors }}
+      </div>
+      <div class="col-lg-5">
+        <label class="form-label" for="{{ form.localizacao.id_for_label }}">Localização</label>
+        {{ form.localizacao }}
+        {{ form.localizacao.errors }}
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label" for="{{ form.cor.id_for_label }}">Cor</label>
+        {{ form.cor }}
+        {{ form.cor.errors }}
+      </div>
+      <div class="col-12">
+        <div class="form-check form-switch">
+          {{ form.ativo }}
+          <label class="form-check-label" for="{{ form.ativo.id_for_label }}">Vaga ativa</label>
+        </div>
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Salvar</button>
+        <a class="btn btn-light" href="{% url 'reserva_garagem:vaga_list' %}">Cancelar</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

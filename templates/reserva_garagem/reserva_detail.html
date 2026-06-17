@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 17/06/2026 -->
+<!-- Detalhe completo da reserva de garagem e sua trilha de auditoria. -->
+
+{% block title %}Reserva #{{ reserva.pk }}{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_garagem/css/reserva_garagem.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div>
+      <h1>Reserva #{{ reserva.pk }}</h1>
+      <p>{{ reserva.get_status_display }} • {{ reserva.data|date:"d/m/Y" }} • {{ reserva.vaga.nome_exibicao }}</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      {% if pode_editar %}
+        <a class="btn btn-primary" href="{% url 'reserva_garagem:reserva_update' reserva.pk %}">Editar</a>
+        <a class="btn btn-outline-danger" href="{% url 'reserva_garagem:reserva_cancel' reserva.pk %}">Cancelar</a>
+      {% endif %}
+      {% if pode_analisar %}
+        <a class="btn btn-dark" href="{% url 'reserva_garagem:fila_fiscal_analise' reserva.pk %}">Analisar</a>
+      {% endif %}
+      <a class="btn btn-light" href="{% url 'reserva_garagem:reserva_list' %}">Voltar</a>
+    </div>
+  </div>
+
+  <section class="reserva-espacos-dashboard-grid">
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Status</small>
+      <strong>{{ reserva.get_status_display }}</strong>
+      <span>Solicitada em {{ reserva.criado_em|date:"d/m/Y H:i" }}</span>
+    </article>
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Série</small>
+      <strong>{% if serie_count %}{{ serie_count }} ocorrência(s){% else %}Avulsa{% endif %}</strong>
+      <span>{{ reserva.serie_descricao }}</span>
+    </article>
+  </section>
+
+  <section class="reserva-espacos-surface reserva-espacos-detail-card">
+    <p><strong>Solicitante:</strong> {{ solicitante_payload.nome|default:reserva.solicitante.username }}</p>
+    <p><strong>Responsável textual:</strong> {{ reserva.responsavel }}</p>
+    <p><strong>Vaga:</strong> {{ reserva.vaga.nome_exibicao }}</p>
+    <p><strong>Data:</strong> {{ reserva.data|date:"d/m/Y" }}</p>
+    <p><strong>Marca:</strong> {{ reserva.marca_veiculo }}</p>
+    <p><strong>Modelo:</strong> {{ reserva.modelo_veiculo }}</p>
+    <p><strong>Cor:</strong> {{ reserva.cor_veiculo }}</p>
+    <p><strong>Placa:</strong> {{ reserva.placa_veiculo }}</p>
+    <p><strong>Observações:</strong> {{ reserva.observacoes|default:"Sem observações."|linebreaksbr }}</p>
+    <hr>
+    <p><strong>Fiscal responsável:</strong> {{ fiscal_payload.nome|default:"-" }}</p>
+    {% if reserva.justificativa_indeferimento %}
+      <p><strong>Justificativa do indeferimento:</strong> {{ reserva.justificativa_indeferimento|linebreaksbr }}</p>
+    {% endif %}
+  </section>
+
+  <section class="reserva-espacos-surface mt-4">
+    <h2>Histórico da reserva</h2>
+    <div class="reserva-garagem-history-list">
+      {% for evento in reserva.eventos.all %}
+        <article class="reserva-garagem-history-item">
+          <strong>{{ evento.get_acao_display }}</strong>
+          <span>{{ evento.criado_em|date:"d/m/Y H:i" }}</span>
+          <p>{{ evento.usuario|default:"Sistema" }}</p>
+        </article>
+      {% empty %}
+        <p class="text-muted mb-0">Nenhum evento registrado.</p>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

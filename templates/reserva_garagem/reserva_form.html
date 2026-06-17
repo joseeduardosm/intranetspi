@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 17/06/2026 -->
+<!-- Formulário do solicitante para abrir ou editar reservas de vaga. -->
+
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_garagem/css/reserva_garagem.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{{ titulo }}</h1>
+    <p>Informe a vaga, o intervalo de dias e os dados do veículo que ocupará a garagem.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <form method="post" class="row g-4">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="col-12"><div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div></div>
+      {% endif %}
+      {% if object and serie_count %}
+        <div class="col-12">
+          <div class="alert alert-info mb-0">
+            Esta reserva faz parte de uma série com {{ serie_count }} ocorrência(s).
+          </div>
+        </div>
+      {% endif %}
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.vaga.id_for_label }}">Vaga</label>
+        {{ form.vaga }}
+        {{ form.vaga.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.data_inicial.id_for_label }}">Data inicial</label>
+        {{ form.data_inicial }}
+        {{ form.data_inicial.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.data_final.id_for_label }}">Data final</label>
+        {{ form.data_final }}
+        {{ form.data_final.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.recorrencia.id_for_label }}">Recorrência</label>
+        {{ form.recorrencia }}
+        <div class="form-text">Use dias úteis para pular sábados e domingos do intervalo.</div>
+        {{ form.recorrencia.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.marca_veiculo.id_for_label }}">Marca</label>
+        {{ form.marca_veiculo }}
+        {{ form.marca_veiculo.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.modelo_veiculo.id_for_label }}">Modelo</label>
+        {{ form.modelo_veiculo }}
+        {{ form.modelo_veiculo.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.cor_veiculo.id_for_label }}">Cor</label>
+        {{ form.cor_veiculo }}
+        {{ form.cor_veiculo.errors }}
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="{{ form.placa_veiculo.id_for_label }}">Placa</label>
+        {{ form.placa_veiculo }}
+        {{ form.placa_veiculo.errors }}
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="{{ form.observacoes.id_for_label }}">Observações</label>
+        {{ form.observacoes }}
+        {{ form.observacoes.errors }}
+      </div>
+      {% if object and serie_count %}
+        <div class="col-12">
+          <label class="form-label d-block">Escopo da alteração</label>
+          <div class="d-flex gap-4 flex-wrap">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="apply_scope" id="apply-scope-single" value="single" checked>
+              <label class="form-check-label" for="apply-scope-single">Somente esta ocorrência</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="apply_scope" id="apply-scope-all" value="all">
+              <label class="form-check-label" for="apply-scope-all">Aplicar em toda a série</label>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Salvar</button>
+        <a class="btn btn-light" href="{% if object %}{% url 'reserva_garagem:reserva_detail' object.pk %}{% else %}{% url 'reserva_garagem:reserva_list' %}{% endif %}">Cancelar</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

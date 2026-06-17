@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     'navbar',
     'noticias',
     'reserva_carros',
+    'reserva_garagem',
     'regulariza_sgi',
     'reserva_espacos',
     'setores',

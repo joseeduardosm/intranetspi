@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 17/06/2026 -->
+<!-- Dashboard de ocupação média e uso das vagas da garagem. -->
+
+{% block title %}Dashboard da reserva de garagem{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_garagem/css/reserva_garagem.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div>
+      <h1>Dashboard da reserva de garagem</h1>
+      <p>Painel gerencial da ocupação média da garagem no mês de {{ mes_referencia }}.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-light" href="{% url 'reserva_garagem:agenda' %}">Calendário</a>
+      <a class="btn btn-light" href="{% url 'reserva_garagem:reserva_list' %}">Reservas</a>
+    </div>
+  </div>
+
+  <section class="reserva-espacos-dashboard-grid">
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Total de reservas no mês</small>
+      <strong>{{ total_reservas_mes }}</strong>
+      <span>Inclui pendentes, deferidas, indeferidas e canceladas.</span>
+    </article>
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Reservas deferidas no mês</small>
+      <strong>{{ reservas_deferidas_mes }}</strong>
+      <span>São as ocorrências que efetivamente ocuparam vagas.</span>
+    </article>
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Taxa média diária de ocupação</small>
+      <strong>{{ percentual_medio_ocupacao }}%</strong>
+      <span>Percentual médio de vagas ativas ocupadas por dia.</span>
+    </article>
+  </section>
+
+  <section class="reserva-espacos-chart-grid">
+    <article class="reserva-espacos-surface">
+      <h2>Ocupação diária do mês</h2>
+      <div id="chart-ocupacao" class="reserva-espacos-chart"></div>
+    </article>
+    <article class="reserva-espacos-surface">
+      <h2>Ranking das vagas mais usadas</h2>
+      <div id="chart-vagas" class="reserva-espacos-chart"></div>
+    </article>
+  </section>
+
+  <section class="reserva-espacos-surface mt-4">
+    <h2>Série mensal histórica de reservas</h2>
+    <div id="chart-historico" class="reserva-espacos-chart"></div>
+  </section>
+
+  {{ grafico_ocupacao_media|json_script:"grafico-ocupacao-media" }}
+  {{ grafico_vagas_top|json_script:"grafico-vagas-top" }}
+  {{ grafico_reservas_meses|json_script:"grafico-reservas-meses" }}
+
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script>
+    const ocupacao = JSON.parse(document.getElementById("grafico-ocupacao-media")?.textContent || "{}");
+    const vagasTop = JSON.parse(document.getElementById("grafico-vagas-top")?.textContent || "{}");
+    const historico = JSON.parse(document.getElementById("grafico-reservas-meses")?.textContent || "{}");
+
+    Plotly.newPlot("chart-ocupacao", [
+      {
+        x: ocupacao.labels || [],
+        y: ocupacao.values || [],
+        type: "scatter",
+        mode: "lines+markers",
+        line: { color: "#1f4b99", width: 3 },
+        marker: { size: 8 },
+        fill: "tozeroy",
+        fillcolor: "rgba(31, 75, 153, 0.12)",
+      }
+    ], {
+      margin: { l: 50, r: 10, t: 10, b: 40 },
+      paper_bgcolor: "#fff",
+      plot_bgcolor: "#fff",
+      yaxis: { title: "% ocupação", rangemode: "tozero" },
+    }, { responsive: true, displaylogo: false });
+
+    Plotly.newPlot("chart-vagas", [
+      {
+        x: vagasTop.values || [],
+        y: vagasTop.labels || [],
+        type: "bar",
+        orientation: "h",
+        marker: { color: "#0b6e4f" },
+      }
+    ], {
+      margin: { l: 180, r: 10, t: 10, b: 35 },
+      paper_bgcolor: "#fff",
+      plot_bgcolor: "#fff",
+      xaxis: { title: "Reservas deferidas", rangemode: "tozero" },
+      yaxis: { automargin: true },
+    }, { responsive: true, displaylogo: false });
+
+    Plotly.newPlot("chart-historico", [
+      {
+        x: historico.labels || [],
+        y: historico.values || [],
+        type: "bar",
+        marker: { color: "#a64b00" },
+      }
+    ], {
+      margin: { l: 40, r: 10, t: 10, b: 50 },
+      paper_bgcolor: "#fff",
+      plot_bgcolor: "#fff",
+      yaxis: { title: "Reservas", rangemode: "tozero" },
+    }, { responsive: true, displaylogo: false });
+  </script>
+{% endblock %}

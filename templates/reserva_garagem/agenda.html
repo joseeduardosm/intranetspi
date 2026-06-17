@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 17/06/2026 -->
+<!-- Calendário mensal all-day das reservas de garagem com filtro por vaga. -->
+
+{% block title %}Reserva de garagem{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_garagem/css/reserva_garagem.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div>
+      <h1>Reserva de garagem</h1>
+      <p>Agenda mensal das solicitações pendentes e deferidas para ocupação das vagas.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      {% if pode_solicitar_reserva %}
+        <a class="btn btn-primary" href="{% url 'reserva_garagem:reserva_create' %}">Nova reserva</a>
+      {% endif %}
+      <a class="btn btn-light" href="{% url 'reserva_garagem:reserva_list' %}">Reservas</a>
+      <a class="btn btn-light" href="{% url 'reserva_garagem:dashboard' %}">Dashboard</a>
+      {% if pode_analisar_reservas %}
+        <a class="btn btn-outline-secondary" href="{% url 'reserva_garagem:fila_fiscal' %}">Fila fiscal</a>
+      {% endif %}
+      {% if pode_gerenciar_base %}
+        <a class="btn btn-outline-secondary" href="{% url 'reserva_garagem:vaga_list' %}">Vagas</a>
+        <a class="btn btn-outline-secondary" href="{% url 'reserva_garagem:configuracao' %}">Configuração</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <section class="reserva-espacos-surface">
+    <div class="reserva-garagem-toolbar">
+      <div class="reserva-garagem-filter">
+        <label class="form-label" for="calendar-vaga-filter">Filtro por vaga</label>
+        <select id="calendar-vaga-filter" class="form-select form-select-lg">
+          <option value="all">Todas as vagas</option>
+          {% for vaga in vagas %}
+            <option value="{{ vaga.pk }}"{% if vaga_atual == vaga.pk|stringformat:"s" %} selected{% endif %}>{{ vaga.nome_exibicao }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="reserva-garagem-nav">
+        <button class="btn btn-light" type="button" id="calendar-prev">‹</button>
+        <button class="btn btn-light" type="button" id="calendar-today">Hoje</button>
+        <div class="reserva-garagem-title" id="calendar-title"></div>
+        <button class="btn btn-light" type="button" id="calendar-next">›</button>
+      </div>
+    </div>
+    <div class="reserva-garagem-weekdays" id="calendar-weekdays"></div>
+    <div class="reserva-garagem-grid" id="calendar-grid"></div>
+  </section>
+
+  {{ reservas_data|json_script:"reservas-data" }}
+
+  <script>
+    const locale = "pt-BR";
+    const reservas = JSON.parse(document.getElementById("reservas-data")?.textContent || "[]");
+    const filtroVaga = document.getElementById("calendar-vaga-filter");
+    const titleEl = document.getElementById("calendar-title");
+    const weekdaysEl = document.getElementById("calendar-weekdays");
+    const gridEl = document.getElementById("calendar-grid");
+    const today = new Date();
+    let currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    const cloneDate = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const pad = (value) => String(value).padStart(2, "0");
+    const dateKey = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    const startOfWeek = (date) => {
+      const copy = cloneDate(date);
+      copy.setDate(copy.getDate() - copy.getDay());
+      return copy;
+    };
+    const endOfWeek = (date) => {
+      const copy = cloneDate(date);
+      copy.setDate(copy.getDate() + (6 - copy.getDay()));
+      return copy;
+    };
+    const escapeHtml = (value) => String(value || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+
+    const reservasFiltradas = () => reservas.filter((item) => filtroVaga.value === "all" || String(item.vaga_id) === String(filtroVaga.value));
+
+    const reservasPorDia = () => {
+      const grouped = {};
+      reservasFiltradas().forEach((item) => {
+        const key = item.inicio;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(item);
+      });
+      return grouped;
+    };
+
+    const updateQueryString = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (filtroVaga.value === "all") {
+        params.delete("vaga");
+      } else {
+        params.set("vaga", filtroVaga.value);
+      }
+      const query = params.toString();
+      window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    };
+
+    const buildTooltip = (item) => `
+      <strong>${escapeHtml(item.vaga_nome)}</strong><br>
+      Solicitante: ${escapeHtml(item.solicitante_nome || "-")}<br>
+      Placa: ${escapeHtml(item.placa || "-")}<br>
+      Veículo: ${escapeHtml(item.veiculo || "-")}<br>
+      Status: ${escapeHtml(item.status_label || "-")}<br>
+      Observações: ${escapeHtml(item.observacoes || "-")}
+    `;
+
+    const render = () => {
+      titleEl.textContent = currentMonth.toLocaleDateString(locale, { month: "long", year: "numeric" });
+      weekdaysEl.innerHTML = "";
+      gridEl.innerHTML = "";
+      ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].forEach((label) => {
+        const el = document.createElement("div");
+        el.className = "reserva-garagem-weekday";
+        el.textContent = label;
+        weekdaysEl.appendChild(el);
+      });
+
+      const first = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+      const last = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+      const start = startOfWeek(first);
+      const end = endOfWeek(last);
+      const grouped = reservasPorDia();
+
+      for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+        const key = dateKey(cursor);
+        const isCurrentMonth = cursor.getMonth() === currentMonth.getMonth();
+        const isToday = key === dateKey(today);
+        const cell = document.createElement("article");
+        cell.className = `reserva-garagem-day${isCurrentMonth ? "" : " is-muted"}${isToday ? " is-today" : ""}`;
+        const reservasDia = grouped[key] || [];
+
+        let createUrl = "{% url 'reserva_garagem:reserva_create' %}?data=" + key;
+        if (filtroVaga.value !== "all") {
+          createUrl += "&vaga=" + filtroVaga.value;
+        }
+
+        cell.innerHTML = `
+          <div class="reserva-garagem-day-head">
+            <span>${cursor.getDate()}</span>
+            {% if pode_solicitar_reserva %}
+              <a class="reserva-garagem-add" href="${createUrl}" aria-label="Criar reserva para ${key}">+</a>
+            {% endif %}
+          </div>
+          <div class="reserva-garagem-day-events"></div>
+        `;
+
+        const eventsContainer = cell.querySelector(".reserva-garagem-day-events");
+        reservasDia.forEach((item) => {
+          const anchor = document.createElement("a");
+          anchor.href = item.url;
+          anchor.className = "reserva-garagem-event";
+          anchor.style.background = item.cor || "#1f4b99";
+          anchor.innerHTML = `
+            <span class="reserva-garagem-event-title">${escapeHtml(item.vaga_nome)}</span>
+            <small>${escapeHtml(item.placa || "-")} • ${escapeHtml(item.status_label || "-")}</small>
+            <span class="reserva-garagem-tooltip">${buildTooltip(item)}</span>
+          `;
+          eventsContainer.appendChild(anchor);
+        });
+
+        gridEl.appendChild(cell);
+      }
+    };
+
+    document.getElementById("calendar-prev").addEventListener("click", () => {
+      currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+      render();
+    });
+    document.getElementById("calendar-next").addEventListener("click", () => {
+      currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+      render();
+    });
+    document.getElementById("calendar-today").addEventListener("click", () => {
+      currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      render();
+    });
+    filtroVaga.addEventListener("change", () => {
+      updateQueryString();
+      render();
+    });
+
+    render();
+  </script>
+{% endblock %}

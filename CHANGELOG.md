@@ -2,6 +2,44 @@
 
 Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
+## [0.3.7] - 2026-06-17
+- Criado e integrado o novo módulo `reserva_garagem` com ACL própria, URL base `/reserva-garagem/`, migração inicial e cadastro automático como recurso protegível.
+- Estruturado o domínio operacional da garagem:
+  - cadastro administrativo de `Vagas de garagem` com nome, localização, cor e status ativo;
+  - configuração singleton para o `grupo_fiscais`;
+  - reservas materializadas por dia com série, status fiscal, dados completos do veículo, auditoria e justificativa de indeferimento.
+- Implementado o fluxo híbrido entre `reserva_espacos` e `reserva_carros`:
+  - formulário do solicitante sem horário, com `data inicial`, `data final`, recorrência diária corrida e recorrência em dias úteis;
+  - permissão de reservas aos finais de semana, exceto quando a recorrência escolhida filtra apenas dias úteis;
+  - edição e cancelamento da série inteira apenas enquanto a reserva permanecer pendente.
+- Aplicadas as regras de conflito definidas para a garagem:
+  - vaga só bloqueia quando existir reserva `DEFERIDA` na mesma data;
+  - reservas `AGUARDANDO_APROVAÇÃO` podem coexistir até a análise;
+  - bloqueio por mesma `placa` na mesma data;
+  - bloqueio por mesmo `solicitante` na mesma data.
+- Implementada a fila fiscal em bloco:
+  - deferimento e indeferimento da série inteira;
+  - justificativa obrigatória no indeferimento;
+  - fiscal não remaneja vaga, apenas decide;
+  - gravação de eventos de criação, edição, cancelamento, deferimento e indeferimento.
+- Integrada a mensageria assíncrona do portal ao novo módulo:
+  - notificação ao solicitante após deferimento;
+  - notificação ao solicitante após indeferimento;
+  - payload específico com vaga, placa, série e intervalo de datas.
+- Criadas as interfaces principais do app:
+  - agenda mensal all-day com pendentes em cinza e deferidas na cor da vaga;
+  - listagem de reservas, detalhe, criação, edição e cancelamento;
+  - fila fiscal e tela de análise;
+  - dashboard com taxa média diária de ocupação, ranking das vagas mais usadas e série histórica mensal;
+  - CRUD de vagas e tela de configuração administrativa;
+  - CSS isolado do módulo em `static/reserva_garagem/css/reserva_garagem.css`.
+- Ajustada a consolidação analítica para PostgreSQL usando `TruncMonth`, evitando dependência de SQL específico de SQLite no dashboard do novo módulo.
+- Validada a entrega com:
+  - `./.venv/bin/python manage.py makemigrations reserva_garagem`
+  - `./.venv/bin/python manage.py migrate`
+  - `./.venv/bin/python manage.py check`
+  - `./.venv/bin/python manage.py test reserva_garagem`
+
 ## [0.3.6] - 2026-06-16
 - Consolidado o novo fluxo operacional do módulo `contratos` diretamente no app principal, substituindo a estrutura paralela anterior e preservando o histórico legado em `contratos_old`.
 - Reestruturado o fluxo das competências:

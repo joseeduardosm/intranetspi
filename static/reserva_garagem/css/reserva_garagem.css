@@ -1,0 +1,203 @@
+/* Criado por OpenAI Codex em 17/06/2026 */
+/* Isola os ajustes visuais do módulo de garagem e reaproveita a base do app de espaços. */
+
+@import url("/static/reserva_espacos/css/reserva_espacos.css");
+@import url("/static/mensageria_assincrona/css/mensageria.css");
+
+.reserva-garagem-status.status-aguardando_aprovacao {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.reserva-garagem-status.status-deferida {
+  background: #ecfdf5;
+  color: #166534;
+}
+
+.reserva-garagem-status.status-indeferida {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.reserva-garagem-status.status-cancelada {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.reserva-garagem-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: .8rem;
+}
+
+.reserva-garagem-history-item {
+  border-left: 3px solid rgba(31, 75, 153, .25);
+  padding-left: .9rem;
+}
+
+.reserva-garagem-history-item span,
+.reserva-garagem-history-item p {
+  display: block;
+  margin: 0;
+  color: #64748b;
+}
+
+.reserva-garagem-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.reserva-garagem-filter {
+  min-width: 260px;
+}
+
+.reserva-garagem-nav {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+
+.reserva-garagem-title {
+  min-width: 170px;
+  text-align: center;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.reserva-garagem-weekdays,
+.reserva-garagem-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.reserva-garagem-weekdays {
+  margin-bottom: .75rem;
+}
+
+.reserva-garagem-weekday {
+  text-align: center;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.reserva-garagem-day {
+  min-height: 145px;
+  padding: .85rem;
+  border-radius: 1rem;
+  border: 1px solid #dbe4f0;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
+
+.reserva-garagem-day.is-muted {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.reserva-garagem-day.is-today {
+  border-color: #1f4b99;
+  box-shadow: 0 0 0 2px rgba(31, 75, 153, .08);
+}
+
+.reserva-garagem-day-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  font-weight: 700;
+}
+
+.reserva-garagem-add {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 1rem;
+}
+
+.reserva-garagem-day-events {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+}
+
+.reserva-garagem-event {
+  position: relative;
+  color: #fff;
+  border-radius: .9rem;
+  padding: .55rem .65rem;
+  text-decoration: none;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .10);
+}
+
+.reserva-garagem-event:hover .reserva-garagem-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.reserva-garagem-event-title {
+  display: block;
+  font-weight: 700;
+}
+
+.reserva-garagem-event small {
+  display: block;
+  color: rgba(255, 255, 255, .88);
+}
+
+.reserva-garagem-tooltip {
+  position: absolute;
+  left: 0;
+  top: calc(100% + .45rem);
+  z-index: 8;
+  min-width: 230px;
+  max-width: 320px;
+  background: #0f172a;
+  color: #fff;
+  border-radius: .9rem;
+  padding: .8rem .95rem;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, .2);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.reserva-garagem-color-swatch {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, .12);
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: .35rem;
+}
+
+@media (max-width: 991px) {
+  .reserva-garagem-weekdays,
+  .reserva-garagem-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reserva-garagem-weekdays {
+    display: none;
+  }
+
+  .reserva-garagem-day {
+    min-height: unset;
+  }
+}

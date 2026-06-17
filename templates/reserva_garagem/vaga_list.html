@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 17/06/2026 -->
+<!-- Lista administrativa das vagas de garagem cadastradas no sistema. -->
+
+{% block title %}Vagas de garagem{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_garagem/css/reserva_garagem.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div>
+      <h1>Vagas de garagem</h1>
+      <p>Gerencie as vagas disponíveis para reserva no módulo.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary" href="{% url 'reserva_garagem:vaga_create' %}">Nova vaga</a>
+      <a class="btn btn-light" href="{% url 'reserva_garagem:agenda' %}">Voltar ao calendário</a>
+    </div>
+  </div>
+
+  <section class="reserva-espacos-surface">
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>Vaga</th>
+            <th>Localização</th>
+            <th>Cor</th>
+            <th>Status</th>
+            <th class="text-end">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for vaga in vagas %}
+            <tr>
+              <td><strong>{{ vaga.nome }}</strong></td>
+              <td>{{ vaga.localizacao|default:"-" }}</td>
+              <td><span class="reserva-garagem-color-swatch" style="background: {{ vaga.cor }};"></span> {{ vaga.cor }}</td>
+              <td>{% if vaga.ativo %}<span class="badge text-bg-success">Ativa</span>{% else %}<span class="badge text-bg-secondary">Inativa</span>{% endif %}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'reserva_garagem:vaga_update' vaga.pk %}">Editar</a>
+                <a class="btn btn-sm btn-outline-danger" href="{% url 'reserva_garagem:vaga_delete' vaga.pk %}">Excluir</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-center text-muted py-4">Nenhuma vaga cadastrada.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}
