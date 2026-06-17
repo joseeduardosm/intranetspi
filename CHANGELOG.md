@@ -34,6 +34,7 @@ Todas as mudanças importantes deste projeto são documentadas neste arquivo.
   - CRUD de vagas e tela de configuração administrativa;
   - CSS isolado do módulo em `static/reserva_garagem/css/reserva_garagem.css`.
 - Ajustada a consolidação analítica para PostgreSQL usando `TruncMonth`, evitando dependência de SQL específico de SQLite no dashboard do novo módulo.
+- Restaurado na tela de preenchimento de `Avaliação` do módulo `contratos` o layout anterior em cards por item, mantendo o novo layout apenas na versão exportada em PDF.
 - Validada a entrega com:
   - `./.venv/bin/python manage.py makemigrations reserva_garagem`
   - `./.venv/bin/python manage.py migrate`

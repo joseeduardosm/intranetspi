@@ -44,7 +44,6 @@
                       {% for error in nota_fiscal_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                       {% item_audit_footer resposta 'nota_fiscal' as nota_fiscal_footer %}
                       {% if nota_fiscal_footer %}
-                        <!-- O log da nota fica sempre visível quando houver histórico, independentemente do valor lançado. -->
                         <div class="form-text contratos-audit-footer">{{ nota_fiscal_footer }}</div>
                       {% endif %}
                     </div>
@@ -66,7 +65,6 @@
                       {% for error in nota_gestor_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                       {% item_audit_footer resposta 'nota_gestor' as nota_gestor_footer %}
                       {% if nota_gestor_footer %}
-                        <!-- O log da nota do gestor também precisa aparecer mesmo quando a nota não exige texto complementar. -->
                         <div class="form-text contratos-audit-footer">{{ nota_gestor_footer }}</div>
                       {% endif %}
                     </div>
