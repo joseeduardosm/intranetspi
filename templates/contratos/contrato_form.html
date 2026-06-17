@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
+<!-- Objetivo: Reaproveitar um formulário estável e objetivo para o cadastro inicial do Contratos V2. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dataInicioField = document.querySelector('input[name="data_inicio_vigencia"]');
+    const numeroContratoField = document.querySelector('input[name="numero_contrato"]');
+    
+    if (dataInicioField && numeroContratoField && !numeroContratoField.value) {
+        dataInicioField.addEventListener('change', function() {
+            const dataVal = this.value;
+            if (dataVal) {
+                const year = dataVal.split('-')[0];
+                if (year.length === 4) {
+                    fetch(`/contratos/proximo-numero/?ano=${year}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.numero && !numeroContratoField.value) {
+                                numeroContratoField.value = data.numero;
+                            }
+                        });
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
+
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{{ titulo }}</h1>
+  </div>
+  <div class="card border-0 shadow-sm contratos-form-card">
+    <div class="card-body p-4">
+      <form method="post">
+        {% csrf_token %}
+        {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.empresa_contratada.id_for_label }}">{{ form.empresa_contratada.label }}</label>
+          <div class="input-group">
+            {{ form.empresa_contratada }}
+            <a href="{% url 'contratos:empresa_create' %}" target="_blank" class="btn btn-outline-secondary d-flex align-items-center" title="Cadastrar nova empresa" style="border-radius: 0 0.375rem 0.375rem 0;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
+              </svg>
+            </a>
+          </div>
+          {% if form.empresa_contratada.help_text %}<div class="form-text">{{ form.empresa_contratada.help_text }}</div>{% endif %}
+          {% for error in form.empresa_contratada.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+        {% for field in form.visible_fields %}
+          {% if field.name == 'numero_contrato_incremental' or field.name == 'empresa_contratada' %}
+          {% elif field.name == 'numero_contrato' %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              <div class="contratos-numero-grid">
+                <div>
+                  {{ field }}
+                  {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                  {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="contratos-numero-auto-box">
+                  <div class="form-check mb-0">
+                    {{ form.numero_contrato_incremental }}
+                    <label class="form-check-label" for="{{ form.numero_contrato_incremental.id_for_label }}">
+                      {{ form.numero_contrato_incremental.label }}
+                    </label>
+                  </div>
+                  {% if form.numero_contrato_incremental.help_text %}
+                    <div class="form-text mt-1">{{ form.numero_contrato_incremental.help_text }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          {% else %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+              {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+        <div class="d-flex gap-2 justify-content-end">
+          <a class="btn btn-light" href="{% url 'contratos:contrato_list' %}">Cancelar</a>
+          <button class="btn btn-primary" type="submit">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const checkbox = document.getElementById('id_numero_contrato_incremental');
+      const numeroInput = document.getElementById('id_numero_contrato');
+      if (!checkbox || !numeroInput) {
+        return;
+      }
+
+      const toggleNumeroField = () => {
+        const automatico = checkbox.checked;
+        numeroInput.readOnly = automatico;
+        if (automatico) {
+          numeroInput.setAttribute('placeholder', 'Será preenchido automaticamente ao salvar');
+        } else {
+          numeroInput.removeAttribute('placeholder');
+        }
+      };
+
+      checkbox.addEventListener('change', toggleNumeroField);
+      toggleNumeroField();
+    }());
+  </script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dataInicioField = document.querySelector('input[name="data_inicio_vigencia"]');
+    const numeroContratoField = document.querySelector('input[name="numero_contrato"]');
+    
+    if (dataInicioField && numeroContratoField && !numeroContratoField.value) {
+        dataInicioField.addEventListener('change', function() {
+            const dataVal = this.value;
+            if (dataVal) {
+                const year = dataVal.split('-')[0];
+                if (year.length === 4) {
+                    fetch(`/contratos/proximo-numero/?ano=${year}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.numero && !numeroContratoField.value) {
+                                numeroContratoField.value = data.numero;
+                            }
+                        });
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

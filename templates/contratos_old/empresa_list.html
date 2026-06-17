@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
+<!-- Objetivo: Listar empresas contratadas e seus responsáveis principais. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start">
+    <div>
+      <h1>Empresas contratadas</h1>
+      <p>Cadastro reutilizável das contratadas e de seus responsáveis.</p>
+    </div>
+    <a class="btn btn-primary btn-lg" href="{% url 'contratos:empresa_create' %}">Nova empresa</a>
+  </div>
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Razão social</th>
+            <th>CNPJ</th>
+            <th>Cidade/UF</th>
+            <th>Responsáveis</th>
+            <th class="text-end">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for empresa in empresas %}
+            <tr>
+              <td>{{ empresa.razao_social }}</td>
+              <td>{{ empresa.cnpj }}</td>
+              <td>{{ empresa.cidade }}{% if empresa.estado %}/{{ empresa.estado }}{% endif %}</td>
+              <td>
+                {% for responsavel in empresa.responsaveis.all %}
+                  <span class="badge text-bg-light border">{{ responsavel.nome }}</span>
+                {% empty %}
+                  <span class="text-muted">Sem responsáveis</span>
+                {% endfor %}
+              </td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos:responsavel_create' empresa.pk %}">Responsável</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos:empresa_update' empresa.pk %}">Editar</a>
+                <a class="btn btn-sm btn-outline-danger" href="{% url 'contratos:empresa_delete' empresa.pk %}">Excluir</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-muted">Nenhuma empresa cadastrada.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
+

@@ -2,14 +2,14 @@
 {% load static %}
 <!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
 <!-- Objetivo: Cadastrar e editar itens financeiros do contrato V2 com foco em cálculo automático. -->
-{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos_v2/css/contratos_v2.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
 
 {% block content %}
   <div class="spi-page-title">
     <h1>{{ titulo }}</h1>
     <p>{{ contrato.numero_contrato }} - {{ contrato.apelido }}</p>
   </div>
-  <div class="card border-0 shadow-sm contratos-v2-form-card">
+  <div class="card border-0 shadow-sm contratos-form-card">
     <div class="card-body p-4">
       <form method="post">
         {% csrf_token %}
@@ -24,7 +24,7 @@
         {% endfor %}
         {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
         <div class="d-flex gap-2 justify-content-end">
-          <a class="btn btn-light" href="{% url 'contratos_v2:contrato_detail' contrato.pk %}">Cancelar</a>
+          <a class="btn btn-light" href="{% url 'contratos:contrato_detail' contrato.pk %}">Cancelar</a>
           <button class="btn btn-primary" type="submit">Salvar item</button>
         </div>
       </form>

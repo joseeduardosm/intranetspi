@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% load static %}
+{% load contratos_extras %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
+<!-- Objetivo: Concluir o pagamento da competência anexando os documentos obrigatórios e registrando o valor final. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{{ titulo }}</h1>
+    <p>{{ contrato.numero_contrato }} • competência de {{ competencia.periodo_inicio|date:"d/m/Y" }} a {{ competencia.periodo_fim|date:"d/m/Y" }}</p>
+  </div>
+
+  <div class="card border-0 shadow-sm contratos-form-card">
+    <div class="card-body p-4">
+      <div class="contratos-payment-summary mb-4">
+        <div><span class="contratos-kicker">Valor medido</span><strong>R$ {{ competencia.valor_medido|brl }}</strong></div>
+        <div><span class="contratos-kicker">Valor sugerido</span><strong>R$ {{ competencia.valor_liberado_sugerido|brl }}</strong></div>
+        <div><span class="contratos-kicker">Retenções totais</span><strong id="retencoesTotaisResumo">R$ {{ competencia.total_retencoes|brl }}</strong></div>
+      </div>
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+        {% for field in form.visible_fields %}
+          {% if field.name == 'gestor_pagamento_em_exercicio' or field.name == 'coordenadora_em_exercicio' or field.name == 'diretora_em_exercicio' or field.name == 'subsecretario_em_exercicio' %}
+          {% elif field.name == 'gestor_pagamento' %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.gestor_pagamento.id_for_label }}">{{ form.gestor_pagamento.label }}</label>
+              <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-center">
+                <div class="flex-grow-1">{{ form.gestor_pagamento }}</div>
+                <div class="form-check mt-2 mt-lg-0">
+                  {{ form.gestor_pagamento_em_exercicio }}
+                  <label class="form-check-label" for="{{ form.gestor_pagamento_em_exercicio.id_for_label }}">Em exercício</label>
+                </div>
+              </div>
+              {% if form.gestor_pagamento.help_text %}<div class="form-text">{{ form.gestor_pagamento.help_text }}</div>{% endif %}
+              {% for error in form.gestor_pagamento.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+              {% for error in form.gestor_pagamento_em_exercicio.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          {% elif field.name == 'coordenadora_pagamento' %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.coordenadora_pagamento.id_for_label }}">{{ form.coordenadora_pagamento.label }}</label>
+              <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-center">
+                <div class="flex-grow-1">{{ form.coordenadora_pagamento }}</div>
+                <div class="form-check mt-2 mt-lg-0">
+                  {{ form.coordenadora_em_exercicio }}
+                  <label class="form-check-label" for="{{ form.coordenadora_em_exercicio.id_for_label }}">Em exercício</label>
+                </div>
+              </div>
+              {% for error in form.coordenadora_pagamento.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+              {% for error in form.coordenadora_em_exercicio.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          {% elif field.name == 'diretora_pagamento' %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.diretora_pagamento.id_for_label }}">{{ form.diretora_pagamento.label }}</label>
+              <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-center">
+                <div class="flex-grow-1">{{ form.diretora_pagamento }}</div>
+                <div class="form-check mt-2 mt-lg-0">
+                  {{ form.diretora_em_exercicio }}
+                  <label class="form-check-label" for="{{ form.diretora_em_exercicio.id_for_label }}">Em exercício</label>
+                </div>
+              </div>
+              {% for error in form.diretora_pagamento.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+              {% for error in form.diretora_em_exercicio.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          {% elif field.name == 'subsecretario_pagamento' %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.subsecretario_pagamento.id_for_label }}">{{ form.subsecretario_pagamento.label }}</label>
+              <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-center">
+                <div class="flex-grow-1">{{ form.subsecretario_pagamento }}</div>
+                <div class="form-check mt-2 mt-lg-0">
+                  {{ form.subsecretario_em_exercicio }}
+                  <label class="form-check-label" for="{{ form.subsecretario_em_exercicio.id_for_label }}">Em exercício</label>
+                </div>
+              </div>
+              {% for error in form.subsecretario_pagamento.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+              {% for error in form.subsecretario_em_exercicio.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          {% else %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.name == 'valor_liberado_final' %}
+                <div class="form-text">Este campo é bloqueado e recalculado automaticamente conforme o preenchimento das retenções.</div>
+              {% endif %}
+              {% if field.name == 'valor_nota_fiscal' %}
+                <div class="mt-2 d-flex flex-wrap gap-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="opcao_valor_nota" id="radioValorMedido" value="{{ competencia.valor_medido|stringformat:".2f" }}">
+                    <label class="form-check-label text-secondary small" for="radioValorMedido">
+                      Usar Valor Medido (R$ {{ competencia.valor_medido|brl }})
+                    </label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="opcao_valor_nota" id="radioValorSugerido" value="{{ competencia.valor_liberado_sugerido|stringformat:".2f" }}">
+                    <label class="form-check-label text-secondary small" for="radioValorSugerido">
+                      Usar Valor Sugerido (R$ {{ competencia.valor_liberado_sugerido|brl }})
+                    </label>
+                  </div>
+                </div>
+              {% endif %}
+              {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+              {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+        <div class="d-flex gap-2 justify-content-end">
+          <a class="btn btn-light" href="{% url 'contratos:contrato_detail' contrato.pk %}">Cancelar</a>
+          <button class="btn btn-primary" type="submit">Registrar pagamento</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const inputValorNota = document.getElementById('id_valor_nota_fiscal');
+      const inputValor = document.getElementById('id_valor_liberado_final');
+      const radioMedido = document.getElementById('radioValorMedido');
+      const radioSugerido = document.getElementById('radioValorSugerido');
+      const inputIr = document.getElementById('id_retencao_ir');
+      const inputInss = document.getElementById('id_retencao_inss');
+      const inputIss = document.getElementById('id_retencao_iss');
+      const inputPis = document.getElementById('id_retencao_pis_pasep');
+      const inputCofins = document.getElementById('id_retencao_cofins');
+      const resumoRetencoes = document.getElementById('retencoesTotaisResumo');
+
+      if (inputValorNota && inputValor && radioMedido && radioSugerido) {
+        function parseValorTela(valorString) {
+          const valorNormalizado = (valorString || '').trim();
+          if (!valorNormalizado) {
+            return 0;
+          }
+          // Aceita tanto "1234.56" quanto "1.234,56" sem distorcer a casa decimal.
+          if (valorNormalizado.includes(',') && valorNormalizado.includes('.')) {
+            return parseFloat(valorNormalizado.replace(/\./g, '').replace(',', '.')) || 0;
+          }
+          if (valorNormalizado.includes(',')) {
+            return parseFloat(valorNormalizado.replace(',', '.')) || 0;
+          }
+          return parseFloat(valorNormalizado) || 0;
+        }
+
+        function atualizarValorLiquido() {
+          const valorNota = parseValorTela(inputValorNota.value);
+          const totalRetencoes =
+            parseValorTela(inputIr?.value) +
+            parseValorTela(inputInss?.value) +
+            parseValorTela(inputIss?.value) +
+            parseValorTela(inputPis?.value) +
+            parseValorTela(inputCofins?.value);
+          const valorLiquido = Math.max(0, valorNota - totalRetencoes);
+          // Como o campo é number, mantemos ponto decimal para o navegador aceitar o valor.
+          inputValor.value = valorLiquido.toFixed(2);
+          if (resumoRetencoes) {
+            resumoRetencoes.textContent = `R$ ${totalRetencoes.toFixed(2).replace('.', ',')}`;
+          }
+        }
+
+        const valMedido = parseFloat(radioMedido.value) || 0;
+        const valSugerido = parseFloat(radioSugerido.value) || 0;
+
+        // Função para atualizar o check dos radios baseando-se no valor digitado/carregado
+        function sincronizarRadios() {
+          const valAtual = parseValorTela(inputValorNota.value);
+          if (Math.abs(valAtual - valMedido) < 0.005) {
+            radioMedido.checked = true;
+          } else if (Math.abs(valAtual - valSugerido) < 0.005) {
+            radioSugerido.checked = true;
+          } else {
+            radioMedido.checked = false;
+            radioSugerido.checked = false;
+          }
+        }
+
+        // Sincroniza inicialmente
+        sincronizarRadios();
+
+        // Escuta a seleção dos radios para preencher o input principal
+        radioMedido.addEventListener('change', function() {
+          if (this.checked) {
+            inputValorNota.value = (parseFloat(this.value) || 0).toFixed(2);
+            inputValorNota.dispatchEvent(new Event('input'));
+          }
+        });
+
+        radioSugerido.addEventListener('change', function() {
+          if (this.checked) {
+            inputValorNota.value = (parseFloat(this.value) || 0).toFixed(2);
+            inputValorNota.dispatchEvent(new Event('input'));
+          }
+        });
+
+        // Caso o usuário altere o valor digitando, atualiza os radios de forma reativa
+        [inputValorNota, inputIr, inputInss, inputIss, inputPis, inputCofins].forEach(function(input) {
+          input?.addEventListener('input', function() {
+            sincronizarRadios();
+            atualizarValorLiquido();
+          });
+        });
+
+        inputValor.setAttribute('readonly', 'readonly');
+        atualizarValorLiquido();
+      }
+    });
+  </script>
+{% endblock %}

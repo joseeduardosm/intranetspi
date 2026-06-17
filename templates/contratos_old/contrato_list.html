@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% load static %}
+{% load contratos_extras %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
+<!-- Objetivo: Exibir a listagem principal de contratos com filtros e alertas visuais. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start">
+    <div>
+      <h1>Contratos</h1>
+      <p>Gestão integrada de vigência, execução e histórico contratual.</p>
+    </div>
+    <a class="btn btn-primary btn-lg" href="{% url 'contratos:contrato_create' %}">Novo contrato</a>
+  </div>
+
+  <form class="card border-0 shadow-sm contratos-filtros mb-4" method="get">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Busca</label>
+          <input class="form-control" type="text" name="q" value="{{ request.GET.q }}" placeholder="Número, apelido, objeto ou empresa">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Situação</label>
+          <select class="form-select" name="situacao">
+            <option value="">Todas</option>
+            {% for value, label in contratos.model.Situacao.choices %}
+              <option value="{{ value }}"{% if request.GET.situacao == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Regime</label>
+          <select class="form-select" name="regime">
+            <option value="">Todos</option>
+            {% for value, label in contratos.model.Regime.choices %}
+              <option value="{{ value }}"{% if request.GET.regime == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button class="btn btn-primary w-100" type="submit">Filtrar</button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0 contratos-table">
+        <thead>
+          <tr>
+            <th>
+              <a class="contratos-sort-link{% if ordenacao_links.numero_contrato.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.numero_contrato.querystring }}">
+                Número
+                <span class="contratos-sort-indicator">{% if ordenacao_links.numero_contrato.direcao == 'asc' %}▲{% elif ordenacao_links.numero_contrato.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
+              </a>
+            </th>
+            <th>
+              <a class="contratos-sort-link{% if ordenacao_links.apelido.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.apelido.querystring }}">
+                Apelido
+                <span class="contratos-sort-indicator">{% if ordenacao_links.apelido.direcao == 'asc' %}▲{% elif ordenacao_links.apelido.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
+              </a>
+            </th>
+            <th>
+              <a class="contratos-sort-link{% if ordenacao_links.empresa.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.empresa.querystring }}">
+                Empresa
+                <span class="contratos-sort-indicator">{% if ordenacao_links.empresa.direcao == 'asc' %}▲{% elif ordenacao_links.empresa.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
+              </a>
+            </th>
+            <th>
+              <a class="contratos-sort-link{% if ordenacao_links.situacao.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.situacao.querystring }}">
+                Situação
+                <span class="contratos-sort-indicator">{% if ordenacao_links.situacao.direcao == 'asc' %}▲{% elif ordenacao_links.situacao.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
+              </a>
+            </th>
+            <th>
+              <a class="contratos-sort-link{% if ordenacao_links.prazo_atual.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.prazo_atual.querystring }}">
+                Prazo atual
+                <span class="contratos-sort-indicator">{% if ordenacao_links.prazo_atual.direcao == 'asc' %}▲{% elif ordenacao_links.prazo_atual.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
+              </a>
+            </th>
+            <th>
+              <a class="contratos-sort-link{% if ordenacao_links.periodo_acumulado.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.periodo_acumulado.querystring }}">
+                Período acumulado
+                <span class="contratos-sort-indicator">{% if ordenacao_links.periodo_acumulado.direcao == 'asc' %}▲{% elif ordenacao_links.periodo_acumulado.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
+              </a>
+            </th>
+            <th>
+              <a class="contratos-sort-link{% if ordenacao_links.data_final.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.data_final.querystring }}">
+                Data final
+                <span class="contratos-sort-indicator">{% if ordenacao_links.data_final.direcao == 'asc' %}▲{% elif ordenacao_links.data_final.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
+              </a>
+            </th>
+            <th>
+              <a class="contratos-sort-link{% if ordenacao_links.regime.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.regime.querystring }}">
+                Regime
+                <span class="contratos-sort-indicator">{% if ordenacao_links.regime.direcao == 'asc' %}▲{% elif ordenacao_links.regime.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
+              </a>
+            </th>
+            <th>
+              <a class="contratos-sort-link{% if ordenacao_links.valor_global.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.valor_global.querystring }}">
+                Valor global
+                <span class="contratos-sort-indicator">{% if ordenacao_links.valor_global.direcao == 'asc' %}▲{% elif ordenacao_links.valor_global.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
+              </a>
+            </th>
+            <th class="text-end">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for contrato in contratos %}
+            <tr class="alerta-{{ contrato.alerta_vigencia }}">
+              <td>
+                <a href="{% url 'contratos:contrato_detail' contrato.pk %}">{{ contrato.numero_contrato }}</a>
+              </td>
+              <td>{{ contrato.apelido }}</td>
+              <td>{{ contrato.empresa_contratada.razao_social }}</td>
+              <td><span class="contratos-badge situacao-{{ contrato.situacao_atual|lower }}">{{ contrato.situacao_atual_display }}</span></td>
+              <td>{{ contrato.prazo_atual_display }}</td>
+              <td>{{ contrato.periodo_acumulado_display }}</td>
+              <td>{{ contrato.data_final_vigencia|date:"d/m/Y" }}</td>
+              <td><span class="contratos-badge regime-{{ contrato.regime_atual|lower }}">{{ contrato.regime_atual_display }}</span></td>
+              <td>R$ {{ contrato.valor_global|brl }}</td>
+              <td class="text-end">
+                <div class="spi-action-menu contratos-action-menu">
+                  <button class="btn btn-sm btn-outline-secondary spi-action-menu-toggle" type="button" aria-label="Ações do contrato" aria-expanded="false" title="Ações">...</button>
+                  <div class="spi-action-menu-panel" role="menu" hidden>
+                    <a class="btn btn-sm btn-primary" role="menuitem" href="{% url 'contratos:contrato_detail' contrato.pk %}">Abrir</a>
+                    <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'contratos:dashboard' contrato.pk %}">Painel</a>
+                    <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'contratos:contrato_update' contrato.pk %}">Editar</a>
+                    <a class="btn btn-sm btn-outline-danger" role="menuitem" href="{% url 'contratos:contrato_delete' contrato.pk %}">Excluir</a>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10" class="text-muted">Nenhum contrato encontrado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    function positionContratoActionMenu(menu) {
+      var toggle = menu.querySelector('.spi-action-menu-toggle');
+      var panel = menu.querySelector('.spi-action-menu-panel');
+      if (!toggle || !panel) {
+        return;
+      }
+      var rect = toggle.getBoundingClientRect();
+      var maxTop = Math.max(8, window.innerHeight - panel.offsetHeight - 8);
+      panel.style.right = 'auto';
+      panel.style.left = Math.max(8, rect.right - panel.offsetWidth) + 'px';
+      panel.style.top = Math.min(maxTop, Math.max(8, rect.top + (rect.height / 2) - (panel.offsetHeight / 2))) + 'px';
+    }
+
+    function closeContratoActionMenus(exceptToggle) {
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(function (menu) {
+        if (!exceptToggle || !menu.contains(exceptToggle)) {
+          menu.classList.remove('is-open');
+          var panel = menu.querySelector('.spi-action-menu-panel');
+          if (panel) {
+            panel.hidden = true;
+            panel.style.left = '';
+            panel.style.right = '';
+            panel.style.top = '';
+          }
+          var openToggle = menu.querySelector('.spi-action-menu-toggle');
+          if (openToggle) {
+            openToggle.setAttribute('aria-expanded', 'false');
+          }
+        }
+      });
+    }
+
+    document.addEventListener('click', function (event) {
+      var toggle = event.target.closest('.spi-action-menu-toggle');
+      closeContratoActionMenus(toggle);
+      if (!toggle) {
+        return;
+      }
+      var menu = toggle.closest('.spi-action-menu');
+      var isOpen = menu.classList.toggle('is-open');
+      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      var panel = menu.querySelector('.spi-action-menu-panel');
+      if (panel) {
+        panel.hidden = !isOpen;
+      }
+      if (isOpen) {
+        positionContratoActionMenu(menu);
+      }
+      event.preventDefault();
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      closeContratoActionMenus();
+    });
+
+    window.addEventListener('scroll', function () {
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(positionContratoActionMenu);
+    }, true);
+
+    window.addEventListener('resize', function () {
+      document.querySelectorAll('.spi-action-menu.is-open').forEach(positionContratoActionMenu);
+    });
+  </script>
+{% endblock %}

@@ -39,6 +39,7 @@ class UsuariosTests(TestCase):
         self.user = User.objects.create_user(username="joao", password="123", email="joao@example.com")
         self.setor_ti = SetorNode.objects.create(group=Group.objects.create(name="TI"))
         self.setor_rh = SetorNode.objects.create(group=Group.objects.create(name="RH"))
+        self.grupo_acl = SetorNode.objects.create(group=Group.objects.create(name="ACL Contratos"), sistemico=True)
 
     def test_cria_perfil_automaticamente_ao_criar_usuario(self):
         self.assertTrue(UsuarioPerfil.objects.filter(user=self.user).exists())
@@ -50,7 +51,7 @@ class UsuariosTests(TestCase):
     def test_home_exibe_modal_bloqueante_quando_cadastro_incompleto(self):
         self.client.login(username="joao", password="123")
         response = self.client.get(reverse("noticias:public_list"))
-        self.assertContains(response, "Atualize seus dados antes de continuar")
+        self.assertContains(response, "Atualize seus dados cadastrais")
         self.assertContains(response, reverse("usuarios:update", args=[self.user.perfil.pk]))
 
     def test_contexto_nao_exige_recadastro_com_campos_completos_e_data_recente(self):
@@ -81,13 +82,26 @@ class UsuariosTests(TestCase):
 
     def test_visible_users_queryset_oculta_usuarios_invisiveis_dos_seletores(self):
         oculto = User.objects.create_user(username="adminx", password="123", email="adminx@example.com")
+        tecnico = User.objects.create_user(username="antigravity", password="123", email="antigravity@example.com")
         visivel = User.objects.create_user(username="maria", password="123", email="maria@example.com")
 
         usernames = set(visible_users_queryset().values_list("username", flat=True))
 
         self.assertIn("maria", usernames)
         self.assertNotIn(oculto.username, usernames)
-        self.assertTrue({"root", "adminx", "adminy", "joaox", "joaoy", "u1", "u2", "u10"}.issubset(HIDDEN_SELECTOR_USERNAMES))
+        self.assertNotIn(tecnico.username, usernames)
+        self.assertTrue({"root", "adminx", "adminy", "antigravity", "joaox", "joaoy", "u1", "u2", "u10"}.issubset(HIDDEN_SELECTOR_USERNAMES))
+
+    def test_lista_usuarios_nao_exibe_usuario_antigravity(self):
+        tecnico = User.objects.create_user(username="antigravity", password="123", email="antigravity@example.com")
+        tecnico.perfil.nome_completo = "Antigravity"
+        tecnico.perfil.save()
+
+        self.client.login(username="admin", password="123")
+        response = self.client.get(reverse("usuarios:list"))
+
+        self.assertNotContains(response, "Antigravity")
+        self.assertNotContains(response, "antigravity@example.com")
 
     def test_administrador_do_sistema_nao_fica_bloqueado_por_recadastro(self):
         request = RequestFactory().get("/noticias/")
@@ -139,6 +153,18 @@ class UsuariosTests(TestCase):
         self.assertEqual(aniversariante["local"], "4 Andar - Bloco A")
         self.assertTrue(aniversariante["foto_url"].endswith("usuarios/fotos/joao.png"))
 
+    def test_modal_de_aniversariantes_exibe_texto_coletivo_e_nao_mensagem_individual(self):
+        self.user.perfil.nome_completo = "Joao Silva"
+        self.user.perfil.data_nascimento = timezone.localdate().replace(day=1)
+        self.user.perfil.save(update_fields=["nome_completo", "data_nascimento", "atualizado_em"])
+
+        self.client.login(username="joao", password="123")
+        response = self.client.get(reverse("noticias:public_list"))
+
+        self.assertContains(response, "Aniversariantes do mês")
+        self.assertContains(response, "Não se esqueça de parabenizar os colegas abaixo.")
+        self.assertNotContains(response, "A Secretaria de Parcerias em Investimentos parabeniza você por mais um ano de vida.")
+
     def test_lista_ramais_busca_e_ordena_no_queryset(self):
         outro = User.objects.create_user(username="maria", password="123")
         perfil_outro = outro.perfil
@@ -168,7 +194,8 @@ class UsuariosTests(TestCase):
         self.client.login(username="joao", password="123")
         response = self.client.get(reverse("usuarios:ramais"), {"q": "RH", "sort": "email", "dir": "asc"})
         self.assertContains(response, "Maria Souza")
-        self.assertNotContains(response, "Joao Silva")
+        perfis = list(response.context["perfis"])
+        self.assertEqual([perfil.nome_completo for perfil in perfis], ["Maria Souza"])
 
     def test_lista_ramais_nao_exibe_usuario_root(self):
         root = User.objects.create_superuser(username="root", password="123")
@@ -300,6 +327,30 @@ class UsuariosTests(TestCase):
         self.assertContains(response, '<select name="setor"', html=False)
         self.assertContains(response, "TI")
         self.assertContains(response, "RH")
+        self.assertNotContains(response, "ACL Contratos")
+
+    def test_admin_nao_consegue_alocar_usuario_em_grupo_sistemico_por_post_manual(self):
+        self.client.login(username="admin", password="123")
+        response = self.client.post(
+            reverse("usuarios:create"),
+            {
+                "login": "maria_acl",
+                "password1": "senha-forte-123",
+                "password2": "senha-forte-123",
+                "nome_completo": "Maria ACL",
+                "email": "maria.acl@spi.local",
+                "ramal": "5544",
+                "foto": foto_upload(),
+                "cargo": "Coordenadora",
+                "setor": str(self.grupo_acl.pk),
+                "andar": "2",
+                "bloco": "B",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(response.context["form"], "setor", f"Faça uma escolha válida. {self.grupo_acl.pk} não é uma das escolhas disponíveis.")
+        self.assertFalse(User.objects.filter(username="maria_acl").exists())
 
     def test_usuario_comum_edita_apenas_o_proprio_cadastro(self):
         outro = User.objects.create_user(username="maria", password="123")

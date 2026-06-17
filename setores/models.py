@@ -27,6 +27,11 @@ class SetorNode(models.Model):
         on_delete=models.SET_NULL,
         related_name='setores_liderados',
     )
+    sistemico = models.BooleanField(
+        'Grupo sistêmico',
+        default=False,
+        help_text='Use para grupos destinados apenas a controle de acesso, sem exibição no organograma.',
+    )
     ativo = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
@@ -44,6 +49,9 @@ class SetorNode(models.Model):
         if self.id is not None and self.parent_id == self.id:
             raise ValidationError({'parent': 'Um setor não pode ser pai dele mesmo.'})
 
+        if self.sistemico and self.parent_id:
+            raise ValidationError({'parent': 'Grupos sistêmicos não podem participar da hierarquia do organograma.'})
+
         # Percorre os ancestrais para impedir ciclos que quebrariam o organograma.
         visited = set()
         cursor = self.parent
@@ -60,6 +68,12 @@ class SetorNode(models.Model):
     @property
     def grupo_pai_nome(self):
         return self.parent.group.name if self.parent_id else ''
+
+    @property
+    def exibir_no_organograma(self):
+        """Indica se o nó deve aparecer na árvore institucional visível aos usuários."""
+
+        return self.ativo and not self.sistemico
 
 
 class UserSetorMembership(models.Model):

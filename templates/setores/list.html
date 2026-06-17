@@ -37,6 +37,7 @@
             <tr>
               <th>ID</th>
               <th>Nome do grupo</th>
+              <th>Tipo</th>
               <th>Grupo pai</th>
               <th class="text-end">...</th>
             </tr>
@@ -46,6 +47,7 @@
               <tr>
                 <td class="fw-semibold">{{ setor.id }}</td>
                 <td>{{ setor.group.name }}</td>
+                <td>{% if setor.sistemico %}Sistêmico{% else %}Setor{% endif %}</td>
                 <td>{{ setor.parent.group.name|default:"-" }}</td>
                 <td class="text-end">
                   {% if request.user.is_superuser %}
@@ -60,7 +62,7 @@
                 </td>
               </tr>
             {% empty %}
-              <tr><td colspan="4" class="text-center text-muted py-5">Nenhum setor cadastrado.</td></tr>
+              <tr><td colspan="5" class="text-center text-muted py-5">Nenhum setor cadastrado.</td></tr>
             {% endfor %}
           </tbody>
         </table>

@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+{% load static %}
+{% load contratos_extras %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
+<!-- Objetivo: Medir a competência mensal trazendo automaticamente os itens do contrato V2. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>
+      {{ titulo }}
+      {% if competencia.valor_medido %}
+        - R$ {{ competencia.valor_medido|brl }}
+      {% endif %}
+    </h1>
+    <p>{{ contrato.numero_contrato }} • competência de {{ competencia.periodo_inicio|date:"d/m/Y" }} a {{ competencia.periodo_fim|date:"d/m/Y" }}</p>
+  </div>
+
+  <div class="card border-0 shadow-sm contratos-form-card">
+    <div class="card-body p-4">
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <section class="contratos-group-box contratos-form-section">
+          <h2 class="contratos-subtitle mb-3">Medição</h2>
+          {% if form.aplicar_pro_rata %}
+            <div class="form-check mb-4">
+              {{ form.aplicar_pro_rata }}
+              <label class="form-check-label" for="{{ form.aplicar_pro_rata.id_for_label }}">{{ form.aplicar_pro_rata.label }}</label>
+              {% if form.aplicar_pro_rata.help_text %}<div class="form-text">{{ form.aplicar_pro_rata.help_text }}</div>{% endif %}
+              {% for error in form.aplicar_pro_rata.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          {% endif %}
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0 contratos-items-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Descrição</th>
+                  <th>Quantidade contratada</th>
+                  <th>Valor unitário</th>
+                  <th>Quantidade medida</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for linha in itens_medicao %}
+                  <tr>
+                    <td>{{ linha.item.ordem }}</td>
+                    <td>{{ linha.item.descricao }}</td>
+                    <td>{{ linha.item.quantidade }}</td>
+                    <td>R$ {{ linha.item.valor_unitario|brl }}</td>
+                    <td>
+                      {{ linha.field }}
+                      {% for error in linha.field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="5" class="text-muted">Nenhum item cadastrado no contrato.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% item_audit_footer competencia 'medicao' as auditoria_medicao %}
+          {% if auditoria_medicao %}
+            <div class="contratos-audit-footer text-end mt-3">{{ auditoria_medicao }}</div>
+          {% endif %}
+        </section>
+
+        <section class="contratos-group-box contratos-form-section">
+          <h2 class="contratos-subtitle mb-3">Aceite provisório</h2>
+          <div class="row g-3">
+            <div class="col-lg-6">
+              <label class="form-label" for="{{ form.aceite_provisorio_arquivo.id_for_label }}">{{ form.aceite_provisorio_arquivo.label }}</label>
+              {{ form.aceite_provisorio_arquivo }}
+              {% if competencia.aceite_provisorio_arquivo %}
+                <div class="form-text">Arquivo atual: <a href="{{ competencia.aceite_provisorio_arquivo.url }}" target="_blank" rel="noopener">visualizar PDF</a></div>
+              {% endif %}
+              {% for error in form.aceite_provisorio_arquivo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="{{ form.data_aceite_provisorio.id_for_label }}">{{ form.data_aceite_provisorio.label }}</label>
+              {{ form.data_aceite_provisorio }}
+              {% for error in form.data_aceite_provisorio.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="{{ form.prazo_aceite_definitivo_dias.id_for_label }}">{{ form.prazo_aceite_definitivo_dias.label }}</label>
+              {{ form.prazo_aceite_definitivo_dias }}
+              {% for error in form.prazo_aceite_definitivo_dias.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          </div>
+          {% item_audit_footer competencia 'aceite_provisorio' as auditoria_aceite_provisorio %}
+          {% if auditoria_aceite_provisorio %}
+            <div class="contratos-audit-footer text-end mt-3">{{ auditoria_aceite_provisorio }}</div>
+          {% endif %}
+        </section>
+
+        <section class="contratos-group-box contratos-form-section">
+          <h2 class="contratos-subtitle mb-3">Aceite definitivo</h2>
+          <div class="row g-3">
+            <div class="col-lg-6">
+              <label class="form-label" for="{{ form.aceite_definitivo_arquivo.id_for_label }}">{{ form.aceite_definitivo_arquivo.label }}</label>
+              {{ form.aceite_definitivo_arquivo }}
+              {% if competencia.aceite_definitivo_arquivo %}
+                <div class="form-text">Arquivo atual: <a href="{{ competencia.aceite_definitivo_arquivo.url }}" target="_blank" rel="noopener">visualizar PDF</a></div>
+              {% endif %}
+              {% for error in form.aceite_definitivo_arquivo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="{{ form.data_aceite_definitivo.id_for_label }}">{{ form.data_aceite_definitivo.label }}</label>
+              {{ form.data_aceite_definitivo }}
+              {% for error in form.data_aceite_definitivo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="{{ form.prazo_pagamento_dias.id_for_label }}">{{ form.prazo_pagamento_dias.label }}</label>
+              {{ form.prazo_pagamento_dias }}
+              {% for error in form.prazo_pagamento_dias.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+          </div>
+          {% item_audit_footer competencia 'aceite_definitivo' as auditoria_aceite_definitivo %}
+          {% if auditoria_aceite_definitivo %}
+            <div class="contratos-audit-footer text-end mt-3">{{ auditoria_aceite_definitivo }}</div>
+          {% endif %}
+        </section>
+
+        <section class="contratos-group-box contratos-form-section">
+          <h2 class="contratos-subtitle mb-3">Nota Fiscal Principal</h2>
+          <div class="row g-3">
+            <div class="col-lg-6">
+              <label class="form-label" for="{{ form.nota_fiscal_fatura.id_for_label }}">{{ form.nota_fiscal_fatura.label }}</label>
+              {{ form.nota_fiscal_fatura }}
+              {% if competencia.nota_fiscal_fatura %}
+                <div class="form-text">Arquivo atual: <a href="{{ competencia.nota_fiscal_fatura.url }}" target="_blank" rel="noopener">visualizar PDF</a></div>
+              {% endif %}
+              {% for error in form.nota_fiscal_fatura.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-6">
+              <label class="form-label" for="{{ form.numero_nota_fiscal.id_for_label }}">{{ form.numero_nota_fiscal.label }}</label>
+              {{ form.numero_nota_fiscal }}
+              {% for error in form.numero_nota_fiscal.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.valor_nota_fiscal.id_for_label }}">{{ form.valor_nota_fiscal.label }}</label>{{ form.valor_nota_fiscal }}{% for error in form.valor_nota_fiscal.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.retencao_ir.id_for_label }}">{{ form.retencao_ir.label }}</label>{{ form.retencao_ir }}{% for error in form.retencao_ir.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.retencao_inss.id_for_label }}">{{ form.retencao_inss.label }}</label>{{ form.retencao_inss }}{% for error in form.retencao_inss.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.retencao_iss.id_for_label }}">{{ form.retencao_iss.label }}</label>{{ form.retencao_iss }}{% for error in form.retencao_iss.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.retencao_pis_pasep.id_for_label }}">{{ form.retencao_pis_pasep.label }}</label>{{ form.retencao_pis_pasep }}{% for error in form.retencao_pis_pasep.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.retencao_cofins.id_for_label }}">{{ form.retencao_cofins.label }}</label>{{ form.retencao_cofins }}{% for error in form.retencao_cofins.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.valor_liberado_final.id_for_label }}">{{ form.valor_liberado_final.label }}</label>{{ form.valor_liberado_final }}</div>
+          </div>
+          {% item_audit_footer competencia 'nota_principal' as auditoria_nota_principal %}
+          {% if auditoria_nota_principal %}
+            <div class="contratos-audit-footer text-end mt-3">{{ auditoria_nota_principal }}</div>
+          {% endif %}
+        </section>
+
+        <section class="contratos-group-box contratos-form-section">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="contratos-subtitle mb-0">Nota Fiscal Adicional</h2>
+            <div class="d-flex align-items-center gap-3">
+              <div class="form-check mb-0">
+                {{ form.nota_adicional_nao_consta }}
+                <label class="form-check-label" for="{{ form.nota_adicional_nao_consta.id_for_label }}">{{ form.nota_adicional_nao_consta.label }}</label>
+              </div>
+              {% if competencia.possui_nota_adicional %}
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'contratos:competencia_checklist_extra_create' competencia.pk %}">+</a>
+              {% endif %}
+            </div>
+          </div>
+          {% for error in form.nota_adicional_nao_consta.errors %}<div class="invalid-feedback d-block mb-3">{{ error }}</div>{% endfor %}
+          <div class="row g-3">
+            <div class="col-lg-6">
+              <label class="form-label" for="{{ form.nota_adicional_arquivo.id_for_label }}">{{ form.nota_adicional_arquivo.label }}</label>
+              {{ form.nota_adicional_arquivo }}
+              {% if competencia.nota_adicional_arquivo %}
+                <div class="form-text">Arquivo atual: <a href="{{ competencia.nota_adicional_arquivo.url }}" target="_blank" rel="noopener">visualizar PDF</a></div>
+              {% endif %}
+              {% for error in form.nota_adicional_arquivo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-lg-6">
+              <label class="form-label" for="{{ form.numero_nota_adicional.id_for_label }}">{{ form.numero_nota_adicional.label }}</label>
+              {{ form.numero_nota_adicional }}
+              {% for error in form.numero_nota_adicional.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.valor_nota_adicional.id_for_label }}">{{ form.valor_nota_adicional.label }}</label>{{ form.valor_nota_adicional }}{% for error in form.valor_nota_adicional.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.retencao_ir_adicional.id_for_label }}">{{ form.retencao_ir_adicional.label }}</label>{{ form.retencao_ir_adicional }}{% for error in form.retencao_ir_adicional.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.retencao_inss_adicional.id_for_label }}">{{ form.retencao_inss_adicional.label }}</label>{{ form.retencao_inss_adicional }}{% for error in form.retencao_inss_adicional.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.retencao_iss_adicional.id_for_label }}">{{ form.retencao_iss_adicional.label }}</label>{{ form.retencao_iss_adicional }}{% for error in form.retencao_iss_adicional.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.retencao_pis_pasep_adicional.id_for_label }}">{{ form.retencao_pis_pasep_adicional.label }}</label>{{ form.retencao_pis_pasep_adicional }}{% for error in form.retencao_pis_pasep_adicional.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.retencao_cofins_adicional.id_for_label }}">{{ form.retencao_cofins_adicional.label }}</label>{{ form.retencao_cofins_adicional }}{% for error in form.retencao_cofins_adicional.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
+            <div class="col-md-4"><label class="form-label" for="{{ form.valor_liquido_nota_adicional.id_for_label }}">{{ form.valor_liquido_nota_adicional.label }}</label>{{ form.valor_liquido_nota_adicional }}</div>
+          </div>
+          {% if itens_checklist_extra %}
+            <div class="mt-4">
+              <h3 class="h6">Checklist extra da nota adicional</h3>
+              <ul class="mb-0">
+                {% for item_extra in itens_checklist_extra %}
+                  <li>{{ item_extra.titulo }}{% if item_extra.anexo_principal %} - <a href="{{ item_extra.anexo_principal.arquivo.url }}" target="_blank" rel="noopener">anexo</a>{% endif %}</li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+          {% item_audit_footer competencia 'nota_adicional' as auditoria_nota_adicional %}
+          {% if auditoria_nota_adicional %}
+            <div class="contratos-audit-footer text-end mt-3">{{ auditoria_nota_adicional }}</div>
+          {% endif %}
+        </section>
+
+        <section class="contratos-group-box contratos-form-section">
+          <h2 class="contratos-subtitle mb-3">Observações finais</h2>
+          <div>
+            <label class="form-label" for="{{ form.observacoes_medicao.id_for_label }}">{{ form.observacoes_medicao.label }}</label>
+            {{ form.observacoes_medicao }}
+            {% for error in form.observacoes_medicao.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          {% item_audit_footer competencia 'observacoes_finais' as auditoria_observacoes_finais %}
+          {% if auditoria_observacoes_finais %}
+            <div class="contratos-audit-footer text-end mt-3">{{ auditoria_observacoes_finais }}</div>
+          {% endif %}
+        </section>
+        {% for error in form.non_field_errors %}<div class="alert alert-danger mt-3">{{ error }}</div>{% endfor %}
+        <div class="d-flex gap-2 justify-content-end mt-4">
+          <a class="btn btn-light" href="{% url 'contratos:contrato_detail' contrato.pk %}">Cancelar</a>
+          <button class="btn btn-primary" type="submit">Salvar medição</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      function parseDecimal(value) {
+        const normalized = String(value || '').replace(',', '.').trim();
+        const parsed = Number.parseFloat(normalized);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+
+      function formatDecimal(value) {
+        return value.toFixed(2);
+      }
+
+      function bindLiquidCalculator(config) {
+        const totalField = document.getElementById(config.totalFieldId);
+        const retentionFields = config.retentionFieldIds
+          .map(id => document.getElementById(id))
+          .filter(Boolean);
+        const outputField = document.getElementById(config.outputFieldId);
+
+        if (!totalField || !outputField) {
+          return;
+        }
+
+        function recalculate() {
+          const total = parseDecimal(totalField.value);
+          const retentions = retentionFields.reduce((accumulator, field) => accumulator + parseDecimal(field.value), 0);
+          const liquid = Math.max(total - retentions, 0);
+          outputField.value = formatDecimal(liquid);
+        }
+
+        [totalField, ...retentionFields].forEach(field => {
+          field.addEventListener('input', recalculate);
+          field.addEventListener('change', recalculate);
+        });
+
+        recalculate();
+      }
+
+      // Mantém o valor líquido visível sem depender do salvamento da página.
+      bindLiquidCalculator({
+        totalFieldId: '{{ form.valor_nota_fiscal.id_for_label }}',
+        retentionFieldIds: [
+          '{{ form.retencao_ir.id_for_label }}',
+          '{{ form.retencao_inss.id_for_label }}',
+          '{{ form.retencao_iss.id_for_label }}',
+          '{{ form.retencao_pis_pasep.id_for_label }}',
+          '{{ form.retencao_cofins.id_for_label }}'
+        ],
+        outputFieldId: '{{ form.valor_liberado_final.id_for_label }}'
+      });
+
+      bindLiquidCalculator({
+        totalFieldId: '{{ form.valor_nota_adicional.id_for_label }}',
+        retentionFieldIds: [
+          '{{ form.retencao_ir_adicional.id_for_label }}',
+          '{{ form.retencao_inss_adicional.id_for_label }}',
+          '{{ form.retencao_iss_adicional.id_for_label }}',
+          '{{ form.retencao_pis_pasep_adicional.id_for_label }}',
+          '{{ form.retencao_cofins_adicional.id_for_label }}'
+        ],
+        outputFieldId: '{{ form.valor_liquido_nota_adicional.id_for_label }}'
+      });
+
+      const notaAdicionalCheckbox = document.getElementById('{{ form.nota_adicional_nao_consta.id_for_label }}');
+      const notaAdicionalFields = [
+        '{{ form.nota_adicional_arquivo.id_for_label }}',
+        '{{ form.numero_nota_adicional.id_for_label }}',
+        '{{ form.valor_nota_adicional.id_for_label }}',
+        '{{ form.retencao_ir_adicional.id_for_label }}',
+        '{{ form.retencao_inss_adicional.id_for_label }}',
+        '{{ form.retencao_iss_adicional.id_for_label }}',
+        '{{ form.retencao_pis_pasep_adicional.id_for_label }}',
+        '{{ form.retencao_cofins_adicional.id_for_label }}',
+        '{{ form.valor_liquido_nota_adicional.id_for_label }}'
+      ].map(id => document.getElementById(id)).filter(Boolean);
+
+      function toggleNotaAdicionalFields() {
+        if (!notaAdicionalCheckbox) {
+          return;
+        }
+        const bloquear = notaAdicionalCheckbox.checked;
+        notaAdicionalFields.forEach(field => {
+          if (!field.dataset.lockedByHistory) {
+            field.disabled = bloquear;
+          }
+        });
+      }
+
+      notaAdicionalFields.forEach(field => {
+        if (field.disabled) {
+          field.dataset.lockedByHistory = '1';
+        }
+      });
+
+      if (notaAdicionalCheckbox) {
+        notaAdicionalCheckbox.addEventListener('change', toggleNotaAdicionalFields);
+        toggleNotaAdicionalFields();
+      }
+    });
+  </script>
+{% endblock %}

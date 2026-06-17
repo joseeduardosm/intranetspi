@@ -9,6 +9,7 @@ from . import views
 app_name = "mensageria"
 
 urlpatterns = [
+    path("", views.MensagemAdminListView.as_view(), name="root"),
     path("minhas/", views.MinhasMensagensListView.as_view(), name="minhas"),
     path("minhas/<int:pk>/", views.MinhaMensagemDetailView.as_view(), name="minha_detail"),
     path("admin/", views.MensagemAdminListView.as_view(), name="admin_list"),
@@ -20,4 +21,3 @@ urlpatterns = [
     path("visualizada/", views.MensagemVisualizadaView.as_view(), name="visualizada"),
     path("indicadores/", views.MensageriaIndicadoresView.as_view(), name="indicadores"),
 ]
-

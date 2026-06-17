@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% load static %}
-{% load contratos_v2_extras %}
+{% load contratos_extras %}
 <!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
 <!-- Objetivo: Permitir que os fiscais alimentem os documentos da competência diretamente em uma única tela. -->
-{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos_v2/css/contratos_v2.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
 
 {% block content %}
   <div class="spi-page-title">
@@ -11,7 +11,7 @@
     <p>{{ contrato.numero_contrato }} • competência de {{ competencia.periodo_inicio|date:"d/m/Y" }} a {{ competencia.periodo_fim|date:"d/m/Y" }}</p>
   </div>
 
-  <div class="card border-0 shadow-sm contratos-v2-form-card">
+  <div class="card border-0 shadow-sm contratos-form-card">
     <div class="card-body p-4">
       <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
@@ -19,7 +19,7 @@
           {% item_field form item.pk 'arquivo' as arquivo_field %}
           {% item_field form item.pk 'limpar' as limpar_field %}
           {% item_field_errors form item.pk 'arquivo' as arquivo_errors %}
-          <article class="contratos-v2-checklist-item">
+          <article class="contratos-checklist-item">
             <div class="d-flex justify-content-between gap-3 align-items-start">
               <div>
                 <strong>{{ item.ordem }}. {{ item.titulo }}</strong>
@@ -46,7 +46,7 @@
         {% endfor %}
         {% for error in form.non_field_errors %}<div class="alert alert-danger mt-3">{{ error }}</div>{% endfor %}
         <div class="d-flex gap-2 justify-content-end mt-4">
-          <a class="btn btn-light" href="{% url 'contratos_v2:contrato_detail' contrato.pk %}">Cancelar</a>
+          <a class="btn btn-light" href="{% url 'contratos:contrato_detail' contrato.pk %}">Cancelar</a>
           <button class="btn btn-primary" type="submit">Salvar checklist</button>
         </div>
       </form>

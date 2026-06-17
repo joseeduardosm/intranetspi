@@ -1,211 +1,98 @@
 {% extends "base.html" %}
 {% load static %}
-{% load contratos_extras %}
-<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
-<!-- Objetivo: Exibir a listagem principal de contratos com filtros e alertas visuais. -->
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
+<!-- Objetivo: Listar contratos da V2 com busca ampla e ações curtas, inspiradas no RegulaSGI. -->
+{% block title %}Contratos V2{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
-
 {% block content %}
-  <div class="spi-page-title d-flex justify-content-between align-items-start">
-    <div>
-      <h1>Contratos</h1>
-      <p>Gestão integrada de vigência, execução e histórico contratual.</p>
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div class="spi-page-title mb-0">
+      <h1>Contratos V2</h1>
+      <p>Versão incremental do módulo de contratos com cadastro inicial simplificado.</p>
     </div>
-    <a class="btn btn-primary btn-lg" href="{% url 'contratos:contrato_create' %}">Novo contrato</a>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'home' %}">Home</a>
+      {% if usuario_pode_gerir_checklists_padrao_globais %}
+        <a class="btn btn-outline-primary" href="{% url 'contratos:checklist_padrao_list' %}">Checklists Padrão</a>
+      {% endif %}
+      <a class="btn btn-primary" href="{% url 'contratos:contrato_create' %}">Novo contrato</a>
+    </div>
   </div>
 
-  <form class="card border-0 shadow-sm contratos-filtros mb-4" method="get">
-    <div class="card-body">
-      <div class="row g-3">
-        <div class="col-md-4">
-          <label class="form-label">Busca</label>
-          <input class="form-control" type="text" name="q" value="{{ request.GET.q }}" placeholder="Número, apelido, objeto ou empresa">
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">Situação</label>
-          <select class="form-select" name="situacao">
-            <option value="">Todas</option>
-            {% for value, label in contratos.model.Situacao.choices %}
-              <option value="{{ value }}"{% if request.GET.situacao == value %} selected{% endif %}>{{ label }}</option>
+  <section class="card shadow-sm border-0">
+    <div class="card-body border-bottom">
+      <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
+        <input
+          class="form-control form-control-lg flex-grow-1 contratos-search-input"
+          type="search"
+          name="q"
+          value="{{ q }}"
+          placeholder="Pesquisar por número, apelido, objeto, empresa ou responsável"
+        >
+        <button class="btn btn-primary" type="submit">Pesquisar</button>
+        {% if q %}<a class="btn btn-light" href="{{ request.path }}">Limpar</a>{% endif %}
+      </form>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive contratos-table-wrap">
+        <table class="table align-middle mb-0 contratos-table">
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th>Apelido</th>
+              <th>Empresa contratada</th>
+              <th>Início</th>
+              <th>Situação</th>
+              <th class="text-end">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for contrato in contratos %}
+              <tr>
+                <td class="fw-semibold">
+                  <a class="text-decoration-none" href="{% url 'contratos:contrato_detail' contrato.pk %}">{{ contrato.numero_contrato }}</a>
+                </td>
+                <td>
+                  <strong>{{ contrato.apelido }}</strong>
+                  <div class="text-muted small mt-1">{{ contrato.objeto }}</div>
+                </td>
+                <td>{{ contrato.empresa_contratada.razao_social }}</td>
+                <td>{{ contrato.data_inicio_vigencia|date:"d/m/Y" }}</td>
+                <td>
+                  {% if contrato.situacao_forcada %}
+                    <span class="badge text-bg-secondary">{{ contrato.get_situacao_forcada_display }}</span>
+                  {% else %}
+                    <span class="badge text-bg-light border">Automática</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <div class="dropdown">
+                    <button
+                      class="btn btn-sm btn-outline-secondary contratos-actions-toggle"
+                      type="button"
+                      data-bs-toggle="dropdown"
+                      data-bs-boundary="viewport"
+                      data-bs-popper-config='{"strategy":"fixed"}'
+                      title="Ações"
+                    >...</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item" href="{% url 'contratos:contrato_detail' contrato.pk %}">Abrir</a></li>
+                      {% if not contrato.competencias.exists %}
+                        <li><a class="dropdown-item" href="{% url 'contratos:contrato_update' contrato.pk %}">Editar</a></li>
+                      {% endif %}
+                      <li><a class="dropdown-item text-danger" href="{% url 'contratos:contrato_delete' contrato.pk %}">Excluir</a></li>
+                    </ul>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6" class="text-center text-muted py-5">Nenhum contrato V2 cadastrado.</td>
+              </tr>
             {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">Regime</label>
-          <select class="form-select" name="regime">
-            <option value="">Todos</option>
-            {% for value, label in contratos.model.Regime.choices %}
-              <option value="{{ value }}"{% if request.GET.regime == value %} selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-2 d-flex align-items-end">
-          <button class="btn btn-primary w-100" type="submit">Filtrar</button>
-        </div>
+          </tbody>
+        </table>
       </div>
     </div>
-  </form>
-
-  <div class="card border-0 shadow-sm">
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0 contratos-table">
-        <thead>
-          <tr>
-            <th>
-              <a class="contratos-sort-link{% if ordenacao_links.numero_contrato.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.numero_contrato.querystring }}">
-                Número
-                <span class="contratos-sort-indicator">{% if ordenacao_links.numero_contrato.direcao == 'asc' %}▲{% elif ordenacao_links.numero_contrato.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
-              </a>
-            </th>
-            <th>
-              <a class="contratos-sort-link{% if ordenacao_links.apelido.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.apelido.querystring }}">
-                Apelido
-                <span class="contratos-sort-indicator">{% if ordenacao_links.apelido.direcao == 'asc' %}▲{% elif ordenacao_links.apelido.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
-              </a>
-            </th>
-            <th>
-              <a class="contratos-sort-link{% if ordenacao_links.empresa.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.empresa.querystring }}">
-                Empresa
-                <span class="contratos-sort-indicator">{% if ordenacao_links.empresa.direcao == 'asc' %}▲{% elif ordenacao_links.empresa.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
-              </a>
-            </th>
-            <th>
-              <a class="contratos-sort-link{% if ordenacao_links.situacao.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.situacao.querystring }}">
-                Situação
-                <span class="contratos-sort-indicator">{% if ordenacao_links.situacao.direcao == 'asc' %}▲{% elif ordenacao_links.situacao.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
-              </a>
-            </th>
-            <th>
-              <a class="contratos-sort-link{% if ordenacao_links.prazo_atual.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.prazo_atual.querystring }}">
-                Prazo atual
-                <span class="contratos-sort-indicator">{% if ordenacao_links.prazo_atual.direcao == 'asc' %}▲{% elif ordenacao_links.prazo_atual.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
-              </a>
-            </th>
-            <th>
-              <a class="contratos-sort-link{% if ordenacao_links.periodo_acumulado.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.periodo_acumulado.querystring }}">
-                Período acumulado
-                <span class="contratos-sort-indicator">{% if ordenacao_links.periodo_acumulado.direcao == 'asc' %}▲{% elif ordenacao_links.periodo_acumulado.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
-              </a>
-            </th>
-            <th>
-              <a class="contratos-sort-link{% if ordenacao_links.data_final.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.data_final.querystring }}">
-                Data final
-                <span class="contratos-sort-indicator">{% if ordenacao_links.data_final.direcao == 'asc' %}▲{% elif ordenacao_links.data_final.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
-              </a>
-            </th>
-            <th>
-              <a class="contratos-sort-link{% if ordenacao_links.regime.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.regime.querystring }}">
-                Regime
-                <span class="contratos-sort-indicator">{% if ordenacao_links.regime.direcao == 'asc' %}▲{% elif ordenacao_links.regime.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
-              </a>
-            </th>
-            <th>
-              <a class="contratos-sort-link{% if ordenacao_links.valor_global.ativa %} is-active{% endif %}" href="?{{ ordenacao_links.valor_global.querystring }}">
-                Valor global
-                <span class="contratos-sort-indicator">{% if ordenacao_links.valor_global.direcao == 'asc' %}▲{% elif ordenacao_links.valor_global.direcao == 'desc' %}▼{% else %}↕{% endif %}</span>
-              </a>
-            </th>
-            <th class="text-end">Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for contrato in contratos %}
-            <tr class="alerta-{{ contrato.alerta_vigencia }}">
-              <td>
-                <a href="{% url 'contratos:contrato_detail' contrato.pk %}">{{ contrato.numero_contrato }}</a>
-              </td>
-              <td>{{ contrato.apelido }}</td>
-              <td>{{ contrato.empresa_contratada.razao_social }}</td>
-              <td><span class="contratos-badge situacao-{{ contrato.situacao_atual|lower }}">{{ contrato.situacao_atual_display }}</span></td>
-              <td>{{ contrato.prazo_atual_display }}</td>
-              <td>{{ contrato.periodo_acumulado_display }}</td>
-              <td>{{ contrato.data_final_vigencia|date:"d/m/Y" }}</td>
-              <td><span class="contratos-badge regime-{{ contrato.regime_atual|lower }}">{{ contrato.regime_atual_display }}</span></td>
-              <td>R$ {{ contrato.valor_global|brl }}</td>
-              <td class="text-end">
-                <div class="spi-action-menu contratos-action-menu">
-                  <button class="btn btn-sm btn-outline-secondary spi-action-menu-toggle" type="button" aria-label="Ações do contrato" aria-expanded="false" title="Ações">...</button>
-                  <div class="spi-action-menu-panel" role="menu" hidden>
-                    <a class="btn btn-sm btn-primary" role="menuitem" href="{% url 'contratos:contrato_detail' contrato.pk %}">Abrir</a>
-                    <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'contratos:dashboard' contrato.pk %}">Painel</a>
-                    <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'contratos:contrato_update' contrato.pk %}">Editar</a>
-                    <a class="btn btn-sm btn-outline-danger" role="menuitem" href="{% url 'contratos:contrato_delete' contrato.pk %}">Excluir</a>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="10" class="text-muted">Nenhum contrato encontrado.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  <script>
-    function positionContratoActionMenu(menu) {
-      var toggle = menu.querySelector('.spi-action-menu-toggle');
-      var panel = menu.querySelector('.spi-action-menu-panel');
-      if (!toggle || !panel) {
-        return;
-      }
-      var rect = toggle.getBoundingClientRect();
-      var maxTop = Math.max(8, window.innerHeight - panel.offsetHeight - 8);
-      panel.style.right = 'auto';
-      panel.style.left = Math.max(8, rect.right - panel.offsetWidth) + 'px';
-      panel.style.top = Math.min(maxTop, Math.max(8, rect.top + (rect.height / 2) - (panel.offsetHeight / 2))) + 'px';
-    }
-
-    function closeContratoActionMenus(exceptToggle) {
-      document.querySelectorAll('.spi-action-menu.is-open').forEach(function (menu) {
-        if (!exceptToggle || !menu.contains(exceptToggle)) {
-          menu.classList.remove('is-open');
-          var panel = menu.querySelector('.spi-action-menu-panel');
-          if (panel) {
-            panel.hidden = true;
-            panel.style.left = '';
-            panel.style.right = '';
-            panel.style.top = '';
-          }
-          var openToggle = menu.querySelector('.spi-action-menu-toggle');
-          if (openToggle) {
-            openToggle.setAttribute('aria-expanded', 'false');
-          }
-        }
-      });
-    }
-
-    document.addEventListener('click', function (event) {
-      var toggle = event.target.closest('.spi-action-menu-toggle');
-      closeContratoActionMenus(toggle);
-      if (!toggle) {
-        return;
-      }
-      var menu = toggle.closest('.spi-action-menu');
-      var isOpen = menu.classList.toggle('is-open');
-      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      var panel = menu.querySelector('.spi-action-menu-panel');
-      if (panel) {
-        panel.hidden = !isOpen;
-      }
-      if (isOpen) {
-        positionContratoActionMenu(menu);
-      }
-      event.preventDefault();
-    });
-
-    document.addEventListener('keydown', function (event) {
-      if (event.key !== 'Escape') {
-        return;
-      }
-      closeContratoActionMenus();
-    });
-
-    window.addEventListener('scroll', function () {
-      document.querySelectorAll('.spi-action-menu.is-open').forEach(positionContratoActionMenu);
-    }, true);
-
-    window.addEventListener('resize', function () {
-      document.querySelectorAll('.spi-action-menu.is-open').forEach(positionContratoActionMenu);
-    });
-  </script>
+  </section>
 {% endblock %}

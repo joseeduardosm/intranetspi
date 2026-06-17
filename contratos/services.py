@@ -1,53 +1,25 @@
-# Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026
-# Objetivo: Centralizar cálculos de vigência, execução financeira, qualidade e retroatividade.
+# Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026
+# Objetivo: Centralizar regras do fluxo de checklist, competências, medição, avaliação e pagamento do Contratos V2.
 
 from __future__ import annotations
 
-import calendar
-import re
-from datetime import date, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 
-from django.db.models import Sum
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 
-ZERO = Decimal('0.00')
+import calendar
+from datetime import date, timedelta
+import re
+
 CONTRATO_NUMERO_RE = re.compile(r'^(?P<sequencial>\d{3})/(?P<ano>\d{4})$')
 
-
 def quantize_money(value):
-    """Padroniza valores monetários com duas casas decimais."""
-
-    return (value or ZERO).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-
-
-def parse_numero_contrato(value):
-    """Extrai sequência e ano do número no formato NNN/AAAA."""
-
-    match = CONTRATO_NUMERO_RE.match((value or '').strip())
-    if not match:
-        return None
-    return int(match.group('sequencial')), int(match.group('ano'))
-
-
-def numero_contrato_por_ano(ano):
-    """Calcula o próximo número sequencial do contrato para o ano informado."""
-
-    from .models import Contrato
-
-    maior = 0
-    suffix = f'/{ano}'
-    for numero in Contrato.objects.filter(numero_contrato__endswith=suffix).values_list('numero_contrato', flat=True):
-        parsed = parse_numero_contrato(numero)
-        if parsed and parsed[1] == ano:
-            maior = max(maior, parsed[0])
-    return f'{maior + 1:03d}/{ano}'
-
+    from decimal import Decimal, ROUND_HALF_UP
+    return (value or Decimal('0.00')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 def add_months(base_date, months):
-    """Adiciona meses preservando o último dia válido do mês de destino."""
-
     if not base_date:
         return None
     month_index = base_date.month - 1 + int(months or 0)
@@ -57,61 +29,20 @@ def add_months(base_date, months):
     day = min(base_date.day, last_day)
     return date(year, month, day)
 
-
 def inclusive_end_date(start_date, months):
-    """Converte uma vigência em meses para a última data do período correspondente."""
-
     final_date = add_months(start_date, months)
     if not final_date:
         return None
     return final_date - timedelta(days=1)
 
-
-def full_months_between(start_date, end_date):
-    """Conta meses completos entre duas datas para os indicadores de prazo."""
-
-    if not start_date or not end_date or end_date < start_date:
-        return 0
-    months = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
-    if end_date.day < start_date.day:
-        months -= 1
-    return max(months, 0)
-
-
-def periodo_texto(utilizado, total):
-    """Formata indicadores no padrão X/Y meses usado pelo módulo."""
-
-    return f'{utilizado}/{total} meses'
-
-
-def contrato_total_itens(contrato):
-    """Soma os subtotais mensais dos itens do contrato."""
-
-    total = contrato.itens.aggregate(total=Sum('valor_subtotal')).get('total') or ZERO
-    return quantize_money(total)
-
-
-def contrato_valor_global(contrato):
-    """Calcula o valor global a partir da base mensal multiplicada pela vigência total."""
-
-    base_mensal = contrato_total_itens(contrato)
-    vigencia_meses = contrato_prazo_total_meses(contrato)
-    return quantize_money(base_mensal * Decimal(vigencia_meses))
-
-
 def ultimo_dia_mes(data_referencia):
-    """Retorna o último dia do mês da data informada."""
-
     return date(
         data_referencia.year,
         data_referencia.month,
         calendar.monthrange(data_referencia.year, data_referencia.month)[1],
     )
 
-
 def iterar_periodos_competencia(data_inicio, data_fim):
-    """Gera as fatias mensais da vigência respeitando meses parciais no início e no fim."""
-
     if not data_inicio or not data_fim or data_fim < data_inicio:
         return []
 
@@ -124,320 +55,564 @@ def iterar_periodos_competencia(data_inicio, data_fim):
         cursor = periodo_fim + timedelta(days=1)
     return periodos
 
+def parse_numero_contrato(value):
+    match = CONTRATO_NUMERO_RE.match((value or '').strip())
+    if not match:
+        return None
+    return int(match.group('sequencial')), int(match.group('ano'))
 
-def calcular_valor_previsto_competencia(contrato, periodo_inicio, periodo_fim):
-    """Usa sempre a base mensal vigente como valor previsto da competência."""
-
-    del periodo_inicio, periodo_fim
-    return quantize_money(contrato.base_mensal or contrato_total_itens(contrato))
 
 
-def sync_competencias_pagamento(contrato):
-    """Cria e atualiza automaticamente as competências previstas da vigência atual."""
+ZERO = Decimal('0.00')
+
+
+def validar_processos_sei_contrato(contrato):
+    """Bloqueia o fluxo mensal enquanto o contrato não tiver os dois processos SEI completos."""
+
+    campos_faltantes = []
+    if not (contrato.processo_sei_gestao_numero or '').strip():
+        campos_faltantes.append('Processo SEI (Gestão) - número')
+    if not (contrato.processo_sei_gestao_url or '').strip():
+        campos_faltantes.append('Processo SEI (Gestão) - link')
+    if not (contrato.processo_sei_execucao_numero or '').strip():
+        campos_faltantes.append('Processo SEI (Execução) - número')
+    if not (contrato.processo_sei_execucao_url or '').strip():
+        campos_faltantes.append('Processo SEI (Execução) - link')
+    if campos_faltantes:
+        raise ValidationError(
+            'Preencha os campos obrigatórios de processos SEI antes de gerar competências: '
+            + ', '.join(campos_faltantes)
+            + '.'
+        )
+
+
+def usuario_eh_admin_sistema(user):
+    """Considera como administradores operadores com privilégios globais do portal."""
+
+    return bool(user and user.is_authenticated and (user.is_superuser or user.is_staff))
+
+
+def usuario_pode_gerir_contrato_v2(user, contrato):
+    """Gestor, criador do contrato e administradores podem gerir cadastros e autorizações."""
+
+    return bool(
+        user
+        and user.is_authenticated
+        and (
+            usuario_eh_admin_sistema(user)
+            or user.pk == contrato.gestor_contrato_id
+            # O criador do contrato mantém autonomia operacional mesmo quando o gestor ainda não foi definido.
+            or user.pk == contrato.criado_por_id
+        )
+    )
+
+
+def usuario_pode_gerir_documento_importante_contrato(user, contrato):
+    """Define quem pode gerenciar ao menos um documento importante no escopo do contrato."""
+
+    return bool(
+        user
+        and user.is_authenticated
+        and (
+            usuario_eh_admin_sistema(user)
+            or user.pk == contrato.gestor_contrato_id
+            or user.pk == contrato.criado_por_id
+        )
+    )
+
+
+def usuario_pode_gerir_documento_importante(user, documento):
+    """Permite gestão por administrador, gestor, criador do contrato ou autor do documento."""
+
+    contrato = documento.contrato
+    return bool(
+        user
+        and user.is_authenticated
+        and (
+            usuario_eh_admin_sistema(user)
+            or user.pk == contrato.gestor_contrato_id
+            or user.pk == contrato.criado_por_id
+            or user.pk == documento.criado_por_id
+        )
+    )
+
+
+def usuario_eh_criador_contrato(user, contrato):
+    """Retorna se o usuário autenticado é o responsável original pelo cadastro do contrato."""
+
+    return bool(user and user.is_authenticated and user.pk == contrato.criado_por_id)
+
+
+def usuario_pode_preencher_checklist_v2(user, contrato):
+    """Checklist pode ser alimentado pelos fiscais, pelo gestor e por administradores."""
+
+    return bool(
+        user
+        and user.is_authenticated
+        and (
+            usuario_pode_gerir_contrato_v2(user, contrato)
+            or user.pk == contrato.fiscal_administrativo_id
+            or user.pk == contrato.fiscal_tecnico_id
+        )
+    )
+
+
+def usuario_pode_preencher_avaliacao_v2(user, contrato):
+    """A avaliação segue a mesma regra operacional do checklist."""
+
+    return usuario_pode_preencher_checklist_v2(user, contrato)
+
+
+def usuario_pode_preencher_avaliacao_fiscal_v2(user, contrato):
+    """Fiscais preenchem a parte fiscal; sem fiscais definidos, o criador cobre o papel inicial."""
+
+    return bool(
+        user
+        and user.is_authenticated
+        and (
+            usuario_eh_admin_sistema(user)
+            or user.pk == contrato.fiscal_administrativo_id
+            or user.pk == contrato.fiscal_tecnico_id
+            # Enquanto o contrato ainda nasce sem fiscais, o criador mantém o fluxo operacional destravado.
+            or (
+                usuario_eh_criador_contrato(user, contrato)
+                and not contrato.fiscal_administrativo_id
+                and not contrato.fiscal_tecnico_id
+            )
+        )
+    )
+
+
+def usuario_pode_preencher_avaliacao_gestor_v2(user, contrato):
+    """Gestor preenche sua etapa; sem gestor definido, o criador cobre o papel inicial."""
+
+    return bool(
+        user
+        and user.is_authenticated
+        and (
+            usuario_eh_admin_sistema(user)
+            or user.pk == contrato.gestor_contrato_id
+            # O criador atua como responsável transitório até a definição formal do gestor.
+            or (usuario_eh_criador_contrato(user, contrato) and not contrato.gestor_contrato_id)
+        )
+    )
+
+
+def usuario_pode_preencher_medicao_v2(user, contrato):
+    """Nesta primeira fase a medição fica com gestor e administradores."""
+
+    return usuario_pode_gerir_contrato_v2(user, contrato)
+
+
+def competencia_v2_esta_fechada(competencia):
+    """Competências pagas ou canceladas ficam congeladas."""
+
+    return competencia.status in {
+        competencia.Status.PAGA,
+        competencia.Status.CANCELADA,
+    }
+
+
+def competencia_v2_exige_avaliacao(competencia):
+    """A competência exige avaliação quando nasceu vinculada a uma versão de formulário."""
+
+    return bool(competencia.formulario_avaliacao_snapshot)
+
+
+def validar_competencia_v2_editavel(competencia):
+    """Impede alterações operacionais em competências já encerradas."""
+
+    if competencia_v2_esta_fechada(competencia):
+        raise ValidationError('Esta competência já foi encerrada e não pode mais ser alterada.')
+
+
+def _snapshot_checklist_modelo(modelo):
+    """Serializa a versão do checklist com todos os itens para replicação nas competências."""
+
+    return {
+        'id': modelo.pk,
+        'nome': modelo.nome,
+        'descricao': modelo.descricao,
+        'observacoes': modelo.observacoes,
+        'ativo': modelo.ativo,
+        'itens': [
+            {
+                'ordem': item.ordem,
+                'titulo': item.titulo,
+                'descricao': item.descricao,
+                'obrigatorio': item.obrigatorio,
+            }
+            for item in modelo.itens.order_by('ordem', 'id')
+        ],
+    }
+
+
+def _snapshot_formulario_avaliacao(formulario):
+    """Congela a definição da avaliação no momento em que a competência nasce."""
+
+    return {
+        'id': formulario.pk,
+        'nome': formulario.nome,
+        'descricao': formulario.descricao,
+        'observacoes': formulario.observacoes,
+        'escala': [
+            {
+                'ordem': nota.ordem,
+                'valor': str(nota.valor),
+                'legenda': nota.legenda,
+            }
+            for nota in formulario.escalas.order_by('ordem', 'id')
+        ],
+        'faixas_liberacao': [
+            {
+                'ordem': faixa.ordem,
+                'nota_minima': str(faixa.nota_minima),
+                'nota_maxima': str(faixa.nota_maxima) if faixa.nota_maxima is not None else '',
+                'percentual_liberacao': str(faixa.percentual_liberacao),
+            }
+            for faixa in formulario.faixas_liberacao.order_by('ordem', 'id')
+        ],
+        'grupos': [
+            {
+                'ordem': grupo.ordem,
+                'nome': grupo.nome,
+                'descricao': grupo.descricao,
+                'itens': [
+                    {
+                        'ordem': item.ordem,
+                        'descricao': item.descricao,
+                        'peso_percentual': str(item.peso_percentual),
+                        'observacoes_padrao': item.observacoes_padrao,
+                    }
+                    for item in grupo.itens.order_by('ordem', 'id')
+                ],
+            }
+            for grupo in formulario.grupos.order_by('ordem', 'id')
+        ],
+    }
+
+
+def atualizar_checklist_snapshot_competencia_v2(competencia, modelo):
+    """Replica a versão ativa do checklist para uma competência ainda aberta."""
+
+    from .models import ChecklistCompetenciaItem
+
+    validar_competencia_v2_editavel(competencia)
+    competencia.checklist_modelo_snapshot = _snapshot_checklist_modelo(modelo)
+    competencia.save(update_fields=['checklist_modelo_snapshot', 'atualizado_em'])
+    competencia.checklist_itens.all().delete()
+    for item_snapshot in competencia.checklist_modelo_snapshot.get('itens', []):
+        ChecklistCompetenciaItem.objects.create(
+            competencia=competencia,
+            ordem=item_snapshot['ordem'],
+            titulo=item_snapshot['titulo'],
+            descricao=item_snapshot.get('descricao', ''),
+            obrigatorio=item_snapshot.get('obrigatorio', True),
+        )
+    recalcular_competencia_v2(competencia)
+
+
+def sincronizar_checklist_ativo_contrato_v2(contrato):
+    """Aplica o checklist ativo às competências ainda não encerradas do contrato."""
+
+    modelo = contrato.checklist_ativo
+    if modelo is None:
+        return
+    for competencia in contrato.competencias.exclude(
+        status__in=[
+            contrato.competencias.model.Status.PAGA,
+            contrato.competencias.model.Status.CANCELADA,
+        ]
+    ):
+        atualizar_checklist_snapshot_competencia_v2(competencia, modelo)
+
+
+def criar_avaliacao_shell_competencia_v2(competencia, formulario):
+    """Cria a avaliação vazia já com snapshot e itens-resposta vinculados à competência."""
+
+    from .models import AvaliacaoCompetenciaItemRespostaV2, AvaliacaoQualidadeCompetencia
+
+    if competencia.avaliacao_qualidade_segura is not None:
+        return competencia.avaliacao_qualidade_segura
+
+    snapshot = _snapshot_formulario_avaliacao(formulario)
+    avaliacao = AvaliacaoQualidadeCompetencia.objects.create(
+        competencia=competencia,
+        formulario=formulario,
+        formulario_snapshot=snapshot,
+    )
+    for grupo in snapshot.get('grupos', []):
+        for item in grupo.get('itens', []):
+            AvaliacaoCompetenciaItemRespostaV2.objects.create(
+                avaliacao=avaliacao,
+                grupo_nome=grupo['nome'],
+                grupo_ordem=grupo['ordem'],
+                item_ordem=item['ordem'],
+                item_descricao=item['descricao'],
+                item_peso_percentual=Decimal(item['peso_percentual']),
+                item_observacoes_padrao=item.get('observacoes_padrao', ''),
+            )
+    competencia.formulario_avaliacao_snapshot = snapshot
+    competencia.save(update_fields=['formulario_avaliacao_snapshot', 'atualizado_em'])
+    return avaliacao
+
+
+def gerar_competencias_contrato_v2(contrato):
+    """Gera competências mensais da vigência inicial usando checklist ativo e avaliação opcional."""
 
     from .models import CompetenciaPagamento
 
-    data_inicio = contrato.data_inicio_vigencia
-    data_fim = contrato_data_final_vigente(contrato)
-    if not data_inicio or not data_fim:
-        return
+    validar_processos_sei_contrato(contrato)
 
-    periodos_esperados = iterar_periodos_competencia(data_inicio, data_fim)
-    competencias_existentes = {
-        (competencia.periodo_inicio, competencia.periodo_fim): competencia
-        for competencia in contrato.competencias.filter(gerada_automaticamente=True)
-    }
+    modelo = contrato.checklist_ativo
+    if modelo is None:
+        raise ValidationError('Cadastre e ative ao menos uma versão de checklist antes de gerar as competências.')
 
-    for periodo_inicio, periodo_fim in periodos_esperados:
-        valor_previsto = calcular_valor_previsto_competencia(contrato, periodo_inicio, periodo_fim)
-        competencia = competencias_existentes.get((periodo_inicio, periodo_fim))
-        if competencia is None:
-            CompetenciaPagamento.objects.create(
-                contrato=contrato,
-                periodo_inicio=periodo_inicio,
-                periodo_fim=periodo_fim,
-                valor_previsto=valor_previsto,
-                gerada_automaticamente=True,
-            )
-            continue
+    data_fim = inclusive_end_date(contrato.data_inicio_vigencia, contrato.prazo_inicial_meses)
+    periodos = iterar_periodos_competencia(contrato.data_inicio_vigencia, data_fim)
+    formulario_ativo = contrato.formulario_avaliacao_ativo
 
-        campos_atualizar = []
-        if competencia.valor_previsto != valor_previsto:
-            competencia.valor_previsto = valor_previsto
-            campos_atualizar.append('valor_previsto')
-        if not competencia.gerada_automaticamente:
-            competencia.gerada_automaticamente = True
-            campos_atualizar.append('gerada_automaticamente')
-        if campos_atualizar:
-            campos_atualizar.append('atualizado_em')
-            competencia.save(update_fields=campos_atualizar)
-
-
-def contrato_total_prorrogacoes(contrato):
-    """Soma os meses de todos os termos aditivos de prorrogação."""
-
-    total = contrato.aditivos.aggregate(total=Sum('quantidade_meses')).get('total') or 0
-    return int(total)
-
-
-def contrato_prazo_total_meses(contrato):
-    """Retorna a vigência acumulada prevista considerando prorrogações."""
-
-    return int(contrato.prazo_inicial_meses or 0) + contrato_total_prorrogacoes(contrato)
-
-
-def contrato_data_final_vigente(contrato):
-    """Obtém a data final vigente a partir do último aditivo ou do prazo inicial."""
-
-    ultimo = contrato.aditivos.order_by('data_termino', 'id').last()
-    if ultimo and ultimo.data_termino:
-        return ultimo.data_termino
-    return inclusive_end_date(contrato.data_inicio_vigencia, contrato.prazo_inicial_meses)
-
-
-def contrato_data_limite_ordinaria(contrato):
-    """Calcula a data limite da vigência ordinária do contrato."""
-
-    return inclusive_end_date(contrato.data_inicio_vigencia, contrato.vigencia_maxima_meses)
-
-
-def contrato_regime(contrato):
-    """Define o regime contratual com base no total de meses consumidos/previstos."""
-
-    total_meses = contrato_prazo_total_meses(contrato)
-    ordinario = int(contrato.vigencia_maxima_meses or 0)
-    if total_meses <= ordinario:
-        return contrato.Regime.ORDINARIO
-    if total_meses <= ordinario + 12:
-        return contrato.Regime.EXCEPCIONAL
-    return contrato.Regime.EMERGENCIAL
-
-
-def contrato_situacao(contrato, reference_date=None):
-    """Calcula a situação operacional do contrato a partir do calendário e travas manuais."""
-
-    today = reference_date or timezone.localdate()
-    if contrato.situacao_forcada == contrato.Situacao.SUSPENSO:
-        return contrato.Situacao.SUSPENSO
-    if contrato.situacao_forcada == contrato.Situacao.ENCERRADO:
-        return contrato.Situacao.ENCERRADO
-    data_final = contrato_data_final_vigente(contrato)
-    if not data_final:
-        return contrato.Situacao.VIGENTE
-    if today > data_final:
-        return contrato.Situacao.ENCERRADO
-    dias_restantes = (data_final - today).days
-    if dias_restantes <= 180:
-        return contrato.Situacao.A_VENCER
-    return contrato.Situacao.VIGENTE
-
-
-def contrato_alerta(contrato, reference_date=None):
-    """Mapeia o alerta visual da listagem principal a partir dos dias restantes."""
-
-    today = reference_date or timezone.localdate()
-    situacao = contrato_situacao(contrato, today)
-    if situacao == contrato.Situacao.ENCERRADO:
-        return 'cinza'
-    data_final = contrato_data_final_vigente(contrato)
-    if not data_final:
-        return 'verde'
-    dias_restantes = (data_final - today).days
-    if dias_restantes <= 30:
-        return 'preto'
-    if dias_restantes <= 60:
-        return 'roxo'
-    if dias_restantes <= 90:
-        return 'vermelho'
-    if dias_restantes <= 120:
-        return 'laranja'
-    if dias_restantes <= 180:
-        return 'amarelo'
-    return 'verde'
-
-
-def contrato_prazo_atual_texto(contrato, reference_date=None):
-    """Calcula o indicador de prazo atual dentro da vigência vigente."""
-
-    today = reference_date or timezone.localdate()
-    data_final = contrato_data_final_vigente(contrato) or today
-    if today > data_final:
-        fim_referencia = data_final
-    else:
-        fim_referencia = today
-    meses = full_months_between(contrato.data_inicio_vigencia, fim_referencia)
-    total = contrato_prazo_total_meses(contrato)
-    return periodo_texto(meses, total)
-
-
-def contrato_periodo_acumulado_texto(contrato, reference_date=None):
-    """Calcula o indicador acumulado em relação ao limite máximo ordinário."""
-
-    today = reference_date or timezone.localdate()
-    data_final = contrato_data_final_vigente(contrato) or today
-    fim_referencia = min(today, data_final)
-    meses = full_months_between(contrato.data_inicio_vigencia, fim_referencia)
-    total = int(contrato.vigencia_maxima_meses or 0)
-    return periodo_texto(meses, total)
-
-
-def snapshot_modelo_qualidade(modelo):
-    """Converte o modelo vigente em um snapshot serializável para auditoria."""
-
-    grupos = []
-    for grupo in modelo.grupos.order_by('ordem', 'id'):
-        criterios = []
-        for criterio in grupo.criterios.order_by('ordem', 'id'):
-            criterios.append(
-                {
-                    'id': criterio.id,
-                    'nome': criterio.nome,
-                    'peso': str(criterio.peso),
-                    'pontuacao_maxima': str(criterio.pontuacao_maxima),
-                }
-            )
-        grupos.append(
-            {
-                'id': grupo.id,
-                'nome': grupo.nome,
-                'peso': str(grupo.peso),
-                'criterios': criterios,
-            }
+    for periodo_inicio, periodo_fim in periodos:
+        competencia, criada = CompetenciaPagamento.objects.get_or_create(
+            contrato=contrato,
+            periodo_inicio=periodo_inicio,
+            periodo_fim=periodo_fim,
+            defaults={
+                'valor_previsto': contrato.base_mensal,
+                'checklist_modelo_snapshot': _snapshot_checklist_modelo(modelo),
+                'formulario_avaliacao_snapshot': _snapshot_formulario_avaliacao(formulario_ativo) if formulario_ativo else {},
+            },
         )
-    return {
-        'modelo_id': modelo.id,
-        'modelo_nome': modelo.nome,
-        'grupos': grupos,
-    }
+        if criada:
+            atualizar_checklist_snapshot_competencia_v2(competencia, modelo)
+            if formulario_ativo:
+                criar_avaliacao_shell_competencia_v2(competencia, formulario_ativo)
 
 
-def recalcular_avaliacao(competencia):
-    """Atualiza percentual, desconto e valor final com base nas notas registradas."""
+def recalcular_avaliacao_v2(avaliacao):
+    """Atualiza nota final e percentuais sugeridos a partir da média ponderada dos itens."""
 
-    avaliacao = getattr(competencia, 'avaliacao_qualidade', None)
-    if not avaliacao:
+    respostas = list(avaliacao.itens.order_by('grupo_ordem', 'item_ordem', 'id'))
+    soma_pesos_itens = sum((resposta.item_peso_percentual or ZERO) for resposta in respostas) or Decimal('1.00')
+    acumulado = ZERO
+    for resposta in respostas:
+        acumulado += (resposta.nota_valor or ZERO) * ((resposta.item_peso_percentual or ZERO) / soma_pesos_itens)
+
+    nota_final = quantize_money(acumulado) if respostas else ZERO
+    percentual = Decimal('100.00')
+    for faixa in avaliacao.faixas_liberacao_snapshot:
+        nota_minima = Decimal(faixa['nota_minima'])
+        nota_maxima = Decimal(faixa['nota_maxima']) if faixa.get('nota_maxima') not in {'', None} else None
+        if nota_final < nota_minima:
+            continue
+        if nota_maxima is not None and nota_final > nota_maxima:
+            continue
+        percentual = Decimal(faixa['percentual_liberacao'])
+        break
+
+    avaliacao.nota_final = nota_final
+    avaliacao.percentual_liberacao_sugerido = percentual
+    avaliacao.valor_liberado_sugerido = quantize_money((avaliacao.competencia.valor_medido or ZERO) * (percentual / Decimal('100.00')))
+    avaliacao.save(
+        update_fields=[
+            'nota_final',
+            'percentual_liberacao_sugerido',
+            'valor_liberado_sugerido',
+            'atualizado_em',
+        ]
+    )
+    recalcular_competencia_v2(avaliacao.competencia)
+
+
+def avaliacao_v2_esta_concluida(avaliacao):
+    """Só conclui a avaliação quando conteúdo e PDF assinado estiverem fechados."""
+
+    respostas = list(avaliacao.itens.order_by('grupo_ordem', 'item_ordem', 'id'))
+    if not respostas:
+        return False
+
+    max_nota = avaliacao.maior_nota_escala
+    for resposta in respostas:
+        # A nota final que vale continua sendo a do gestor quando existir,
+        # mas a conclusão precisa respeitar as obrigações de cada papel separadamente.
+        if resposta.nota_fiscal_valor is None:
+            return False
+        if resposta.nota_gestor_valor is None:
+            return False
+        if resposta.nota_fiscal_valor < max_nota and not (resposta.justificativa_fiscal or '').strip():
+            return False
+        if resposta.nota_gestor_valor < max_nota and not (resposta.manifestacao_gestor_item or '').strip():
+            return False
+    # O fechamento da etapa depende do relatório assinado ter voltado para a competência.
+    return bool(avaliacao.competencia.avaliacao_assinada)
+
+
+def competencia_medicao_v2_esta_concluida(competencia):
+    """Define a conclusão da medição expandida com aceites e dados financeiros."""
+
+    possui_medicoes = competencia.medicoes.filter(quantidade__gt=0).exists()
+    possui_nf_principal = bool(competencia.nota_fiscal_fatura and (competencia.numero_nota_fiscal or '').strip())
+    possui_aceite_provisorio = bool(
+        competencia.aceite_provisorio_arquivo and competencia.data_aceite_provisorio and competencia.prazo_aceite_definitivo_dias
+    )
+    possui_aceite_definitivo = bool(
+        competencia.aceite_definitivo_arquivo and competencia.data_aceite_definitivo and competencia.prazo_pagamento_dias
+    )
+    if not (possui_medicoes and possui_nf_principal and possui_aceite_provisorio and possui_aceite_definitivo):
+        return False
+    if competencia.nota_adicional_nao_consta:
+        return True
+    if competencia.possui_nota_adicional:
+        return bool(
+            competencia.nota_adicional_arquivo
+            and (competencia.numero_nota_adicional or '').strip()
+            and (competencia.valor_nota_adicional or ZERO) >= ZERO
+        )
+    return False
+
+
+def competencia_checklist_v2_esta_concluido(competencia):
+    """Agrupa checklist oficial e checklist adicional em uma única checagem operacional."""
+
+    itens = competencia.checklist_itens.all()
+    return bool(itens.exists() and not itens.filter(obrigatorio=True, concluido=False).exists())
+
+
+def recalcular_competencia_v2(competencia):
+    """Consolida situação, datas de etapa e valores da competência."""
+
+    from django.db.models import Sum
+
+    total_medido = competencia.medicoes.aggregate(total=Sum('valor_subtotal')).get('total') or ZERO
+    competencia.valor_medido = quantize_money(total_medido)
+
+    checklist_pendente = competencia.checklist_itens.filter(obrigatorio=True, concluido=False).exists()
+    todos_checklist_ok = competencia_checklist_v2_esta_concluido(competencia)
+    competencia.checklist_concluido_em = timezone.now() if todos_checklist_ok else None
+    medicao_concluida = competencia_medicao_v2_esta_concluida(competencia)
+    if medicao_concluida and not competencia.medicao_concluida_em:
+        competencia.medicao_concluida_em = timezone.now()
+    elif not medicao_concluida:
+        competencia.medicao_concluida_em = None
+
+    avaliacao = competencia.avaliacao_qualidade_segura
+    if avaliacao:
+        competencia.valor_liberado_sugerido = avaliacao.valor_liberado_sugerido
+    else:
+        competencia.valor_liberado_sugerido = competencia.valor_medido
+    competencia.valor_liberado_final = quantize_money((competencia.valor_nota_fiscal or ZERO) - competencia.total_retencoes)
+    competencia.valor_liquido_nota_adicional = quantize_money((competencia.valor_nota_adicional or ZERO) - competencia.total_retencoes_adicionais)
+
+    if competencia_v2_esta_fechada(competencia):
+        competencia.save(
+            update_fields=[
+                'valor_medido',
+                'valor_liberado_sugerido',
+                'valor_liberado_final',
+                'valor_liquido_nota_adicional',
+                'checklist_concluido_em',
+                'medicao_concluida_em',
+                'atualizado_em',
+            ]
+        )
         return
 
-    total_obtido = Decimal('0')
-    total_possivel = Decimal('0')
-    for item in avaliacao.itens.select_related('criterio').all():
-        total_obtido += item.nota_obtida
-        total_possivel += item.criterio.pontuacao_maxima
-
-    if total_possivel <= 0:
-        avaliacao.percentual_desempenho = ZERO
+    if not competencia.checklist_itens.exists():
+        competencia.status = competencia.Status.BLOQUEADA
+    elif not medicao_concluida:
+        competencia.status = competencia.Status.MEDICAO_PENDENTE
+    elif competencia_v2_exige_avaliacao(competencia) and not (avaliacao and avaliacao.concluida_em):
+        competencia.status = competencia.Status.AVALIACAO_PENDENTE
+    elif checklist_pendente:
+        competencia.status = competencia.Status.CHECKLIST_PENDENTE
+    elif not competencia.download_realizado_em:
+        competencia.status = competencia.Status.DOWNLOAD_PENDENTE
+    elif not (competencia.ordem_bancaria_arquivo and competencia.data_pagamento):
+        competencia.status = competencia.Status.OB_PENDENTE
     else:
-        avaliacao.percentual_desempenho = quantize_money((total_obtido / total_possivel) * Decimal('100'))
+        competencia.status = competencia.Status.PAGA
 
-    avaliacao.percentual_desconto = quantize_money(Decimal('100') - avaliacao.percentual_desempenho)
-    valor_medido = competencia.valor_medido or ZERO
-    avaliacao.valor_ajuste = quantize_money((valor_medido * avaliacao.percentual_desconto) / Decimal('100'))
-    avaliacao.valor_final_ajustado = quantize_money(valor_medido - avaliacao.valor_ajuste)
-    type(avaliacao).objects.filter(pk=avaliacao.pk).update(
-        percentual_desempenho=avaliacao.percentual_desempenho,
-        percentual_desconto=avaliacao.percentual_desconto,
-        valor_ajuste=avaliacao.valor_ajuste,
-        valor_final_ajustado=avaliacao.valor_final_ajustado,
+    competencia.save(
+        update_fields=[
+            'status',
+            'valor_medido',
+            'valor_liberado_sugerido',
+            'valor_liberado_final',
+            'valor_liquido_nota_adicional',
+            'checklist_concluido_em',
+            'medicao_concluida_em',
+            'atualizado_em',
+        ]
     )
 
 
-def recalcular_competencia(competencia):
-    """Recalcula totais financeiros e status derivado da competência."""
+def validar_fluxo_pagamento_v2(competencia):
+    """Mantém compatibilidade: agora valida a liberação da etapa final de OB."""
 
-    total_medicoes = competencia.medicoes.aggregate(total=Sum('valor_subtotal')).get('total') or ZERO
-    competencia.valor_medido = quantize_money(total_medicoes)
-    avaliacao = getattr(competencia, 'avaliacao_qualidade', None)
-    if avaliacao and avaliacao.valor_final_ajustado is not None:
-        competencia.valor_liberado = quantize_money(avaliacao.valor_final_ajustado)
-    else:
-        competencia.valor_liberado = competencia.valor_medido
+    if competencia.status != competencia.Status.OB_PENDENTE:
+        raise ValidationError('A competência ainda não está apta para anexar a ordem bancária.')
 
-    if competencia.aguardando_checklist_padrao:
-        novo_status = competencia.Status.BLOQUEADO
-    else:
-        todos_ok = not competencia.checklist_itens.filter(obrigatorio=True, concluido=False).exists()
-        novo_status = competencia.status
-        if novo_status == competencia.Status.BLOQUEADO:
-            novo_status = competencia.Status.RASCUNHO
-        if novo_status == competencia.Status.RASCUNHO and todos_ok:
-            novo_status = competencia.Status.APTO_LIBERACAO
-    type(competencia).objects.filter(pk=competencia.pk).update(
-        valor_medido=competencia.valor_medido,
-        valor_liberado=competencia.valor_liberado,
-        status=novo_status,
+
+def enviar_alertas_monitoramento_competencias(referencia=None):
+    """Dispara alertas automáticos de 50% e de 75%+ para competências em monitoramento."""
+
+    from mensageria_assincrona.models import Mensagem
+    from mensageria_assincrona.services import criar_mensagem_rascunho, publicar_mensagem
+
+    hoje = referencia or timezone.localdate()
+    enviados = 0
+    competencias = (
+        __import__('contratos.models', fromlist=['CompetenciaPagamento']).CompetenciaPagamento.objects
+        .select_related('contrato')
+        .filter(monitoramento_etapa__gt='', monitoramento_inicio__isnull=False, monitoramento_limite__isnull=False)
+        .exclude(status__in=['PAGA', 'CANCELADA'])
     )
-    competencia.status = novo_status
-
-
-def criar_checklist_competencia(competencia):
-    """Replica o checklist-modelo atual do contrato para uma competência específica."""
-
-    if competencia.checklist_itens.exists():
-        return
-    for modelo in competencia.contrato.checklist_modelos.order_by('ordem', 'id'):
-        competencia.checklist_itens.create(
-            titulo=modelo.titulo,
-            descricao=modelo.descricao,
-            obrigatorio=modelo.obrigatorio,
-            ordem=modelo.ordem,
-        )
-
-
-def sincronizar_checklist_contrato(contrato):
-    """Replica o checklist padrão do contrato nas competências já criadas e libera o fluxo."""
-
-    modelos = list(contrato.checklist_modelos.order_by('ordem', 'id'))
-    if not modelos:
-        return
-
-    for competencia in contrato.competencias.all():
-        existentes = {
-            (item.ordem, item.titulo)
-            for item in competencia.checklist_itens.all()
-        }
-        for modelo in modelos:
-            chave = (modelo.ordem, modelo.titulo)
-            if chave in existentes:
-                continue
-            competencia.checklist_itens.create(
-                titulo=modelo.titulo,
-                descricao=modelo.descricao,
-                obrigatorio=modelo.obrigatorio,
-                ordem=modelo.ordem,
-            )
-        recalcular_competencia(competencia)
-
-
-def reordenar_checklist_padrao_contrato(contrato):
-    """Normaliza a numeração do checklist padrão do contrato em sequência crescente."""
-
-    for indice, modelo in enumerate(contrato.checklist_modelos.order_by('ordem', 'id'), start=1):
-        if modelo.ordem == indice:
+    for competencia in competencias:
+        percentual = competencia.monitoramento_percentual
+        deve_enviar = False
+        if percentual >= 75:
+            deve_enviar = competencia.alerta_75_ultimo_envio_em != hoje
+        elif percentual >= 50:
+            deve_enviar = competencia.alerta_50_enviado_em != hoje
+        if not deve_enviar:
             continue
-        type(modelo).objects.filter(pk=modelo.pk).update(ordem=indice)
 
+        destinatarios = [
+            usuario
+            for usuario in [
+                competencia.contrato.fiscal_administrativo,
+                competencia.contrato.fiscal_tecnico,
+                competencia.contrato.gestor_contrato,
+                competencia.contrato.criado_por,
+            ]
+            if usuario and usuario.is_active
+        ]
+        if not destinatarios:
+            continue
 
-def calcular_memorias_retroativas(evento):
-    """Gera a memória de cálculo retroativo por competência afetada pelo reajuste."""
-
-    memorias = []
-    for item_evento in evento.itens.select_related('item_contrato').all():
-        medicoes = item_evento.item_contrato.medicoes.filter(
-            competencia__periodo_inicio__gte=evento.data_base,
-            competencia__periodo_inicio__lt=evento.data_aplicacao,
-        ).select_related('competencia')
-        for medicao in medicoes:
-            diferenca_unitaria = quantize_money(item_evento.valor_reajustado - medicao.valor_unitario_aplicado)
-            diferenca_total = quantize_money(diferenca_unitaria * medicao.quantidade)
-            memoria = evento.memorias.update_or_create(
-                competencia=medicao.competencia,
-                item_contrato=item_evento.item_contrato,
-                defaults={
-                    'quantidade_base': medicao.quantidade,
-                    'valor_unitario_anterior': medicao.valor_unitario_aplicado,
-                    'valor_unitario_reajustado': item_evento.valor_reajustado,
-                    'diferenca_total': diferenca_total,
-                },
-            )[0]
-            memorias.append(memoria)
-    return memorias
+        dias_restantes = max((competencia.monitoramento_limite - hoje).days, 0)
+        mensagem = criar_mensagem_rascunho(
+            assunto=f'Prazo monitorado: {competencia.monitoramento_etapa}',
+            corpo=(
+                f'Etapa pendente: {competencia.monitoramento_etapa}\n'
+                f'Contrato: {competencia.contrato.numero_contrato}\n'
+                f'Competência: {competencia.periodo_inicio:%m/%Y}\n'
+                f'Data limite: {competencia.monitoramento_limite:%d/%m/%Y}\n'
+                f'Dias restantes: {dias_restantes}'
+            ),
+            prioridade=Mensagem.Prioridade.ALTA if percentual >= 75 else Mensagem.Prioridade.NORMAL,
+        )
+        mensagem.origem_tipo = Mensagem.OrigemTipo.SISTEMA
+        mensagem.origem_app = 'contratos'
+        mensagem.origem_model = 'CompetenciaPagamento'
+        mensagem.origem_pk = f'{competencia.pk}:{competencia.monitoramento_etapa}:{hoje.isoformat()}'
+        mensagem.save(update_fields=['origem_tipo', 'origem_app', 'origem_model', 'origem_pk', 'updated_at'])
+        mensagem.usuarios_alvo.add(*destinatarios)
+        publicar_mensagem(mensagem, publicada_em=timezone.now())
+        if percentual >= 75:
+            competencia.alerta_75_ultimo_envio_em = hoje
+        else:
+            competencia.alerta_50_enviado_em = hoje
+        competencia.save(update_fields=['alerta_50_enviado_em', 'alerta_75_ultimo_envio_em', 'atualizado_em'])
+        enviados += 1
+    return enviados

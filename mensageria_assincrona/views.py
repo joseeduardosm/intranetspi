@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, JsonResponse
@@ -106,19 +108,66 @@ class MensagemAdminListView(MensageriaAdminMixin, ListView):
     template_name = "mensageria_assincrona/admin_list.html"
     context_object_name = "mensagens"
     paginate_by = 20
+    sort_map = {
+        "id": "id",
+        "assunto": "assunto",
+        "corpo": "corpo",
+        "prioridade": "prioridade",
+        "status_envio": "status_envio",
+        "origem_tipo": "origem_tipo",
+        "origem_app": "origem_app",
+        "origem_model": "origem_model",
+        "origem_pk": "origem_pk",
+        "criada_por": "criada_por__username",
+        "publicar_em": "publicar_em",
+        "publicada_em": "publicada_em",
+        "expira_em": "expira_em",
+        "payload_email": "payload_email",
+        "created_at": "created_at",
+        "updated_at": "updated_at",
+    }
 
     def get_queryset(self):
         queryset = mensagens_admin_queryset()
         status = self.request.GET.get("status", "").strip()
         if status in Mensagem.StatusEnvio.values:
             queryset = queryset.filter(status_envio=status)
-        return queryset
+
+        sort_key = self.request.GET.get("sort", "").strip()
+        sort_dir = self.request.GET.get("dir", "desc").strip().lower()
+        sort_field = self.sort_map.get(sort_key, "created_at")
+        prefixo = "" if sort_dir == "asc" else "-"
+        return queryset.order_by(f"{prefixo}{sort_field}", "-id")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["status_atual"] = self.request.GET.get("status", "")
+        status_atual = self.request.GET.get("status", "")
+        current_sort = self.request.GET.get("sort", "").strip() or "created_at"
+        current_dir = self.request.GET.get("dir", "desc").strip().lower()
+
+        if current_sort not in self.sort_map:
+            current_sort = "created_at"
+        if current_dir not in {"asc", "desc"}:
+            current_dir = "desc"
+
+        context["status_atual"] = status_atual
         context["status_opcoes"] = Mensagem.StatusEnvio.choices
+        context["current_sort"] = current_sort
+        context["current_dir"] = current_dir
+        context["sort_links"] = {
+            chave: self._build_sort_link(chave, status_atual, current_sort, current_dir)
+            for chave in self.sort_map
+        }
         return context
+
+    def _build_sort_link(self, sort_key, status_atual, current_sort, current_dir):
+        """Preserva filtros ativos ao alternar a ordenação de cada coluna."""
+
+        proxima_direcao = "desc" if current_sort == sort_key and current_dir == "asc" else "asc"
+        query = {"sort": sort_key, "dir": proxima_direcao}
+        if status_atual:
+            query["status"] = status_atual
+        return f"?{urlencode(query)}"
 
 
 class MensagemAdminCreateView(MensageriaAdminMixin, CreateView):

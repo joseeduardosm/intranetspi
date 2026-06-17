@@ -1,56 +1,42 @@
-/* Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 */
-/* Objetivo: Isolar a identidade visual do módulo de contratos sem reutilizar CSS do RegulaSGI. */
-
-:root {
-  --contratos-ink: #143642;
-  --contratos-accent: #0b6e4f;
-  --contratos-sand: #f4efe6;
-  --contratos-paper: #fffdf9;
-  --contratos-line: #d6d1c7;
-  --contratos-alert-amarelo: #ffe082;
-  --contratos-alert-laranja: #ffb74d;
-  --contratos-alert-vermelho: #ef5350;
-  --contratos-alert-roxo: #8e24aa;
-  --contratos-alert-preto: #263238;
-  --contratos-alert-cinza: #cfd8dc;
-  --contratos-alert-verde: #a5d6a7;
-}
-
-.contratos-panel .spi-module-card,
-.contratos-card {
-  background: linear-gradient(135deg, var(--contratos-paper), var(--contratos-sand));
-  border: 1px solid rgba(20, 54, 66, 0.12);
-}
+/* Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026
+   Estiliza o módulo Contratos V2 com foco em clareza e evolução incremental. */
 
 .contratos-form-card,
-.contratos-filtros,
-.contratos-summary-card,
-.contratos-competencia-card {
-  background: var(--contratos-paper);
+.contratos-summary-card {
+  background: #fffdf9;
 }
 
-.contratos-inline-section {
-  border-top: 1px solid var(--contratos-line);
-  margin-top: 2rem;
-  padding-top: 1.5rem;
+.contratos-search-input {
+  min-width: min(32rem, 100%);
 }
 
-.contratos-inline-list {
-  display: grid;
-  gap: 1rem;
+.contratos-table-wrap {
+  overflow: visible;
 }
 
-.contratos-inline-card {
-  background: linear-gradient(180deg, rgba(20, 54, 66, 0.03), rgba(11, 110, 79, 0.02));
-  border: 1px solid rgba(20, 54, 66, 0.1);
-  border-radius: 0.9rem;
-  padding: 1rem;
+.contratos-table thead th {
+  background: #f8fafc;
+  color: #344054;
+  font-size: .9rem;
 }
 
-.contratos-field-with-action {
-  align-items: stretch;
-  display: flex;
-  gap: 0.75rem;
+.contratos-items-table thead th,
+.contratos-items-table tfoot th {
+  background: #f8fafc;
+  color: #344054;
+}
+
+.contratos-items-table td,
+.contratos-items-table th {
+  vertical-align: middle;
+}
+
+.contratos-items-table tfoot th {
+  font-size: .95rem;
+}
+
+.contratos-actions-toggle {
+  min-width: 2.6rem;
 }
 
 .contratos-numero-grid {
@@ -67,73 +53,30 @@
   padding: 0.85rem 1rem;
 }
 
-.contratos-inline-action-btn {
-  align-items: center;
-  display: inline-flex;
-  font-size: 1.25rem;
-  font-weight: 700;
-  justify-content: center;
-  min-width: 3.25rem;
-}
-
-.contratos-modal .modal-body {
-  background: linear-gradient(180deg, rgba(20, 54, 66, 0.02), rgba(11, 110, 79, 0.02));
-}
-
-.spi-action-menu {
-  position: relative;
-}
-
-.spi-action-menu-toggle {
-  min-width: 2.5rem;
-}
-
-.spi-action-menu-panel {
-  background: #fffdf9;
-  border: 1px solid rgba(20, 54, 66, 0.14);
-  border-radius: 0.9rem;
-  box-shadow: 0 18px 32px rgba(20, 54, 66, 0.18);
-  display: grid;
-  gap: 0.45rem;
-  min-width: 10rem;
-  padding: 0.75rem;
-  position: fixed;
-  z-index: 2000;
-}
-
-.spi-action-menu-panel .btn {
-  justify-content: flex-start;
-}
-
-.contratos-itens-table {
-  overflow: visible;
-}
-
 .contratos-summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1rem;
 }
 
-.contratos-summary-card h2 {
-  margin: 0.35rem 0;
-  color: var(--contratos-ink);
-  font-size: 1.5rem;
+.contratos-kicker {
+  color: #0b6e4f;
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
-.contratos-kicker {
-  color: var(--contratos-accent);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.contratos-summary-card h2 {
+  margin: .35rem 0;
+  color: #143642;
+  font-size: 1.45rem;
 }
 
 .contratos-section-header {
   align-items: center;
   background: linear-gradient(90deg, rgba(20, 54, 66, 0.06), rgba(11, 110, 79, 0.04));
   display: flex;
-  justify-content: space-between;
   gap: 1rem;
 }
 
@@ -142,15 +85,14 @@
   margin: 0;
 }
 
-.contratos-responsaveis-stack {
+.contratos-responsaveis-grid {
   display: grid;
-  gap: .7rem;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .contratos-responsavel-card {
   width: 100%;
-  padding: .85rem .95rem;
-  border-width: 1px;
   box-shadow: none;
   cursor: pointer;
   text-align: left;
@@ -162,164 +104,370 @@
 }
 
 .contratos-responsavel-label {
-  color: var(--contratos-accent);
-  font-size: .72rem;
-  font-weight: 800;
+  color: #667085;
+  font-size: .75rem;
+  font-weight: 700;
   letter-spacing: .04em;
   text-transform: uppercase;
 }
 
-.contratos-table tr.alerta-amarelo {
-  background: rgba(255, 224, 130, 0.35);
-}
-
-.contratos-table tr.alerta-laranja {
-  background: rgba(255, 183, 77, 0.3);
-}
-
-.contratos-table tr.alerta-vermelho {
-  background: rgba(239, 83, 80, 0.18);
-}
-
-.contratos-table tr.alerta-roxo {
-  background: rgba(142, 36, 170, 0.12);
-}
-
-.contratos-table tr.alerta-preto {
-  background: rgba(38, 50, 56, 0.14);
-  color: #102027;
-}
-
-.contratos-table tr.alerta-cinza {
-  background: rgba(207, 216, 220, 0.5);
-}
-
-.contratos-table tr.alerta-verde {
-  background: rgba(165, 214, 167, 0.2);
-}
-
-.contratos-badge {
-  border-radius: 999px;
-  display: inline-flex;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.35rem 0.7rem;
-}
-
-.contratos-badge.situacao-vigente,
-.contratos-badge.regime-ordinario {
-  background: rgba(11, 110, 79, 0.12);
-  color: #0b6e4f;
-}
-
-.contratos-badge.situacao-a_vencer,
-.contratos-badge.regime-excepcional {
-  background: rgba(255, 179, 71, 0.18);
-  color: #c76b00;
-}
-
-.contratos-badge.situacao-encerrado {
-  background: rgba(96, 125, 139, 0.18);
-  color: #455a64;
-}
-
-.contratos-badge.situacao-suspenso,
-.contratos-badge.regime-emergencial {
-  background: rgba(183, 28, 28, 0.12);
-  color: #b71c1c;
-}
-
-.contratos-timeline {
-  display: grid;
-  gap: 1rem;
-}
-
-.contratos-timeline-item {
-  border-left: 4px solid rgba(20, 54, 66, 0.18);
-  padding-left: 1rem;
-}
-
-.contratos-timeline-date {
-  color: var(--contratos-accent);
-  font-size: 0.83rem;
-  font-weight: 700;
+.contratos-version-card,
+.contratos-competencia-card,
+.contratos-checklist-item,
+.contratos-avaliacao-item,
+.contratos-avaliacao-group,
+.contratos-group-box {
+  border: 1px solid rgba(20, 54, 66, 0.10);
+  border-radius: 1rem;
+  overflow: visible;
+  padding: 1rem;
 }
 
 .contratos-competencia-card {
-  border: 1px solid var(--contratos-line);
+  background: #fff;
+  transition: background-color .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+
+/* O card acompanha a cor de monitoramento em tom suave enquanto a competência estiver em aberto. */
+.contratos-competencia-card--success {
+  background: rgba(25, 135, 84, 0.05);
+  border-color: rgba(25, 135, 84, 0.14);
+}
+
+.contratos-competencia-card--warning {
+  background: rgba(255, 193, 7, 0.08);
+  border-color: rgba(255, 193, 7, 0.18);
+}
+
+.contratos-competencia-card--danger {
+  background: rgba(220, 53, 69, 0.06);
+  border-color: rgba(220, 53, 69, 0.16);
+}
+
+.contratos-version-card + .contratos-version-card,
+.contratos-competencia-card + .contratos-competencia-card,
+.contratos-checklist-item + .contratos-checklist-item,
+.contratos-avaliacao-group + .contratos-avaliacao-group {
+  margin-top: 1rem;
+}
+
+.contratos-subtitle {
+  color: #143642;
+  font-size: 1rem;
+  margin-bottom: .75rem;
+}
+
+.contratos-inline-action {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: .35rem 0;
+}
+
+.contratos-group-box + .contratos-group-box {
+  margin-top: .75rem;
+}
+
+.contratos-form-section + .contratos-form-section {
+  margin-top: 1rem;
+}
+
+.contratos-competencia-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.contratos-competencia-values div,
+.contratos-payment-summary div {
+  background: #f8fafc;
+  border: 1px solid rgba(20, 54, 66, 0.08);
+  border-radius: .85rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: .75rem .9rem;
+}
+
+.contratos-competencia-values small,
+.contratos-payment-summary small {
+  color: #667085;
+  text-transform: uppercase;
+  font-size: .72rem;
+  letter-spacing: .05em;
+}
+
+.contratos-avaliacao-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.contratos-avaliacao-role {
+  background: #fff;
+  border: 1px solid rgba(20, 54, 66, 0.10);
   border-radius: 1rem;
   padding: 1rem;
 }
 
-.contratos-quality-box {
-  background: linear-gradient(180deg, rgba(11, 110, 79, 0.06), rgba(11, 110, 79, 0.02));
-  border: 1px solid rgba(11, 110, 79, 0.12);
-  border-radius: 0.85rem;
-  padding: 0.85rem;
+.contratos-avaliacao-role-head h3 {
+  color: #143642;
+  font-size: 1rem;
+  margin: 0;
 }
 
-.contratos-modal {
-  border-radius: 1rem;
+.contratos-avaliacao-textarea-wrap[hidden] {
+  display: none !important;
 }
 
-.contratos-authorize-backdrop {
-  align-items: center;
+.contratos-audit-footer {
+  color: #667085;
+  font-size: .78rem;
+  margin-top: .35rem;
+}
+
+.contratos-stage-btn {
+  border: 1px solid rgba(20, 54, 66, 0.16);
+  color: #526071;
+  font-weight: 700;
+}
+
+.contratos-stage-btn.is-done {
+  background: rgba(11, 110, 79, 0.12);
+  border-color: rgba(11, 110, 79, 0.28);
+  color: #0b6e4f;
+}
+
+.contratos-stage-btn.is-pending {
+  background: rgba(255, 193, 7, 0.18);
+  border-color: rgba(255, 193, 7, 0.38);
+  color: #9a6700;
+}
+
+.contratos-stage-btn.is-idle {
+  background: rgba(220, 53, 69, 0.12);
+  border-color: rgba(220, 53, 69, 0.28);
+  color: #dc3545;
+}
+
+/* Etapas bloqueadas permanecem visíveis para explicar o fluxo, mas sem navegação. */
+.contratos-stage-btn.is-disabled,
+.contratos-stage-btn:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+.contratos-payment-summary {
   display: flex;
-  justify-content: center;
-  min-height: 70vh;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
-.contratos-authorize-card {
-  background: linear-gradient(180deg, #fffdf9, #f4efe6);
-  max-width: 720px;
+.contratos-competencia-timeline-wrapper {
+  padding: 0 4px;
+}
+
+.contratos-competencia-timeline-track {
+  background: #e2e8f0;
+  border-radius: 999px;
+  height: 8px;
+  position: relative;
   width: 100%;
 }
 
-.contratos-progress {
-  background: rgba(20, 54, 66, 0.08);
+.contratos-competencia-timeline-fill {
   border-radius: 999px;
-  height: 1.5rem;
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  transition: width .35s ease-in-out;
 }
 
-.contratos-progress .progress-bar {
-  background: linear-gradient(90deg, var(--contratos-accent), #2f855a);
-  font-weight: 700;
+.contratos-competencia-timeline-fill.is-success {
+  background: linear-gradient(90deg, #146c43, #198754);
 }
 
-.contratos-sort-link {
-  align-items: center;
-  color: inherit;
-  display: inline-flex;
-  gap: 0.35rem;
-  text-decoration: none;
+.contratos-competencia-timeline-fill.is-warning {
+  background: linear-gradient(90deg, #c58a00, #ffc107);
 }
 
-.contratos-sort-link:hover {
-  color: var(--contratos-accent);
+.contratos-competencia-timeline-fill.is-danger {
+  background: linear-gradient(90deg, #c13b47, #dc3545);
 }
 
-.contratos-sort-link.is-active {
-  color: var(--contratos-accent);
-  font-weight: 700;
+.contratos-competencia-timeline-tick {
+  background: #fff;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  height: 12px;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  z-index: 2;
 }
 
-.contratos-sort-indicator {
-  color: rgba(20, 54, 66, 0.55);
-  font-size: 0.78rem;
-  line-height: 1;
+.contratos-competencia-timeline-tick.is-past.is-success {
+  background: #198754;
+  border-color: #198754;
 }
 
-.contratos-sort-link.is-active .contratos-sort-indicator {
-  color: inherit;
+.contratos-competencia-timeline-tick.is-past.is-warning {
+  background: #ffc107;
+  border-color: #ffc107;
 }
 
-@media (max-width: 991.98px) {
-  .contratos-section-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
+.contratos-competencia-timeline-tick.is-past.is-danger {
+  background: #dc3545;
+  border-color: #dc3545;
+}
 
+.contratos-competencia-timeline-tick.is-current.is-success {
+  background: #fff;
+  border-color: #198754;
+  box-shadow: 0 0 0 4px rgba(25, 135, 84, 0.18);
+  height: 16px;
+  width: 16px;
+  z-index: 3;
+}
+
+.contratos-competencia-timeline-tick.is-current.is-warning {
+  background: #fff;
+  border-color: #ffc107;
+  box-shadow: 0 0 0 4px rgba(255, 193, 7, 0.22);
+  height: 16px;
+  width: 16px;
+  z-index: 3;
+}
+
+.contratos-competencia-timeline-tick.is-current.is-danger {
+  background: #fff;
+  border-color: #dc3545;
+  box-shadow: 0 0 0 4px rgba(220, 53, 69, 0.18);
+  height: 16px;
+  width: 16px;
+  z-index: 3;
+}
+
+.contratos-competencia-timeline-tick.is-initial,
+.contratos-competencia-timeline-tick.is-end {
+  height: 14px;
+  width: 14px;
+}
+
+/* Timeline de Vigência */
+.contratos-v2-timeline-section .card-body {
+  padding-top: 2rem;
+  padding-bottom: 3.5rem;
+  overflow: visible;
+}
+
+.contratos-v2-timeline-wrapper {
+  position: relative;
+  width: 100%;
+  padding: 0 40px;
+}
+
+.contratos-v2-timeline-track {
+  background: #e2e8f0;
+  border-radius: 4px;
+  height: 8px;
+  position: relative;
+  width: 100%;
+}
+
+.contratos-v2-timeline-fill {
+  background: linear-gradient(90deg, #143642, #0b6e4f);
+  border-radius: 4px;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transition: width 0.5s ease-in-out;
+}
+
+.contratos-v2-timeline-tick {
+  background: #fff;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  height: 14px;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  z-index: 2;
+}
+
+.contratos-v2-timeline-tick.is-past {
+  border-color: #0b6e4f;
+  background: #0b6e4f;
+}
+
+.contratos-v2-timeline-tick.is-current {
+  border-color: #0b6e4f;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(11, 110, 79, 0.2);
+  height: 18px;
+  width: 18px;
+  z-index: 3;
+}
+
+.contratos-v2-timeline-tick.is-initial,
+.contratos-v2-timeline-tick.is-end {
+  height: 16px;
+  width: 16px;
+}
+
+.contratos-v2-timeline-label {
+  color: #475467;
+  font-size: 0.75rem;
+  font-weight: 600;
+  left: 50%;
+  position: absolute;
+  text-align: center;
+  top: 22px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.contratos-v2-timeline-label small {
+  color: #667085;
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+@media (max-width: 767.98px) {
   .contratos-numero-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Cores para monitoramento de prazos (Opção C) */
+.prazo-linha-success {
+  background-color: rgba(25, 135, 84, 0.05) !important;
+  transition: background-color 0.3s ease;
+}
+.prazo-linha-success:hover {
+  background-color: rgba(25, 135, 84, 0.08) !important;
+}
+
+.prazo-linha-warning {
+  background-color: rgba(255, 193, 7, 0.06) !important;
+  transition: background-color 0.3s ease;
+}
+.prazo-linha-warning:hover {
+  background-color: rgba(255, 193, 7, 0.1) !important;
+}
+
+.prazo-linha-danger {
+  background-color: rgba(220, 53, 69, 0.05) !important;
+  transition: background-color 0.3s ease;
+}
+.prazo-linha-danger:hover {
+  background-color: rgba(220, 53, 69, 0.08) !important;
 }

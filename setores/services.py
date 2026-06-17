@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
 from django.db.models import Prefetch
 
@@ -66,9 +66,11 @@ def primary_setor_for_user(user):
     if not user or not user.is_authenticated:
         return None
     perfil = getattr(user, 'perfil', None)
-    memberships = list(
-        user.setor_memberships.select_related('setor__group').order_by('setor__group__name', 'setor_id')
-    )
+    memberships = [
+        membership
+        for membership in user.setor_memberships.select_related('setor__group').order_by('setor__group__name', 'setor_id')
+        if not membership.setor.sistemico
+    ]
     if perfil and perfil.setor:
         for membership in memberships:
             if membership.setor.group.name == perfil.setor:
@@ -87,6 +89,10 @@ def sync_user_memberships_for_setor(setor, selected_users):
     for user in selected_users:
         membership, _created = UserSetorMembership.objects.get_or_create(user=user, setor=setor)
         membership.user.groups.add(setor.group)
+        perfil = getattr(membership.user, 'perfil', None)
+        if perfil and setor.sistemico and perfil.setor == setor.group.name:
+            perfil.setor = ''
+            perfil.save(update_fields=['setor', 'atualizado_em'])
 
     stale_memberships = current_memberships.exclude(user_id__in=selected_ids)
     for membership in stale_memberships:
@@ -105,6 +111,8 @@ def ensure_user_primary_setor(user, setor):
 
     if not user or not setor:
         return
+    if setor.sistemico:
+        raise ValidationError('Grupos sistêmicos não podem ser definidos como setor do perfil.')
     UserSetorMembership.objects.get_or_create(user=user, setor=setor)
     user.groups.add(setor.group)
     perfil = getattr(user, 'perfil', None)
@@ -121,6 +129,7 @@ def build_setor_tree():
     )
     setores = list(
         SetorNode.objects.filter(ativo=True)
+        .filter(sistemico=False)
         .exclude(group__name__iexact='administradores')
         .select_related('group', 'parent__group', 'lider', 'lider__perfil')
         .prefetch_related(Prefetch('memberships', queryset=memberships_qs))

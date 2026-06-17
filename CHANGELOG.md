@@ -2,6 +2,49 @@
 
 Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
+## [0.3.6] - 2026-06-16
+- Consolidado o novo fluxo operacional do módulo `contratos` diretamente no app principal, substituindo a estrutura paralela anterior e preservando o histórico legado em `contratos_old`.
+- Reestruturado o fluxo das competências:
+  - etapas visíveis em cascata para `Medição`, `Avaliação`, `Checklist`, `Download` e `Ordem Bancária`;
+  - bloqueio visual e funcional das etapas ainda não liberadas;
+  - encerramento da competência apenas após o registro da ordem bancária e data de pagamento.
+- Ampliada a etapa de `Medição` para concentrar:
+  - quantitativos executados;
+  - aceite provisório e definitivo com datas e prazos;
+  - nota fiscal principal com retenções e valor líquido;
+  - nota fiscal adicional opcional com retenções próprias e checkbox `Não consta`;
+  - observações finais e auditoria por seção com usuário, data e hora.
+- Ajustado o comportamento da medição no detalhe da competência:
+  - cabeçalho da tela passou a exibir `Medição da competência - R$ valor medido`;
+  - campos já consolidados ficam bloqueados para preservar o histórico;
+  - correção do carregamento e persistência de datas dos aceites;
+  - correção do cálculo automático do valor líquido da nota principal.
+- Evoluída a avaliação de qualidade:
+  - selects de nota agora começam em branco, sem valor implícito;
+  - salvamento da avaliação passou a ser permitido antes do upload do PDF assinado;
+  - disponibilizado botão para baixar a avaliação consolidada logo após existir conteúdo salvo;
+  - mantida a conclusão da etapa apenas após retorno do documento assinado;
+  - removida do relatório a linha `Formulário aplicado`.
+- Revisado o cálculo da nota final da avaliação para usar média ponderada pelos pesos dos itens, refletindo corretamente o consolidado na tela e no relatório em PDF.
+- Reestruturado o download documental da competência:
+  - mantida a sequência oficial unificada e separada dos documentos;
+  - corrigida a ordenação de anexos do checklist;
+  - normalizado o nome dos anexos no ZIP separado para evitar criação de pastas internas;
+  - reforçado o recálculo da avaliação antes da exportação do relatório.
+- Refinado o atestado de realização:
+  - criadas tabelas `Acompanhamento de Pagamento` e `Checklist de Verificação` inspiradas no modelo institucional em Excel;
+  - separados `Processo Gestão` e `Processo Execução`;
+  - incluídos vencimento, responsável da empresa, contato, próximo reajuste, quantidade de aditivos e vigência;
+  - ajustadas tipografia, alinhamento vertical e largura útil das células para evitar quebras ruins de texto.
+- Ajustado o detalhe do contrato:
+  - `Empresa contratada` priorizada no cadastro;
+  - marcador de competência paga passou a exibir `Paga - DD/MM/AAAA`;
+  - `OB` renomeada visualmente para `Ordem Bancária`;
+  - barra de monitoramento das competências ganhou marcadores diários e fundo colorido por progresso.
+- Integrado o monitoramento automático de competências com o app `mensageria_assincrona`, incluindo comandos, endpoints e regras de alerta em 50% e 75% do prazo monitorado.
+- Criado o app `gestão de tarefas`, com base documental inicial, suporte a múltiplos responsáveis com contagem integral por responsável e migrações relacionadas no projeto.
+- Atualizadas migrações, templates, estilos e testes dos módulos `contratos`, `mensageria_assincrona`, `setores` e `usuarios`, mantendo `manage.py check` e testes específicos verdes durante a evolução.
+
 ## [0.3.5] - 2026-06-12
 - Criado e integrado o novo módulo transversal `mensageria_assincrona`:
   - caixa `Minhas mensagens` para todo usuário autenticado ativo;
@@ -23,7 +66,7 @@ Todas as mudanças importantes deste projeto são documentadas neste arquivo.
   - ocultadas contas técnicas e de teste dos pickers compartilhados;
   - exibido nome completo no seletor de passageiros do `reserva_carros`;
   - exibido nome completo no picker de usuários do módulo `acls`, com tipografia reduzida para diminuir a altura visual do controlador.
-- Evoluído o módulo `contratos_v2`:
+- Evoluído o módulo `contratos`:
   - ampliado o fluxo de avaliação de competência com justificativa do fiscal, manifestação do gestor e novos estados de preenchimento;
   - adicionados novos comportamentos em formulários, serviços, detalhe do contrato e templates auxiliares;
   - criada a migração correspondente para sustentar os novos campos e regras operacionais.
@@ -57,13 +100,13 @@ Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 - Adicionadas migrações, filtro de template para moeda e ampliação da suíte de testes do `regulariza_sgi`, mantendo `manage.py check` e os testes do módulo verdes após as mudanças.
 
 ## [0.3.2] - 2026-06-08
-- Criado o módulo `contratos_v2` com identidade visual isolada, rotas próprias e fluxo inicial de cadastro de contratos.
+- Criado o módulo `contratos` com identidade visual isolada, rotas próprias e fluxo inicial de cadastro de contratos.
 - Estruturado o domínio de competências mensais com checklist versionado, avaliação de qualidade por itens, medição, pagamento e estados operacionais.
 - Implementado o detalhamento dos responsáveis internos com cards clicáveis e modal de contato reutilizando o padrão do módulo de ramais.
 - Ajustada a área de avaliação de qualidade para exibir justificativa do fiscal e manifestação do gestor apenas quando a nota fica abaixo da máxima, com estado pendente até a conclusão das manifestações exigidas.
 - Adicionada a etapa de medição com opção de pró-rata nas competências de borda da vigência.
 - Refinados os cards de status da competência para destacar pendências de avaliação em amarelo até a manifestação do gestor.
-- Ampliado o conjunto de formulários e ações do `contratos_v2`, incluindo versões de checklist, grupos, itens, escalas, faixas de liberação e geração idempotente de competências.
+- Ampliado o conjunto de formulários e ações do `contratos`, incluindo versões de checklist, grupos, itens, escalas, faixas de liberação e geração idempotente de competências.
 
 ## [0.3.1] - 2026-06-08
 - Atualizado o módulo `acls` para permitir múltiplos alvos por regra:

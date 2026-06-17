@@ -12,7 +12,7 @@ from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
 from .forms import LDAPDirectoryForm, UsuarioCreateForm, UsuarioPerfilForm, user_search_queryset
 from .models import LDAPDirectory, UsuarioPerfil
-from .services import SYSTEM_USERNAMES, build_ldap_server, ensure_usuario_perfil
+from .services import HIDDEN_SELECTOR_USERNAMES, build_ldap_server, ensure_usuario_perfil
 
 
 SORT_FIELDS = {
@@ -94,7 +94,7 @@ class AuthenticatedListMixin(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         # Usuários técnicos ficam fora das listagens funcionais da intranet.
-        queryset = UsuarioPerfil.objects.select_related("user").exclude(user__username__in=SYSTEM_USERNAMES)
+        queryset = UsuarioPerfil.objects.select_related("user").exclude(user__username__in=HIDDEN_SELECTOR_USERNAMES)
         queryset = user_search_queryset(queryset, self.request.GET.get("q"))
         sort, direction = _sort_params(self.request)
         ordering = SORT_FIELDS[sort]

@@ -31,6 +31,10 @@ class SetorForm(forms.ModelForm):
     """Mantém SetorNode, Group e vínculos de usuários sincronizados no CRUD."""
 
     nome = forms.CharField(label='Nome do grupo', max_length=150, widget=forms.TextInput(attrs={'class': BOOTSTRAP_INPUT}))
+    sistemico = forms.BooleanField(
+        label='Grupo sistêmico (somente controle de acesso)',
+        required=False,
+    )
     usuarios = UsuarioSetorChoiceField(
         label='Usuários pertencentes ao setor',
         required=False,
@@ -40,7 +44,7 @@ class SetorForm(forms.ModelForm):
 
     class Meta:
         model = SetorNode
-        fields = ['nome', 'parent', 'lider', 'ativo']
+        fields = ['nome', 'parent', 'lider', 'sistemico', 'ativo']
         widgets = {
             'parent': forms.Select(attrs={'class': 'form-select form-select-lg'}),
             'lider': forms.Select(attrs={'class': 'form-select form-select-lg'}),
@@ -50,7 +54,8 @@ class SetorForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         # Os querysets são recalculados na instância para refletir usuários e setores atuais.
         self.fields['lider'].queryset = visible_users_queryset()
-        self.fields['parent'].queryset = SetorNode.objects.select_related('group').order_by('group__name')
+        self.fields['parent'].queryset = SetorNode.objects.select_related('group').filter(sistemico=False).order_by('group__name')
+        self.fields['sistemico'].widget.attrs['class'] = 'form-check-input'
         self.fields['ativo'].widget.attrs['class'] = 'form-check-input'
         if self.instance and self.instance.pk:
             self.fields['nome'].initial = self.instance.group.name
@@ -76,11 +81,14 @@ class SetorForm(forms.ModelForm):
     def save(self, commit=True):
         setor = super().save(commit=False)
         nome = self.cleaned_data['nome']
+        sistemico = bool(self.cleaned_data.get('sistemico'))
         old_name = ''
+        old_sistemico = False
         # Renomear o setor também renomeia o grupo, preservando o identificador usado em permissões.
         if self.instance and self.instance.pk:
             group = self.instance.group
             old_name = group.name
+            old_sistemico = self.instance.sistemico
             if group.name != nome:
                 group.name = nome
                 group.save(update_fields=['name'])
@@ -88,18 +96,29 @@ class SetorForm(forms.ModelForm):
             group = Group.objects.create(name=nome)
             setor.group = group
 
+        # Grupos sistêmicos não entram na hierarquia nem carregam liderança institucional.
+        if sistemico:
+            setor.parent = None
+            setor.lider = None
+
         if commit:
             setor.save()
             self.save_m2m()
             selected_users = list(self.cleaned_data.get('usuarios') or [])
             sync_user_memberships_for_setor(setor, selected_users)
+            # Perfis antigos guardam o setor como texto; o ajuste evita divergência visual.
+            from usuarios.models import UsuarioPerfil
             if old_name and old_name != nome:
-                # Perfis antigos guardam o setor como texto; o ajuste evita divergência visual.
+                if not old_sistemico and not setor.sistemico:
+                    UsuarioPerfil.objects.filter(setor=old_name).update(setor=nome)
+                else:
+                    UsuarioPerfil.objects.filter(setor=old_name).update(setor='')
+            elif old_sistemico != setor.sistemico and setor.sistemico:
                 from usuarios.models import UsuarioPerfil
-                UsuarioPerfil.objects.filter(setor=old_name).update(setor=nome)
+                UsuarioPerfil.objects.filter(setor=nome).update(setor='')
             for user in selected_users:
                 perfil = getattr(user, 'perfil', None)
-                if perfil and not perfil.setor:
+                if perfil and not perfil.setor and not setor.sistemico:
                     perfil.setor = setor.group.name
                     perfil.save(update_fields=['setor', 'atualizado_em'])
         return setor
@@ -120,11 +139,12 @@ def setor_usuario_choices(instance=None):
     setores = list(
         SetorNode.objects.select_related('group')
         .filter(ativo=True)
+        .filter(sistemico=False)
         .exclude(group__name__iexact='Administradores')
         .order_by('group__name')
     )
     current = primary_setor_for_user(instance.user) if instance and getattr(instance, 'user_id', None) else None
-    if current and all(setor.pk != current.pk for setor in setores):
+    if current and not current.sistemico and all(setor.pk != current.pk for setor in setores):
         setores.append(current)
     choices.extend((str(setor.pk), setor.group.name) for setor in setores)
     return choices

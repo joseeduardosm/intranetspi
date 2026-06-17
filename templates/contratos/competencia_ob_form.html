@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 16/06/2026 -->
+<!-- Objetivo: Registrar a etapa final da competência com a ordem bancária e a data efetiva do pagamento. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>{{ titulo }}</h1>
+    <p>{{ contrato.numero_contrato }} • competência de {{ competencia.periodo_inicio|date:"d/m/Y" }} a {{ competencia.periodo_fim|date:"d/m/Y" }}</p>
+  </div>
+
+  <div class="card border-0 shadow-sm contratos-form-card">
+    <div class="card-body p-4">
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.ordem_bancaria_arquivo.id_for_label }}">{{ form.ordem_bancaria_arquivo.label }}</label>
+          {{ form.ordem_bancaria_arquivo }}
+          {% if competencia.ordem_bancaria_arquivo %}
+            <div class="form-text">Arquivo atual: <a href="{{ competencia.ordem_bancaria_arquivo.url }}" target="_blank" rel="noopener">visualizar PDF</a></div>
+          {% endif %}
+          {% for error in form.ordem_bancaria_arquivo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.data_pagamento.id_for_label }}">{{ form.data_pagamento.label }}</label>
+          {{ form.data_pagamento }}
+          {% for error in form.data_pagamento.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+        {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+        <div class="d-flex gap-2 justify-content-end">
+          <a class="btn btn-light" href="{% url 'contratos:contrato_detail' contrato.pk %}">Cancelar</a>
+          <button class="btn btn-primary" type="submit">Salvar OB</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

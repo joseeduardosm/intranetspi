@@ -74,8 +74,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'assinatura_e_mail',
     'atalhos',
-    'contratos',
-    'contratos_v2',
+        'contratos',
     'licitacoes',
     'mensageria_assincrona',
     'navbar',
@@ -130,9 +129,15 @@ WSGI_APPLICATION = 'aplicacoesspi.wsgi.application'
 
 DATABASES = {
     'default': {
-        # Banco SQLite usado pelo ambiente atual do projeto.
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'spi_db',
+        'USER': 'spi_user',
+        'PASSWORD': 'admin123',
+        'HOST': 'localhost',
+        'PORT': '5432',
+        'TEST': {
+            'NAME': 'spi_db_test',
+        },
     }
 }
 

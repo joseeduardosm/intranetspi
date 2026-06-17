@@ -117,7 +117,7 @@
           </header>
 
           {% if aniversariantes %}
-            <!-- Barra mensal de aniversariantes com abertura de lista detalhada e ação separada para ocultar. -->
+            <!-- Barra mensal de aniversariantes; qualquer clique abre o aviso com a lista e o fechamento só vale até o dia seguinte. -->
             <div class="spi-marquee-bar" id="birthdayMarqueeBar" style="display: none;">
               <button
                 class="spi-marquee-launch"
@@ -132,16 +132,9 @@
                   {% endfor %}
                 </div>
               </button>
-              <button
-                class="spi-marquee-dismiss"
-                id="birthdayMarqueeDismiss"
-                type="button"
-                aria-label="Ocultar aniversariantes de hoje"
-                title="Ocultar aniversariantes de hoje"
-              >×</button>
             </div>
 
-            <!-- Lista modal dos aniversariantes do mês, com acesso direto ao cartão de contato. -->
+            <!-- Modal de aviso dos aniversariantes do mês com acesso direto ao cartão de contato. -->
             <div class="modal fade" id="birthdayListModal" tabindex="-1" aria-labelledby="birthdayListModalTitle" aria-hidden="true">
               <div class="modal-dialog modal-dialog-centered birthday-list-dialog">
                 <div class="modal-content birthday-list-modal">
@@ -153,6 +146,11 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                   </div>
                   <div class="modal-body birthday-list-body">
+                    <div class="birthday-list-message">
+                      <!-- O modal mensal funciona apenas como lembrete coletivo; a mensagem institucional individual
+                           continua reservada ao aniversariante, no dia exato, via mensageria interna. -->
+                      <p class="mb-0"><strong>Não se esqueça de parabenizar os colegas abaixo.</strong></p>
+                    </div>
                     <div class="birthday-list-stack">
                       {% for a in aniversariantes %}
                         <button
@@ -280,20 +278,6 @@
               </div>
             </div>
 
-            <!-- Confirmação exibida quando o usuário oculta a barra de aniversariantes do mês. -->
-            <div class="modal fade" id="birthdayDismissModal" tabindex="-1" aria-hidden="true">
-              <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
-                  <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title fw-bold text-dark">Aviso</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                  </div>
-                  <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-primary px-4" data-bs-dismiss="modal" style="border-radius: 8px;">Ok</button>
-                  </div>
-                </div>
-              </div>
-            </div>
           {% endif %}
     {% endif %}
 
@@ -538,22 +522,23 @@
           const userKey = 'birthday_marquee_dismissed_' + '{{ request.user.id|default:"anonymous" }}';
           const dismissedDay = localStorage.getItem(userKey);
           const marqueeLaunch = document.getElementById('birthdayMarqueeLaunch');
-          const marqueeDismiss = document.getElementById('birthdayMarqueeDismiss');
           const birthdayListModalEl = document.getElementById('birthdayListModal');
           const birthdayContactModalEl = document.getElementById('birthdayContactModal');
           const birthdayContactModal = birthdayContactModalEl ? new bootstrap.Modal(birthdayContactModalEl) : null;
           const birthdayListModal = birthdayListModalEl ? new bootstrap.Modal(birthdayListModalEl) : null;
+          let birthdayListClosingForContact = false;
 
           if (dismissedDay !== currentDayKey) {
             marqueeBar.style.display = 'flex';
           }
 
-          const dismissModalEl = document.getElementById('birthdayDismissModal');
-          let dismissModalObj = null;
-          if (dismissModalEl) {
-            dismissModalObj = new bootstrap.Modal(dismissModalEl);
+          if (birthdayListModalEl) {
+            birthdayListModalEl.addEventListener('hidden.bs.modal', () => {
+              if (birthdayListClosingForContact) {
+                birthdayListClosingForContact = false;
+                return;
+              }
 
-            dismissModalEl.addEventListener('hidden.bs.modal', () => {
               localStorage.setItem(userKey, currentDayKey);
               marqueeBar.style.display = 'none';
             });
@@ -563,18 +548,10 @@
             birthdayListModal?.show();
           });
 
-          marqueeDismiss?.addEventListener('click', () => {
-            if (dismissModalObj) {
-              dismissModalObj.show();
-            } else {
-              localStorage.setItem(userKey, currentDayKey);
-              marqueeBar.style.display = 'none';
-            }
-          });
-
           // Abre o cartão de contato do aniversariante escolhido usando os dados já carregados na página.
           document.querySelectorAll('[data-birthday-contact-open]').forEach((trigger) => {
             trigger.addEventListener('click', () => {
+              birthdayListClosingForContact = true;
               const name = trigger.dataset.name || '-';
               const photo = trigger.dataset.photo || '';
               const initials = trigger.dataset.iniciais || name.slice(0, 1).toUpperCase();

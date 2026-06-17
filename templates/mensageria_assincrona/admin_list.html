@@ -34,14 +34,25 @@
 
   <div class="card border-0 shadow-sm">
     <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
+      <table class="table table-hover align-middle mb-0 mensageria-admin-table">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>Assunto</th>
-            <th>Status</th>
-            <th>Prioridade</th>
-            <th>Publicação</th>
+            <th><a href="{{ sort_links.id }}">ID{% if current_sort == "id" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.assunto }}">Assunto{% if current_sort == "assunto" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.corpo }}">Corpo{% if current_sort == "corpo" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.prioridade }}">Prioridade{% if current_sort == "prioridade" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.status_envio }}">Status{% if current_sort == "status_envio" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.origem_tipo }}">Origem pública{% if current_sort == "origem_tipo" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.origem_app }}">App de origem{% if current_sort == "origem_app" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.origem_model }}">Model de origem{% if current_sort == "origem_model" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.origem_pk }}">PK de origem{% if current_sort == "origem_pk" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.criada_por }}">Criada por{% if current_sort == "criada_por" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.publicar_em }}">Publicar em{% if current_sort == "publicar_em" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.publicada_em }}">Publicada em{% if current_sort == "publicada_em" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.expira_em }}">Expira em{% if current_sort == "expira_em" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.payload_email }}">Payload e-mail{% if current_sort == "payload_email" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.created_at }}">Criada em{% if current_sort == "created_at" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+            <th><a href="{{ sort_links.updated_at }}">Atualizada em{% if current_sort == "updated_at" %} {% if current_dir == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
             <th>Ciência</th>
             <th class="text-end">Ações</th>
           </tr>
@@ -53,17 +64,20 @@
               <td>
                 <a class="text-decoration-none fw-semibold" href="{% url 'mensageria:admin_detail' mensagem.pk %}">{{ mensagem.assunto }}</a>
               </td>
-              <td><span class="badge text-bg-secondary">{{ mensagem.get_status_envio_display }}</span></td>
+              <td><div class="mensageria-table-text">{{ mensagem.corpo|linebreaksbr }}</div></td>
               <td><span class="badge mensageria-prioridade prioridade-{{ mensagem.prioridade|lower }}">{{ mensagem.get_prioridade_display }}</span></td>
-              <td>
-                {% if mensagem.publicada_em %}
-                  {{ mensagem.publicada_em|date:"d/m/Y H:i" }}
-                {% elif mensagem.publicar_em %}
-                  {{ mensagem.publicar_em|date:"d/m/Y H:i" }}
-                {% else %}
-                  -
-                {% endif %}
-              </td>
+              <td><span class="badge text-bg-secondary">{{ mensagem.get_status_envio_display }}</span></td>
+              <td>{{ mensagem.get_origem_tipo_display|default:"-" }}</td>
+              <td>{{ mensagem.origem_app|default:"-" }}</td>
+              <td>{{ mensagem.origem_model|default:"-" }}</td>
+              <td>{{ mensagem.origem_pk|default:"-" }}</td>
+              <td>{{ mensagem.criada_por.username|default:"-" }}</td>
+              <td>{{ mensagem.publicar_em|date:"d/m/Y H:i"|default:"-" }}</td>
+              <td>{{ mensagem.publicada_em|date:"d/m/Y H:i"|default:"-" }}</td>
+              <td>{{ mensagem.expira_em|date:"d/m/Y H:i"|default:"-" }}</td>
+              <td><code class="mensageria-table-code">{{ mensagem.payload_email|default:"{}" }}</code></td>
+              <td>{{ mensagem.created_at|date:"d/m/Y H:i" }}</td>
+              <td>{{ mensagem.updated_at|date:"d/m/Y H:i" }}</td>
               <td>{{ mensagem.destinos_cientes }}/{{ mensagem.destinos_total }}</td>
               <td class="text-end">
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'mensageria:admin_detail' mensagem.pk %}">Ver</a>
@@ -79,11 +93,10 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="7" class="text-center text-muted py-5">Nenhuma mensagem cadastrada.</td></tr>
+            <tr><td colspan="18" class="text-center text-muted py-5">Nenhuma mensagem cadastrada.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 {% endblock %}
-

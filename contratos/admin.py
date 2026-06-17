@@ -1,64 +1,68 @@
-# Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026
-# Objetivo: Registrar o domínio de contratos no Django Admin para suporte operacional.
+# Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026
+# Objetivo: Expor o cadastro inicial do Contratos V2 no admin do Django.
 
 from django.contrib import admin
 
 from .models import (
-    AvaliacaoCriterioCompetencia,
     AvaliacaoQualidadeCompetencia,
-    ChecklistPagamentoAnexo,
-    ChecklistPagamentoItem,
-    ChecklistPagamentoModelo,
+    ChecklistCompetenciaItem,
+    ChecklistModeloItem,
+    ChecklistModelo,
     CompetenciaPagamento,
-    Contrato,
-    ContratoDetalhamentoItem,
     ContratoItem,
-    CriterioAvaliacaoQualidade,
-    DocumentoContrato,
-    EmpresaContratada,
-    EventoFinanceiroContrato,
-    EventoFinanceiroItem,
-    GrupoAvaliacaoQualidade,
-    MemoriaRetroatividade,
+    Contrato,
+    EscalaNotaAvaliacao,
+    FaixaLiberacaoAvaliacao,
+    FormularioAvaliacao,
+    GrupoAvaliacao,
+    ItemAvaliacao,
     MedicaoItemCompetencia,
-    ModeloAvaliacaoQualidade,
-    OcorrenciaContrato,
-    OcorrenciaContratoAnexo,
-    ResponsavelEmpresa,
-    TermoAditivo,
 )
 
 
 @admin.register(Contrato)
 class ContratoAdmin(admin.ModelAdmin):
-    """Admin resumido do contrato com campos de busca e filtros principais."""
+    list_display = (
+        'numero_contrato',
+        'apelido',
+        'empresa_contratada',
+        'data_inicio_vigencia',
+        'situacao_forcada',
+    )
+    search_fields = (
+        'numero_contrato',
+        'apelido',
+        'objeto',
+        'empresa_contratada__razao_social',
+    )
 
-    list_display = ('numero_contrato', 'apelido', 'empresa_contratada', 'data_inicio_vigencia', 'valor_global')
-    search_fields = ('numero_contrato', 'apelido', 'objeto', 'empresa_contratada__razao_social')
-    list_filter = ('empresa_contratada', 'situacao_forcada')
+
+@admin.register(ContratoItem)
+class ContratoItemAdmin(admin.ModelAdmin):
+    list_display = (
+        'contrato',
+        'ordem',
+        'descricao',
+        'codigo_siafisico',
+        'codigo_catmat_catser',
+        'quantidade',
+        'valor_unitario',
+        'valor_subtotal',
+    )
+    search_fields = ('contrato__numero_contrato', 'contrato__apelido', 'descricao', 'codigo_siafisico', 'codigo_catmat_catser')
 
 
-for model in [
-    EmpresaContratada,
-    ResponsavelEmpresa,
-    ContratoDetalhamentoItem,
-    ContratoItem,
-    TermoAditivo,
-    DocumentoContrato,
-    OcorrenciaContrato,
-    OcorrenciaContratoAnexo,
-    CompetenciaPagamento,
-    ChecklistPagamentoModelo,
-    ChecklistPagamentoItem,
-    ChecklistPagamentoAnexo,
-    MedicaoItemCompetencia,
-    ModeloAvaliacaoQualidade,
-    GrupoAvaliacaoQualidade,
-    CriterioAvaliacaoQualidade,
-    AvaliacaoQualidadeCompetencia,
-    AvaliacaoCriterioCompetencia,
-    EventoFinanceiroContrato,
-    EventoFinanceiroItem,
-    MemoriaRetroatividade,
-]:
-    admin.site.register(model)
+admin.site.register(ChecklistModelo)
+admin.site.register(ChecklistModeloItem)
+admin.site.register(FormularioAvaliacao)
+admin.site.register(EscalaNotaAvaliacao)
+admin.site.register(FaixaLiberacaoAvaliacao)
+admin.site.register(GrupoAvaliacao)
+admin.site.register(ItemAvaliacao)
+admin.site.register(CompetenciaPagamento)
+admin.site.register(ChecklistCompetenciaItem)
+admin.site.register(MedicaoItemCompetencia)
+admin.site.register(AvaliacaoQualidadeCompetencia)
+
+from .models import EmpresaContratada
+admin.site.register(EmpresaContratada)

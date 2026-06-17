@@ -1,824 +1,1540 @@
-# Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026
-# Objetivo: Validar cálculos críticos, ACL básica e exportação do módulo de contratos.
+# Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026
+# Objetivo: Cobrir o CRUD principal e o fluxo mensal de checklist, competências, medição, avaliação e pagamento do Contratos V2.
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 from io import BytesIO
-import json
-from django.core.files.uploadedfile import SimpleUploadedFile
+from pathlib import Path
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-from openpyxl import load_workbook
+from pypdf import PdfWriter
 
 from acls.models import Recurso, RegraAcesso
+from contratos.models import EmpresaContratada
 
-from .forms import ContratoForm
-from .models import (
-    AvaliacaoCriterioCompetencia,
-    AvaliacaoQualidadeCompetencia,
-    ChecklistPagamentoModelo,
-    CompetenciaPagamento,
-    Contrato,
-    ContratoDetalhamentoItem,
-    ContratoItem,
-    CriterioAvaliacaoQualidade,
-    EmpresaContratada,
-    EventoFinanceiroContrato,
-    EventoFinanceiroItem,
-    GrupoAvaliacaoQualidade,
-    MedicaoItemCompetencia,
-    ModeloAvaliacaoQualidade,
-    OcorrenciaContrato,
-    TermoAditivo,
+from .forms import (
+    AvaliacaoCompetenciaV2Form,
+    CompetenciaMedicaoLoteV2Form,
+    CompetenciaPagamentoExecucaoV2Form,
+    ContratoForm,
+    EscalaNotaAvaliacaoForm,
+    FaixaLiberacaoAvaliacaoForm,
+    GrupoAvaliacaoForm,
+    ItemAvaliacaoForm,
+    validar_upload_pdf,
 )
+from .models import (
+    ChecklistCompetenciaAnexo,
+    ChecklistModeloItem,
+    ChecklistModelo,
+    ChecklistPadraoGlobal,
+    ChecklistPadraoGlobalItem,
+    CompetenciaPagamento,
+    ContratoItem,
+    Contrato,
+    DocumentoImportanteContrato,
+    EscalaNotaAvaliacao,
+    ExportacaoDocumentosCompetencia,
+    FaixaLiberacaoAvaliacao,
+    FormularioAvaliacao,
+    GrupoAvaliacao,
+    ItemAvaliacao,
+    PrazoMonitoramento,
+)
+from .services import (
+    usuario_pode_preencher_avaliacao_fiscal_v2,
+    usuario_pode_preencher_avaliacao_gestor_v2,
+)
+from .views import CompetenciaAvaliacaoUpdateView, gerar_relatorio_avaliacao_competencia, gerar_ultima_folha_atestado
 
 
-class ContratosBaseTest(TestCase):
-    """Base compartilhada para instanciar usuários, ACL e contrato de teste."""
+User = get_user_model()
+
+
+def pdf_minimo_valido():
+    """Entrega um PDF mínimo válido para cenários que realmente mesclam arquivos."""
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    buffer = BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
+class ContratosTests(TestCase):
+    """Valida a evolução do módulo Contratos V2 para o fluxo completo de competências."""
 
     def setUp(self):
-        User = get_user_model()
-        self.admin = User.objects.create_user(username='admin-contratos', password='123', is_staff=True)
-        self.user = User.objects.create_user(username='joao', password='123')
-        self.sem_acesso = User.objects.create_user(username='maria', password='123')
-        self.recurso, _ = Recurso.objects.get_or_create(slug='contratos', defaults={'nome': 'Contratos'})
-        regra_usuario = RegraAcesso.objects.create(recurso=self.recurso, nivel=RegraAcesso.NIVEL_MODIFICACAO)
-        regra_usuario.usuarios.add(self.user)
-        self.empresa = EmpresaContratada.objects.create(razao_social='Empresa XPTO', cnpj='00.000.000/0001-00')
-        self.contrato = Contrato.objects.create(
-            numero_contrato='01/2026',
-            apelido='Limpeza predial',
-            objeto='Prestação de serviços de limpeza',
-            detalhamento_objeto='Serviço contínuo.',
+        self.gestor = User.objects.create_user(username='gestor_v2', password='123', is_staff=True)
+        self.criador = User.objects.create_user(username='criador_v2', password='123')
+        self.fiscal_adm = User.objects.create_user(username='fadm_v2', password='123')
+        self.fiscal_tec = User.objects.create_user(username='ftec_v2', password='123')
+        self.operador = User.objects.create_user(username='operador_v2', password='123')
+        self.recurso, _ = Recurso.objects.get_or_create(slug='contratos', defaults={'nome': 'Contratos V2'})
+        regra = RegraAcesso.objects.create(recurso=self.recurso, nivel=RegraAcesso.NIVEL_MODIFICACAO)
+        regra.usuarios.add(self.gestor, self.criador, self.fiscal_adm, self.fiscal_tec, self.operador)
+        self.empresa = EmpresaContratada.objects.create(razao_social='Empresa V2', cnpj='11.111.111/0001-11')
+
+    def criar_contrato(self, numero='001/2026', prazo=2, gestor=None, criado_por=None):
+        return Contrato.objects.create(
+            numero_contrato=numero,
+            apelido='Contrato teste',
+            objeto='Serviço continuado',
             data_inicio_vigencia=date(2026, 1, 1),
-            prazo_inicial_meses=12,
+            prazo_inicial_meses=prazo,
             vigencia_maxima_meses=24,
             empresa_contratada=self.empresa,
-            fiscal_administrativo=self.admin,
-            fiscal_tecnico=self.admin,
-            gestor_contrato=self.admin,
-            base_mensal=Decimal('1000.00'),
-            criado_por=self.admin,
-            atualizado_por=self.admin,
+            processo_sei_gestao_numero='SEI-G-2026-001',
+            processo_sei_gestao_url='https://sei.exemplo/spi/gestao/1',
+            processo_sei_execucao_numero='SEI-E-2026-001',
+            processo_sei_execucao_url='https://sei.exemplo/spi/execucao/1',
+            fiscal_administrativo=self.fiscal_adm,
+            fiscal_tecnico=self.fiscal_tec,
+            gestor_contrato=self.gestor if gestor is None else gestor,
+            # Os testes de permissão precisam variar quem criou o contrato para cobrir a nova regra.
+            criado_por=self.criador if criado_por is None else criado_por,
         )
 
-
-class ContratoCalculoTests(ContratosBaseTest):
-    """Cobre cálculos estruturais de contrato, avaliação e retroatividade."""
-
-    def test_competencias_nascem_bloqueadas_sem_checklist_padrao(self):
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1), periodo_fim=date(2026, 1, 31))
-
-        self.assertEqual(competencia.status, CompetenciaPagamento.Status.BLOQUEADO)
-        self.assertTrue(competencia.aguardando_checklist_padrao)
-        self.assertFalse(competencia.pode_liberar)
-
-    def test_gera_competencias_automaticas_com_base_mensal_em_todos_os_periodos(self):
-        contrato = Contrato.objects.create(
-            numero_contrato='002/2026',
-            apelido='Contrato parcial',
-            objeto='Serviço mensal',
-            detalhamento_objeto='Detalhamento parcial.',
-            data_inicio_vigencia=date(2026, 1, 25),
-            prazo_inicial_meses=1,
-            vigencia_maxima_meses=12,
-            empresa_contratada=self.empresa,
-            fiscal_administrativo=self.admin,
-            fiscal_tecnico=self.admin,
-            gestor_contrato=self.admin,
-            base_mensal=Decimal('3100.00'),
-            criado_por=self.admin,
-            atualizado_por=self.admin,
+    def criar_item_contrato(self, contrato, ordem=1, quantidade='10.00', unitario='100.00'):
+        return ContratoItem.objects.create(
+            contrato=contrato,
+            ordem=ordem,
+            descricao=f'Item {ordem}',
+            quantidade=Decimal(quantidade),
+            valor_unitario=Decimal(unitario),
         )
 
-        competencias = list(contrato.competencias.order_by('periodo_inicio'))
-        self.assertEqual(len(competencias), 2)
-        self.assertEqual(competencias[0].periodo_inicio, date(2026, 1, 25))
-        self.assertEqual(competencias[0].periodo_fim, date(2026, 1, 31))
-        self.assertEqual(competencias[0].valor_previsto, Decimal('3100.00'))
-        self.assertEqual(competencias[1].periodo_inicio, date(2026, 2, 1))
-        self.assertEqual(competencias[1].periodo_fim, date(2026, 2, 24))
-        self.assertEqual(competencias[1].valor_previsto, Decimal('3100.00'))
-
-    def test_cadastro_do_checklist_padrao_replicado_desbloqueia_competencias(self):
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, ordem=1, titulo='FGTS', obrigatorio=True)
-
-        competencias = list(self.contrato.competencias.order_by('periodo_inicio'))
-        self.assertTrue(all(competencia.checklist_itens.count() == 1 for competencia in competencias))
-        self.assertTrue(all(not competencia.aguardando_checklist_padrao for competencia in competencias))
-        self.assertEqual(competencias[0].status, CompetenciaPagamento.Status.RASCUNHO)
-
-    def test_reordena_checklist_padrao_existente_em_sequencia(self):
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, ordem=1, titulo='FGTS', obrigatorio=True)
-        item = ChecklistPagamentoModelo.objects.create(contrato=self.contrato, ordem=1, titulo='Teste 02', obrigatorio=True)
-
-        itens = list(self.contrato.checklist_modelos.order_by('ordem', 'id').values_list('titulo', 'ordem'))
-        self.assertEqual(itens, [('FGTS', 1), ('Teste 02', 2)])
-        self.assertEqual(item.ordem, 2)
-
-    def test_prorrogacao_cria_competencias_automaticas_adicionais(self):
-        TermoAditivo.objects.create(
-            contrato=self.contrato,
-            numero_termo='1º TA',
-            tipo=TermoAditivo.Tipo.PRORROGACAO,
-            data_assinatura=date(2026, 11, 1),
-            data_inicio=date(2027, 1, 1),
-            data_termino=date(2027, 12, 31),
-            quantidade_meses=12,
+    def criar_checklist_ativo(self, contrato, nome='Checklist v1', titulo='FGTS'):
+        checklist = ChecklistModelo.objects.create(
+            contrato=contrato,
+            nome=nome,
+            descricao='Checklist da competência',
+            ativo=True,
         )
+        ChecklistModeloItem.objects.create(modelo=checklist, ordem=1, titulo=titulo, obrigatorio=True)
+        return checklist
 
-        self.assertEqual(self.contrato.competencias.count(), 24)
-        self.assertTrue(
-            self.contrato.competencias.filter(
-                periodo_inicio=date(2027, 12, 1),
-                periodo_fim=date(2027, 12, 31),
-            ).exists()
+    def criar_formulario_avaliacao(self, contrato):
+        formulario = FormularioAvaliacao.objects.create(
+            contrato=contrato,
+            nome='Avaliação 2026',
+            descricao='Modelo de qualidade',
+            ativo=True,
         )
-
-    def test_calcula_subtotal_e_valor_global(self):
-        ContratoItem.objects.create(
-            contrato=self.contrato,
+        EscalaNotaAvaliacao.objects.create(formulario=formulario, ordem=1, valor=Decimal('0.00'), legenda='Insatisfatório')
+        EscalaNotaAvaliacao.objects.create(formulario=formulario, ordem=2, valor=Decimal('1.00'), legenda='Regular')
+        EscalaNotaAvaliacao.objects.create(formulario=formulario, ordem=3, valor=Decimal('3.00'), legenda='Bom')
+        FaixaLiberacaoAvaliacao.objects.create(
+            formulario=formulario,
             ordem=1,
-            descricao='Posto A',
-            quantidade=Decimal('2.00'),
-            valor_unitario=Decimal('150.00'),
+            nota_minima=Decimal('0.00'),
+            nota_maxima=Decimal('1.99'),
+            percentual_liberacao=Decimal('75.00'),
         )
-        ContratoItem.objects.create(
-            contrato=self.contrato,
+        FaixaLiberacaoAvaliacao.objects.create(
+            formulario=formulario,
             ordem=2,
-            descricao='Posto B',
-            quantidade=Decimal('1.00'),
-            valor_unitario=Decimal('100.00'),
+            nota_minima=Decimal('2.00'),
+            nota_maxima=Decimal('2.99'),
+            percentual_liberacao=Decimal('90.00'),
         )
-
-        self.contrato.refresh_from_db()
-        self.assertEqual(self.contrato.base_mensal, Decimal('400.00'))
-        self.assertEqual(self.contrato.valor_global, Decimal('4800.00'))
-
-    def test_calcula_vigencia_periodo_e_regime(self):
-        TermoAditivo.objects.create(
-            contrato=self.contrato,
-            numero_termo='1º TA',
-            tipo=TermoAditivo.Tipo.PRORROGACAO,
-            data_assinatura=date(2026, 11, 1),
-            data_inicio=date(2027, 1, 1),
-            data_termino=date(2027, 12, 31),
-            quantidade_meses=12,
+        FaixaLiberacaoAvaliacao.objects.create(
+            formulario=formulario,
+            ordem=3,
+            nota_minima=Decimal('3.00'),
+            percentual_liberacao=Decimal('100.00'),
         )
-        self.assertEqual(self.contrato.regime_atual, Contrato.Regime.ORDINARIO)
-        self.assertEqual(self.contrato.data_limite_vigencia.strftime('%d/%m/%Y'), '31/12/2027')
-        self.assertIn('/24 meses', self.contrato.periodo_acumulado_display)
+        grupo = GrupoAvaliacao.objects.create(formulario=formulario, ordem=1, nome='Desempenho')
+        ItemAvaliacao.objects.create(grupo=grupo, ordem=1, descricao='Qualidade da entrega', peso_percentual=Decimal('100.00'))
+        return formulario
 
-    def test_bloqueia_pagamento_com_checklist_incompleto(self):
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, ordem=1, titulo='NF', obrigatorio=True)
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 2, 1), periodo_fim=date(2026, 2, 28))
-        self.assertFalse(competencia.pode_liberar)
-
-    def test_criacao_e_calculo_de_medicao(self):
-        item = ContratoItem.objects.create(
-            contrato=self.contrato,
+    def criar_checklist_padrao_global(self, nome='Checklist padrão global', ativo=True):
+        checklist = ChecklistPadraoGlobal.objects.create(
+            nome=nome,
+            descricao='Checklist padrão reutilizável',
+            observacoes='Observações padrão',
+            ativo=ativo,
+            criado_por=self.gestor,
+            atualizado_por=self.gestor,
+        )
+        ChecklistPadraoGlobalItem.objects.create(
+            checklist_padrao=checklist,
             ordem=1,
-            descricao='Item medido',
-            quantidade=Decimal('10.00'),
-            valor_unitario=Decimal('50.00'),
+            titulo='Documento padrão 1',
+            descricao='Descrição do documento padrão 1',
+            obrigatorio=True,
         )
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1), periodo_fim=date(2026, 1, 31))
-        MedicaoItemCompetencia.objects.create(
-            competencia=competencia,
-            item_contrato=item,
-            quantidade=Decimal('2.00'),
-            valor_unitario_aplicado=Decimal('50.00'),
-        )
-        competencia.refresh_from_db()
-        self.assertEqual(competencia.valor_medido, Decimal('100.00'))
-        self.assertEqual(competencia.valor_liberado, Decimal('100.00'))
-
-    def test_item_do_contrato_usa_proxima_ordem_quando_campo_fica_em_branco(self):
-        ContratoItem.objects.create(
-            contrato=self.contrato,
-            ordem=1,
-            descricao='Item inicial',
-            quantidade=Decimal('1.00'),
-            valor_unitario=Decimal('10.00'),
-        )
-        self.client.login(username='admin-contratos', password='123')
-
-        response = self.client.post(
-            reverse('contratos:item_create', args=[self.contrato.pk]),
-            {
-                'ordem': '',
-                'descricao': 'Item automático',
-                'codigo_siafisico': '',
-                'codigo_catmat_catser': '',
-                'unidade_fornecimento': '',
-                'quantidade': '2.00',
-                'valor_unitario': '15.00',
-                'valor_referencial': '0.00',
-            },
-        )
-
-        item = ContratoItem.objects.get(descricao='Item automático')
-        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[self.contrato.pk]), fetch_redirect_response=False)
-        self.assertEqual(item.ordem, 2)
-
-    def test_aplica_avaliacao_qualidade_ao_valor_final(self):
-        item = ContratoItem.objects.create(
-            contrato=self.contrato,
-            ordem=1,
-            descricao='Item qualidade',
-            quantidade=Decimal('1.00'),
-            valor_unitario=Decimal('100.00'),
-        )
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 3, 1), periodo_fim=date(2026, 3, 31))
-        MedicaoItemCompetencia.objects.create(
-            competencia=competencia,
-            item_contrato=item,
-            quantidade=Decimal('1.00'),
-            valor_unitario_aplicado=Decimal('100.00'),
-        )
-        modelo = ModeloAvaliacaoQualidade.objects.create(
-            contrato=self.contrato,
-            nome='SLA',
-            vigencia_inicio=date(2026, 1, 1),
-        )
-        grupo = GrupoAvaliacaoQualidade.objects.create(modelo=modelo, ordem=1, nome='Desempenho', peso=Decimal('1.00'))
-        criterio = CriterioAvaliacaoQualidade.objects.create(
-            grupo=grupo,
-            ordem=1,
-            nome='Pontualidade',
-            peso=Decimal('1.00'),
-            pontuacao_maxima=Decimal('10.00'),
-        )
-        avaliacao = AvaliacaoQualidadeCompetencia.objects.create(competencia=competencia, modelo=modelo)
-        AvaliacaoCriterioCompetencia.objects.create(avaliacao=avaliacao, criterio=criterio, nota_obtida=Decimal('8.00'))
-
-        avaliacao.refresh_from_db()
-        competencia.refresh_from_db()
-        self.assertEqual(avaliacao.percentual_desempenho, Decimal('80.00'))
-        self.assertEqual(competencia.valor_liberado, Decimal('80.00'))
-
-    def test_reajuste_respeita_valor_referencial_e_calcula_retroatividade(self):
-        item = ContratoItem.objects.create(
-            contrato=self.contrato,
-            ordem=1,
-            descricao='Item reajustado',
-            quantidade=Decimal('10.00'),
-            valor_unitario=Decimal('90.00'),
-            valor_referencial=Decimal('100.00'),
-        )
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 4, 1), periodo_fim=date(2026, 4, 30))
-        MedicaoItemCompetencia.objects.create(
-            competencia=competencia,
-            item_contrato=item,
-            quantidade=Decimal('2.00'),
-            valor_unitario_aplicado=Decimal('90.00'),
-        )
-        evento = EventoFinanceiroContrato.objects.create(
-            contrato=self.contrato,
-            tipo=EventoFinanceiroContrato.Tipo.REAJUSTE,
-            indice_aplicado='IPCA',
-            data_base=date(2026, 4, 1),
-            data_aplicacao=date(2026, 5, 1),
-            percentual_aplicado=Decimal('10.00'),
-        )
-        EventoFinanceiroItem.objects.create(
-            evento=evento,
-            item_contrato=item,
-            valor_original=Decimal('90.00'),
-            valor_reajustado=Decimal('99.00'),
-            valor_referencial=Decimal('100.00'),
-        )
-
-        memoria = evento.memorias.get(competencia=competencia, item_contrato=item)
-        self.assertEqual(memoria.diferenca_total, Decimal('18.00'))
-
-
-class ContratosViewTests(ContratosBaseTest):
-    """Valida ACL, filtros de listagem e exportação do diário de bordo."""
-
-    def test_acl_bloqueia_usuario_sem_regra(self):
-        self.client.login(username='maria', password='123')
-        response = self.client.get(reverse('contratos:home'))
-        self.assertEqual(response.status_code, 403)
-
-    def test_listagem_filtra_por_texto(self):
-        self.client.login(username='joao', password='123')
-        response = self.client.get(reverse('contratos:contrato_list'), {'q': 'Limpeza'})
-        self.assertContains(response, 'Limpeza predial')
-
-    def test_listagem_ordena_colunas_em_ordem_crescente(self):
-        Contrato.objects.create(
-            numero_contrato='02/2026',
-            apelido='Zeladoria',
-            objeto='Apoio operacional',
-            detalhamento_objeto='Serviço complementar.',
-            data_inicio_vigencia=date(2026, 2, 1),
-            prazo_inicial_meses=12,
-            vigencia_maxima_meses=24,
-            empresa_contratada=self.empresa,
-            fiscal_administrativo=self.admin,
-            fiscal_tecnico=self.admin,
-            gestor_contrato=self.admin,
-            base_mensal=Decimal('2500.00'),
-            valor_global=Decimal('30000.00'),
-            criado_por=self.admin,
-            atualizado_por=self.admin,
-        )
-        self.client.login(username='joao', password='123')
-
-        response = self.client.get(reverse('contratos:contrato_list'), {'ordem': 'apelido', 'direcao': 'asc'})
-
-        contratos = list(response.context['contratos'])
-        self.assertEqual([contrato.apelido for contrato in contratos], ['Limpeza predial', 'Zeladoria'])
-
-    def test_listagem_ordena_colunas_em_ordem_decrescente(self):
-        Contrato.objects.create(
-            numero_contrato='02/2026',
-            apelido='Zeladoria',
-            objeto='Apoio operacional',
-            detalhamento_objeto='Serviço complementar.',
-            data_inicio_vigencia=date(2026, 2, 1),
-            prazo_inicial_meses=12,
-            vigencia_maxima_meses=24,
-            empresa_contratada=self.empresa,
-            fiscal_administrativo=self.admin,
-            fiscal_tecnico=self.admin,
-            gestor_contrato=self.admin,
-            base_mensal=Decimal('2500.00'),
-            valor_global=Decimal('30000.00'),
-            criado_por=self.admin,
-            atualizado_por=self.admin,
-        )
-        self.client.login(username='joao', password='123')
-
-        response = self.client.get(reverse('contratos:contrato_list'), {'ordem': 'apelido', 'direcao': 'desc'})
-
-        contratos = list(response.context['contratos'])
-        self.assertEqual([contrato.apelido for contrato in contratos], ['Zeladoria', 'Limpeza predial'])
-
-    def test_detalhe_ordena_competencias_com_pagamentos_ao_final(self):
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, ordem=1, titulo='NF', obrigatorio=True)
-        competencia_janeiro = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
-        competencia_fevereiro = self.contrato.competencias.get(periodo_inicio=date(2026, 2, 1))
-        competencia_marco = self.contrato.competencias.get(periodo_inicio=date(2026, 3, 1))
-        competencia_fevereiro.status = CompetenciaPagamento.Status.PAGO
-        competencia_fevereiro.save(update_fields=['status'])
-        competencia_marco.status = CompetenciaPagamento.Status.EM_CONFERENCIA
-        competencia_marco.save(update_fields=['status'])
-
-        self.client.login(username='joao', password='123')
-        response = self.client.get(reverse('contratos:contrato_detail', args=[self.contrato.pk]))
-
-        competencias = list(response.context['competencias'])
-        posicoes = {competencia.pk: indice for indice, competencia in enumerate(competencias)}
-        self.assertLess(posicoes[competencia_janeiro.pk], posicoes[competencia_marco.pk])
-        self.assertLess(posicoes[competencia_marco.pk], posicoes[competencia_fevereiro.pk])
-
-    def test_competencia_nao_exibe_avaliacao_qualidade_sem_modelo_ativo(self):
-        self.client.login(username='admin-contratos', password='123')
-
-        response = self.client.get(reverse('contratos:contrato_detail', args=[self.contrato.pk]))
-
-        self.assertNotContains(response, 'Criar avaliação')
-
-    def test_competencia_exibe_avaliacao_qualidade_para_fiscal_com_modelo_ativo(self):
-        ModeloAvaliacaoQualidade.objects.create(
-            contrato=self.contrato,
-            nome='Modelo ativo',
-            vigencia_inicio=date(2026, 1, 1),
-            ativo=True,
-        )
-        self.client.login(username='admin-contratos', password='123')
-
-        response = self.client.get(reverse('contratos:contrato_detail', args=[self.contrato.pk]))
-
-        self.assertContains(response, 'Criar avaliação')
-
-    def test_detalhe_renderiza_cards_para_responsaveis_internos(self):
-        self.client.login(username='joao', password='123')
-
-        response = self.client.get(reverse('contratos:contrato_detail', args=[self.contrato.pk]))
-
-        self.assertContains(response, 'class="birthday-person-card contratos-responsavel-card"', html=False)
-        self.assertContains(response, 'onclick="openContratoResponsavelModal(this)"', html=False)
-        self.assertContains(response, 'Responsáveis internos')
-
-    def test_rota_de_avaliacao_bloqueia_usuario_que_nao_e_fiscal(self):
-        ModeloAvaliacaoQualidade.objects.create(
-            contrato=self.contrato,
-            nome='Modelo ativo',
-            vigencia_inicio=date(2026, 1, 1),
-            ativo=True,
-        )
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
-        self.client.login(username='joao', password='123')
-
-        response = self.client.get(reverse('contratos:avaliacao_create', args=[competencia.pk]))
-
-        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[self.contrato.pk]), fetch_redirect_response=False)
-
-    def test_exclusao_de_contrato_com_vinculos_protegidos_redireciona_sem_erro(self):
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, titulo='NF mensal', obrigatorio=True)
-        modelo = ModeloAvaliacaoQualidade.objects.create(
-            contrato=self.contrato,
-            nome='Modelo ativo',
-            vigencia_inicio=date(2026, 1, 1),
-            ativo=True,
-        )
-        grupo = GrupoAvaliacaoQualidade.objects.create(modelo=modelo, ordem=1, nome='Grupo', peso=Decimal('1.00'))
-        criterio = CriterioAvaliacaoQualidade.objects.create(
-            grupo=grupo,
-            ordem=1,
-            nome='Critério',
-            peso=Decimal('1.00'),
-            pontuacao_maxima=Decimal('10.00'),
-        )
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
-        avaliacao = AvaliacaoQualidadeCompetencia.objects.create(competencia=competencia, modelo=modelo)
-        AvaliacaoCriterioCompetencia.objects.create(avaliacao=avaliacao, criterio=criterio, nota_obtida=Decimal('8.00'))
-        regra_admin = RegraAcesso.objects.create(recurso=self.recurso, nivel=RegraAcesso.NIVEL_MODIFICACAO)
-        regra_admin.usuarios.add(self.admin)
-        self.client.login(username='admin-contratos', password='123')
-
-        response = self.client.post(reverse('contratos:contrato_delete', args=[self.contrato.pk]))
-
-        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[self.contrato.pk]), fetch_redirect_response=False)
-        self.assertTrue(Contrato.objects.filter(pk=self.contrato.pk).exists())
-
-    def test_checklist_padrao_usa_proxima_ordem_quando_campo_fica_em_branco(self):
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, ordem=1, titulo='FGTS', obrigatorio=True)
-        self.client.login(username='joao', password='123')
-
-        response = self.client.post(
-            reverse('contratos:checklist_modelo_create', args=[self.contrato.pk]),
-            {
-                'titulo': 'teste paga checklist 02',
-                'descricao': '',
-                'obrigatorio': 'on',
-            },
-        )
-
-        item = ChecklistPagamentoModelo.objects.get(titulo='teste paga checklist 02')
-        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[self.contrato.pk]), fetch_redirect_response=False)
-        self.assertEqual(item.ordem, 2)
-
-    def test_bloqueia_medicao_enquanto_competencia_aguarda_checklist_padrao(self):
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
-        self.client.login(username='joao', password='123')
-
-        response = self.client.get(reverse('contratos:medicao_create', args=[competencia.pk]))
-
-        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[self.contrato.pk]), fetch_redirect_response=False)
-
-    def test_tela_de_medicao_traz_itens_do_contrato_automaticamente(self):
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, titulo='NF mensal', obrigatorio=True)
-        item = ContratoItem.objects.create(
-            contrato=self.contrato,
-            ordem=1,
-            descricao='Item mensal automatico',
-            quantidade=Decimal('10.00'),
-            valor_unitario=Decimal('50.00'),
-        )
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
-        self.client.login(username='joao', password='123')
-
-        response = self.client.get(reverse('contratos:medicao_create', args=[competencia.pk]))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Item mensal automatico')
-        self.assertIn(f'quantidade_{item.pk}', response.content.decode())
-
-    def test_post_de_medicao_em_lote_grava_quantidades_dos_itens(self):
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, titulo='NF mensal', obrigatorio=True)
-        item1 = ContratoItem.objects.create(
-            contrato=self.contrato,
-            ordem=1,
-            descricao='Item 1',
-            quantidade=Decimal('10.00'),
-            valor_unitario=Decimal('50.00'),
-        )
-        item2 = ContratoItem.objects.create(
-            contrato=self.contrato,
+        ChecklistPadraoGlobalItem.objects.create(
+            checklist_padrao=checklist,
             ordem=2,
-            descricao='Item 2',
-            quantidade=Decimal('4.00'),
-            valor_unitario=Decimal('100.00'),
+            titulo='Documento padrão 2',
+            descricao='Descrição do documento padrão 2',
+            obrigatorio=False,
         )
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
-        self.client.login(username='joao', password='123')
+        return checklist
 
-        response = self.client.post(
-            reverse('contratos:medicao_create', args=[competencia.pk]),
-            {
-                f'quantidade_{item1.pk}': '2.00',
-                f'quantidade_{item2.pk}': '1.00',
-            },
-        )
-
-        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[self.contrato.pk]), fetch_redirect_response=False)
-        competencia.refresh_from_db()
-        self.assertEqual(competencia.medicoes.count(), 2)
-        self.assertEqual(competencia.medicoes.get(item_contrato=item1).valor_unitario_aplicado, Decimal('50.00'))
-        self.assertEqual(competencia.medicoes.get(item_contrato=item1).quantidade, Decimal('2.00'))
-        self.assertEqual(competencia.medicoes.get(item_contrato=item2).quantidade, Decimal('1.00'))
-
-    def test_cadastro_de_checklist_padrao_libera_fluxo_da_competencia(self):
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
-        self.client.login(username='joao', password='123')
-
-        response = self.client.post(
-            reverse('contratos:checklist_modelo_create', args=[self.contrato.pk]),
-            {
-                'titulo': 'NF mensal',
-                'descricao': 'Documento obrigatório',
-                'obrigatorio': 'on',
-            },
+    def criar_documento_importante(self, contrato, nome='Documento base', usuario=None):
+        return DocumentoImportanteContrato.objects.create(
+            contrato=contrato,
+            nome=nome,
+            arquivo=SimpleUploadedFile('documento.pdf', pdf_minimo_valido(), content_type='application/pdf'),
+            criado_por=usuario or self.criador,
+            atualizado_por=usuario or self.criador,
         )
 
-        competencia.refresh_from_db()
-        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[self.contrato.pk]), fetch_redirect_response=False)
-        self.assertEqual(competencia.checklist_itens.count(), 1)
-        self.assertFalse(competencia.aguardando_checklist_padrao)
-        self.assertEqual(competencia.status, CompetenciaPagamento.Status.RASCUNHO)
-
-    def test_modal_ajax_de_anexo_do_checklist_aceita_apenas_arquivo(self):
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, titulo='NF mensal', obrigatorio=True)
-        item = competencia.checklist_itens.first()
-        self.client.login(username='joao', password='123')
-
-        response_get = self.client.get(
-            f"{reverse('contratos:checklist_anexo_create', args=[item.pk])}?modal=1",
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-
-        self.assertEqual(response_get.status_code, 200)
-        self.assertContains(response_get, 'Salvar anexo')
-
-        response = self.client.post(
-            f"{reverse('contratos:checklist_anexo_create', args=[item.pk])}?modal=1",
-            {'arquivo': SimpleUploadedFile('checklist.pdf', b'%PDF-1.4 checklist', content_type='application/pdf')},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-
-        payload = json.loads(response.content)
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(payload['success'])
-        item.refresh_from_db()
-        self.assertEqual(item.anexos.count(), 1)
-        self.assertTrue(item.concluido)
-        self.assertIsNotNone(item.validado_em)
-
-    def test_limpar_anexo_do_checklist_remove_arquivo_e_retorna_item_para_pendente(self):
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, titulo='NF mensal', obrigatorio=True)
-        item = competencia.checklist_itens.first()
-        item.anexos.create(arquivo=SimpleUploadedFile('checklist.pdf', b'%PDF-1.4 checklist', content_type='application/pdf'))
-        self.client.login(username='joao', password='123')
-
-        response = self.client.post(reverse('contratos:checklist_anexo_delete', args=[item.pk]))
-
-        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[self.contrato.pk]), fetch_redirect_response=False)
-        item.refresh_from_db()
-        self.assertEqual(item.anexos.count(), 0)
-        self.assertFalse(item.concluido)
-        self.assertIsNone(item.validado_em)
-
-    def test_anexo_do_checklist_rejeita_arquivo_que_nao_seja_pdf(self):
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, titulo='NF mensal', obrigatorio=True)
-        item = competencia.checklist_itens.first()
-        self.client.login(username='joao', password='123')
-
-        response = self.client.post(
-            f"{reverse('contratos:checklist_anexo_create', args=[item.pk])}?modal=1",
-            {'arquivo': SimpleUploadedFile('checklist.txt', b'conteudo demonstrativo', content_type='text/plain')},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Envie um arquivo PDF válido.')
-
-    def test_modal_ajax_de_pagamento_anexa_documentos_e_marca_competencia_como_paga(self):
-        competencia = self.contrato.competencias.get(periodo_inicio=date(2026, 1, 1))
-        ChecklistPagamentoModelo.objects.create(contrato=self.contrato, titulo='NF mensal', obrigatorio=True)
-        competencia.refresh_from_db()
-        for item in competencia.checklist_itens.all():
-            item.concluido = True
-            item.validado_em = timezone.now()
-            item.save(update_fields=['concluido', 'validado_em'])
-        self.client.login(username='joao', password='123')
-
-        response_get = self.client.get(
-            f"{reverse('contratos:competencia_pagamento_executar', args=[competencia.pk])}?modal=1",
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-
-        self.assertEqual(response_get.status_code, 200)
-        self.assertContains(response_get, 'Concluir pagamento')
-
-        response_post = self.client.post(
-            f"{reverse('contratos:competencia_pagamento_executar', args=[competencia.pk])}?modal=1",
-            {
-                'anexo_nota_fiscal': SimpleUploadedFile('nf.pdf', b'%PDF-1.4 nf', content_type='application/pdf'),
-                'anexo_atestado_realizacao': SimpleUploadedFile('atestado.pdf', b'%PDF-1.4 atestado', content_type='application/pdf'),
-                'anexo_despacho_dof': SimpleUploadedFile('dof.pdf', b'%PDF-1.4 dof', content_type='application/pdf'),
-            },
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-
-        payload = json.loads(response_post.content)
-        self.assertEqual(response_post.status_code, 200)
-        self.assertTrue(payload['success'])
-        competencia.refresh_from_db()
-        self.assertEqual(competencia.status, CompetenciaPagamento.Status.PAGO)
-        self.assertTrue(bool(competencia.anexo_nota_fiscal))
-        self.assertTrue(bool(competencia.anexo_atestado_realizacao))
-        self.assertTrue(bool(competencia.anexo_despacho_dof))
-
-    def test_exporta_diario_xlsx(self):
-        OcorrenciaContrato.objects.create(
-            contrato=self.contrato,
-            data_registro=date(2026, 1, 10),
-            tipo_ocorrencia='Fiscalização',
-            descricao='Vistoria executada.',
-            usuario=self.admin,
-        )
-        self.client.login(username='joao', password='123')
-        response = self.client.get(reverse('contratos:ocorrencia_export_xlsx', args=[self.contrato.pk]))
-        workbook = load_workbook(BytesIO(response.content))
-        ws = workbook.active
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(ws['A1'].value, 'Número do Contrato')
-        self.assertEqual(ws['B1'].value, '01/2026')
-        self.assertEqual(ws['A6'].value, 'Data')
-
-    def test_cadastro_ajax_de_empresa_retorna_json_para_modal(self):
-        self.client.login(username='joao', password='123')
-        response = self.client.post(
-            f"{reverse('contratos:empresa_create')}?modal=1",
-            {
-                'razao_social': 'Empresa Modal',
-                'cnpj': '33.333.333/0001-33',
-                'nome_fantasia': 'Modal Ltda',
-                'logradouro': 'Rua A',
-                'numero': '10',
-                'complemento': '',
-                'bairro': 'Centro',
-                'cidade': 'São Paulo',
-                'estado': 'SP',
-                'cep': '01000-000',
-            },
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-
-        payload = json.loads(response.content)
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(payload['success'])
-        self.assertEqual(payload['empresa']['label'], 'Empresa Modal')
-
-    def test_formulario_gera_numero_incremental_no_mesmo_ano(self):
-        self.client.login(username='joao', password='123')
-        Contrato.objects.create(
-            numero_contrato='070/2026',
-            apelido='Outro contrato',
-            objeto='Objeto auxiliar',
-            detalhamento_objeto='Detalhamento.',
-            data_inicio_vigencia=date(2026, 2, 1),
-            prazo_inicial_meses=12,
-            vigencia_maxima_meses=24,
-            empresa_contratada=self.empresa,
-            fiscal_administrativo=self.admin,
-            fiscal_tecnico=self.admin,
-            gestor_contrato=self.admin,
-            base_mensal=Decimal('500.00'),
-            criado_por=self.admin,
-            atualizado_por=self.admin,
-        )
-
-        response = self.client.post(
-            reverse('contratos:contrato_create'),
-            {
-                'numero_contrato': '',
-                'numero_contrato_incremental': 'on',
-                'apelido': 'Contrato incremental',
-                'objeto': 'Objeto incremental',
-                'detalhamento_objeto': 'Detalhamento.',
-                'data_inicio_vigencia': '2026-06-01',
-                'prazo_inicial_meses': '12',
-                'vigencia_maxima_meses': '24',
-                'empresa_contratada': str(self.empresa.pk),
-                'fiscal_administrativo': str(self.admin.pk),
-                'fiscal_tecnico': str(self.admin.pk),
-                'gestor_contrato': str(self.admin.pk),
-                'base_mensal': '1000.00',
-                'situacao_forcada': '',
-                'detalhamento-TOTAL_FORMS': '0',
-                'detalhamento-INITIAL_FORMS': '0',
-                'detalhamento-MIN_NUM_FORMS': '0',
-                'detalhamento-MAX_NUM_FORMS': '1000',
-            },
-        )
-
-        criado = Contrato.objects.get(apelido='Contrato incremental')
-        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[criado.pk]), fetch_redirect_response=False)
-        self.assertEqual(criado.numero_contrato, '071/2026')
-
-    def test_tela_de_cadastro_renderiza_management_form_do_detalhamento(self):
-        """Garante que o POST do navegador leve os campos ocultos exigidos pelo formset."""
-
-        self.client.login(username='joao', password='123')
-        response = self.client.get(reverse('contratos:contrato_create'))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'name="detalhamento-TOTAL_FORMS"', html=False)
-        self.assertContains(response, 'name="detalhamento-INITIAL_FORMS"', html=False)
-
-    def test_formulario_incremental_reinicia_sequencia_em_novo_ano(self):
+    def test_formulario_gera_numero_incremental(self):
+        self.criar_contrato(numero='001/2026')
         form = ContratoForm(
             data={
                 'numero_contrato': '',
                 'numero_contrato_incremental': 'on',
-                'apelido': 'Virada de ano',
-                'objeto': 'Objeto',
-                'detalhamento_objeto': 'Detalhamento.',
-                'data_inicio_vigencia': '2027-01-15',
+                'apelido': 'Contrato incremental',
+                'objeto': 'Objeto incremental',
+                'data_inicio_vigencia': '2026-06-01',
                 'prazo_inicial_meses': '12',
                 'vigencia_maxima_meses': '24',
                 'empresa_contratada': str(self.empresa.pk),
-                'fiscal_administrativo': str(self.admin.pk),
-                'fiscal_tecnico': str(self.admin.pk),
-                'gestor_contrato': str(self.admin.pk),
-                'base_mensal': '1000.00',
+                'processo_sei_gestao_numero': 'SEI-G-2026-010',
+                'processo_sei_gestao_url': 'https://sei.exemplo/gestao/10',
+                'processo_sei_execucao_numero': 'SEI-E-2026-010',
+                'processo_sei_execucao_url': 'https://sei.exemplo/execucao/10',
+                'fiscal_administrativo': str(self.fiscal_adm.pk),
+                'fiscal_administrativo_suplente': '',
+                'fiscal_tecnico': str(self.fiscal_tec.pk),
+                'fiscal_tecnico_suplente': '',
+                'gestor_contrato': str(self.gestor.pk),
+                'gestor_contrato_suplente': '',
                 'situacao_forcada': '',
             }
         )
 
         self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.cleaned_data['numero_contrato'], '001/2027')
+        self.assertEqual(form.cleaned_data['numero_contrato'], '002/2026')
 
-    def test_formulario_valida_formato_manual_do_numero(self):
+    def test_formulario_aceita_responsaveis_em_branco_por_enquanto(self):
         form = ContratoForm(
             data={
-                'numero_contrato': '1/2026',
-                'apelido': 'Manual inválido',
-                'objeto': 'Objeto',
-                'detalhamento_objeto': 'Detalhamento.',
-                'data_inicio_vigencia': '2026-01-01',
+                'numero_contrato': '010/2026',
+                'apelido': 'Contrato sem responsáveis',
+                'objeto': 'Objeto temporário',
+                'data_inicio_vigencia': '2026-06-01',
                 'prazo_inicial_meses': '12',
                 'vigencia_maxima_meses': '24',
                 'empresa_contratada': str(self.empresa.pk),
-                'fiscal_administrativo': str(self.admin.pk),
-                'fiscal_tecnico': str(self.admin.pk),
-                'gestor_contrato': str(self.admin.pk),
-                'base_mensal': '1000.00',
+                'processo_sei_gestao_numero': 'SEI-G-2026-011',
+                'processo_sei_gestao_url': 'https://sei.exemplo/gestao/11',
+                'processo_sei_execucao_numero': 'SEI-E-2026-011',
+                'processo_sei_execucao_url': 'https://sei.exemplo/execucao/11',
+                'fiscal_administrativo': '',
+                'fiscal_administrativo_suplente': '',
+                'fiscal_tecnico': '',
+                'fiscal_tecnico_suplente': '',
+                'gestor_contrato': '',
+                'gestor_contrato_suplente': '',
+                'situacao_forcada': '',
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_formulario_de_contrato_exige_processos_sei(self):
+        form = ContratoForm(
+            data={
+                'numero_contrato': '012/2026',
+                'apelido': 'Contrato sem SEI',
+                'objeto': 'Objeto sem SEI',
+                'data_inicio_vigencia': '2026-06-01',
+                'prazo_inicial_meses': '12',
+                'vigencia_maxima_meses': '24',
+                'empresa_contratada': str(self.empresa.pk),
+                'processo_sei_gestao_numero': '',
+                'processo_sei_gestao_url': '',
+                'processo_sei_execucao_numero': '',
+                'processo_sei_execucao_url': '',
+                'fiscal_administrativo': '',
+                'fiscal_administrativo_suplente': '',
+                'fiscal_tecnico': '',
+                'fiscal_tecnico_suplente': '',
+                'gestor_contrato': '',
+                'gestor_contrato_suplente': '',
                 'situacao_forcada': '',
             }
         )
 
         self.assertFalse(form.is_valid())
-        self.assertIn('numero_contrato', form.errors)
+        self.assertIn('processo_sei_gestao_numero', form.errors)
+        self.assertIn('processo_sei_gestao_url', form.errors)
+        self.assertIn('processo_sei_execucao_numero', form.errors)
+        self.assertIn('processo_sei_execucao_url', form.errors)
 
-    def test_criacao_de_contrato_salva_detalhamento_por_itens(self):
-        self.client.login(username='joao', password='123')
+    def test_primeiro_checklist_do_contrato_nasce_ativo_automaticamente(self):
+        contrato = self.criar_contrato(numero='014/2026')
+
+        checklist = ChecklistModelo.objects.create(
+            contrato=contrato,
+            nome='Primeiro checklist',
+            descricao='Checklist inicial do contrato',
+            ativo=False,
+        )
+
+        checklist.refresh_from_db()
+        self.assertTrue(checklist.ativo)
+        self.assertEqual(contrato.checklist_ativo.pk, checklist.pk)
+
+    def test_primeiro_formulario_de_avaliacao_nasce_ativo_automaticamente(self):
+        contrato = self.criar_contrato(numero='015/2026')
+
+        formulario = FormularioAvaliacao.objects.create(
+            contrato=contrato,
+            nome='Avaliação inicial',
+            descricao='Primeiro formulário do contrato',
+            ativo=False,
+        )
+
+        formulario.refresh_from_db()
+        self.assertTrue(formulario.ativo)
+        self.assertEqual(contrato.formulario_avaliacao_ativo.pk, formulario.pk)
+
+    def test_primeiro_checklist_padrao_global_nasce_ativo_automaticamente(self):
+        checklist = ChecklistPadraoGlobal.objects.create(
+            nome='Checklist padrão inicial',
+            descricao='Checklist padrão inicial',
+            ativo=False,
+        )
+
+        checklist.refresh_from_db()
+        self.assertTrue(checklist.ativo)
+
+    def test_ativar_checklist_padrao_global_desativa_os_demais(self):
+        primeiro = self.criar_checklist_padrao_global(nome='Padrão A', ativo=True)
+        segundo = ChecklistPadraoGlobal.objects.create(
+            nome='Padrão B',
+            descricao='Segundo padrão',
+            ativo=True,
+        )
+
+        primeiro.refresh_from_db()
+        segundo.refresh_from_db()
+        self.assertFalse(primeiro.ativo)
+        self.assertTrue(segundo.ativo)
+
+    def test_lista_renderiza_atalho_global_apenas_para_gestor_admin(self):
+        self.criar_checklist_padrao_global()
+
+        self.client.force_login(self.gestor)
+        response_gestor = self.client.get(reverse('contratos:contrato_list'))
+        self.assertContains(response_gestor, 'Checklists Padrão')
+        self.assertNotContains(response_gestor, 'Checklists Padrão Globais')
+        self.client.logout()
+
+        self.client.login(username='operador_v2', password='123')
+        response_operador = self.client.get(reverse('contratos:contrato_list'))
+        self.assertNotContains(response_operador, 'Checklists Padrão')
+
+    def test_lista_de_checklists_padrao_exibe_colunas_e_link_para_tela_propria(self):
+        checklist = self.criar_checklist_padrao_global(nome='Padrão institucional')
+        self.client.force_login(self.gestor)
+
+        response = self.client.get(reverse('contratos:checklist_padrao_list'))
+
+        self.assertContains(response, 'Novo Checklist Padrão')
+        self.assertContains(response, 'Último usuário que alterou')
+        self.assertContains(response, 'Data da última alteração')
+        self.assertContains(response, checklist.nome)
+        self.assertContains(response, reverse('contratos:checklist_padrao_detail', args=[checklist.pk]))
+        self.assertContains(response, self.gestor.username)
+
+    def test_detalhe_do_checklist_padrao_exibe_itens_em_tela_propria(self):
+        checklist = self.criar_checklist_padrao_global(nome='Padrão detalhado')
+        self.client.login(username='gestor_v2', password='123')
+
+        response = self.client.get(reverse('contratos:checklist_padrao_detail', args=[checklist.pk]))
+
+        self.assertContains(response, 'Itens do Checklist')
+        self.assertContains(response, 'Documento padrão 1')
+        self.assertContains(response, 'Novo item')
+
+    def test_operador_sem_perfil_gestor_nao_pode_manter_checklist_padrao_global(self):
+        self.client.login(username='operador_v2', password='123')
+
         response = self.client.post(
-            reverse('contratos:contrato_create'),
+            reverse('contratos:checklist_padrao_create'),
             {
-                'numero_contrato': '',
-                'numero_contrato_incremental': 'on',
-                'apelido': 'Contrato com detalhamento',
-                'objeto': 'Objeto detalhado',
-                'data_inicio_vigencia': '2026-06-01',
-                'prazo_inicial_meses': '12',
-                'vigencia_maxima_meses': '24',
-                'empresa_contratada': str(self.empresa.pk),
-                'fiscal_administrativo': str(self.admin.pk),
-                'fiscal_tecnico': str(self.admin.pk),
-                'gestor_contrato': str(self.admin.pk),
-                'base_mensal': '1000.00',
-                'situacao_forcada': '',
-                'detalhamento-TOTAL_FORMS': '2',
-                'detalhamento-INITIAL_FORMS': '0',
-                'detalhamento-MIN_NUM_FORMS': '0',
-                'detalhamento-MAX_NUM_FORMS': '1000',
-                'detalhamento-0-ordem': '1',
-                'detalhamento-0-descricao': 'Primeiro item do detalhamento',
-                'detalhamento-1-ordem': '2',
-                'detalhamento-1-descricao': 'Segundo item do detalhamento',
+                'nome': 'Padrão indevido',
+                'descricao': 'Não deveria ser criado',
+                'observacoes': '',
+                'ativo': 'on',
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse('contratos:contrato_list'))
+        self.assertContains(response, 'Somente gestores e administradores do sistema podem manter checklists padrão globais.')
+        self.assertFalse(ChecklistPadraoGlobal.objects.filter(nome='Padrão indevido').exists())
+
+    def test_detalhe_do_contrato_exibe_secao_de_checklist_padrao_antes_das_competencias(self):
+        contrato = self.criar_contrato(numero='015A/2026')
+        checklist_padrao = self.criar_checklist_padrao_global(nome='Padrão institucional')
+        self.client.login(username='gestor_v2', password='123')
+
+        response = self.client.get(reverse('contratos:contrato_detail', args=[contrato.pk]))
+
+        self.assertContains(response, 'Checklist Padrão')
+        self.assertContains(response, checklist_padrao.nome)
+        self.assertContains(response, 'Carregar Checklist')
+
+    def test_carregar_checklist_padrao_clona_itens_e_ativa_nova_versao_do_contrato(self):
+        contrato = self.criar_contrato(numero='015B/2026')
+        checklist_anterior = self.criar_checklist_ativo(contrato, nome='Checklist manual', titulo='Documento manual')
+        checklist_padrao = self.criar_checklist_padrao_global(nome='Padrão institucional')
+        self.client.login(username='gestor_v2', password='123')
+
+        response = self.client.post(
+            reverse('contratos:checklist_padrao_carregar', args=[contrato.pk]),
+            {'checklist_padrao_id': str(checklist_padrao.pk)},
+        )
+
+        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[contrato.pk]), fetch_redirect_response=False)
+        checklist_anterior.refresh_from_db()
+        nova_versao = contrato.checklist_modelos.exclude(pk=checklist_anterior.pk).get()
+
+        self.assertFalse(checklist_anterior.ativo)
+        self.assertTrue(nova_versao.ativo)
+        self.assertEqual(nova_versao.nome, 'Padrão institucional (Padrão)')
+        self.assertEqual(
+            list(nova_versao.itens.values_list('titulo', 'ordem', 'obrigatorio')),
+            [
+                ('Documento padrão 1', 1, True),
+                ('Documento padrão 2', 2, False),
+            ],
+        )
+
+    def test_alterar_checklist_padrao_global_nao_muda_copia_ja_carregada_no_contrato(self):
+        contrato = self.criar_contrato(numero='015C/2026')
+        checklist_padrao = self.criar_checklist_padrao_global(nome='Padrão estável')
+        self.client.login(username='gestor_v2', password='123')
+        self.client.post(
+            reverse('contratos:checklist_padrao_carregar', args=[contrato.pk]),
+            {'checklist_padrao_id': str(checklist_padrao.pk)},
+        )
+        checklist_clonado = contrato.checklist_modelos.get()
+        item_padrao = checklist_padrao.itens.get(ordem=1)
+
+        item_padrao.titulo = 'Documento padrão atualizado'
+        item_padrao.save(update_fields=['titulo', 'atualizado_em'])
+        checklist_clonado.refresh_from_db()
+
+        self.assertEqual(checklist_clonado.itens.get(ordem=1).titulo, 'Documento padrão 1')
+
+    def test_nao_permite_carregar_checklist_padrao_em_contrato_com_competencias(self):
+        contrato = self.criar_contrato(numero='015D/2026', prazo=1)
+        self.criar_item_contrato(contrato)
+        self.criar_checklist_ativo(contrato)
+        contrato.gerar_competencias()
+        checklist_padrao = self.criar_checklist_padrao_global(nome='Padrão bloqueado')
+        quantidade_antes = contrato.checklist_modelos.count()
+        self.client.login(username='gestor_v2', password='123')
+
+        response = self.client.post(
+            reverse('contratos:checklist_padrao_carregar', args=[contrato.pk]),
+            {'checklist_padrao_id': str(checklist_padrao.pk)},
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[contrato.pk]))
+        self.assertContains(response, 'Ação bloqueada: Este contrato já possui competências geradas.')
+        self.assertEqual(contrato.checklist_modelos.count(), quantidade_antes)
+
+    def test_exclusao_de_contrato_remove_dependencias_mesmo_com_competencias_e_avaliacoes(self):
+        contrato = self.criar_contrato(numero='015E/2026', prazo=1)
+        self.criar_item_contrato(contrato)
+        self.criar_checklist_ativo(contrato)
+        self.criar_formulario_avaliacao(contrato)
+        contrato.gerar_competencias()
+        self.client.login(username='gestor_v2', password='123')
+
+        response = self.client.post(reverse('contratos:contrato_delete', args=[contrato.pk]))
+
+        self.assertRedirects(response, reverse('contratos:contrato_list'), fetch_redirect_response=False)
+        self.assertFalse(Contrato.objects.filter(pk=contrato.pk).exists())
+        self.assertFalse(FormularioAvaliacao.objects.filter(contrato_id=contrato.pk).exists())
+        self.assertFalse(CompetenciaPagamento.objects.filter(contrato_id=contrato.pk).exists())
+
+    def test_prazo_monitoramento_usa_data_inicio_no_percentual(self):
+        contrato = self.criar_contrato()
+        hoje = timezone.localdate()
+        prazo = PrazoMonitoramento.objects.create(
+            contrato=contrato,
+            nome='Reajuste anual',
+            data_inicio=hoje - timedelta(days=10),
+            data_limite=hoje,
+        )
+        prazo.criado_em = datetime.combine(hoje - timedelta(days=1), datetime.min.time(), tzinfo=dt_timezone.utc)
+        self.assertEqual(prazo.percentual_decorrido, 100)
+
+    def test_prazo_monitoramento_legado_usa_criado_em_sem_data_inicio(self):
+        contrato = self.criar_contrato()
+        hoje = timezone.localdate()
+        prazo = PrazoMonitoramento.objects.create(
+            contrato=contrato,
+            nome='Certidão',
+            data_limite=hoje + timedelta(days=6),
+        )
+        prazo.criado_em = datetime.combine(hoje, datetime.min.time(), tzinfo=dt_timezone.utc)
+        self.assertEqual(prazo.percentual_decorrido, 0)
+
+    def test_formulario_de_escala_nao_expoe_ordem(self):
+        form = EscalaNotaAvaliacaoForm()
+
+        self.assertNotIn('ordem', form.fields)
+
+    def test_formulario_de_faixa_nao_expoe_ordem(self):
+        form = FaixaLiberacaoAvaliacaoForm()
+
+        self.assertNotIn('ordem', form.fields)
+
+    def test_formulario_de_grupo_nao_expoe_ordem_nem_peso(self):
+        form = GrupoAvaliacaoForm()
+
+        self.assertNotIn('ordem', form.fields)
+        self.assertNotIn('peso_percentual', form.fields)
+
+    def test_formulario_de_item_nao_expoe_ordem(self):
+        form = ItemAvaliacaoForm()
+
+        self.assertNotIn('ordem', form.fields)
+
+    def test_formulario_de_avaliacao_inicia_notas_em_branco_sem_herdar_do_outro_papel(self):
+        contrato = self.criar_contrato(numero='011/2026', prazo=1)
+        self.criar_item_contrato(contrato)
+        self.criar_checklist_ativo(contrato)
+        formulario = self.criar_formulario_avaliacao(contrato)
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        avaliacao = competencia.avaliacao_qualidade
+        resposta = avaliacao.itens.get()
+
+        form_inicial = AvaliacaoCompetenciaV2Form(
+            avaliacao=avaliacao,
+            pode_preencher_fiscal=True,
+            pode_preencher_gestor=True,
+        )
+        self.assertIsNone(form_inicial.fields[f'nota_fiscal_{resposta.pk}'].initial)
+        self.assertIsNone(form_inicial.fields[f'nota_gestor_{resposta.pk}'].initial)
+
+        resposta.nota_fiscal_valor = Decimal('1.00')
+        resposta.nota_valor = Decimal('1.00')
+        resposta.save(update_fields=['nota_fiscal_valor', 'nota_valor', 'atualizado_em'])
+
+        form_gestor = AvaliacaoCompetenciaV2Form(
+            avaliacao=avaliacao,
+            pode_preencher_fiscal=False,
+            pode_preencher_gestor=True,
+        )
+        self.assertIsNone(form_gestor.fields[f'nota_gestor_{resposta.pk}'].initial)
+
+    def test_avaliacao_pode_ser_salva_sem_pdf_assinado_e_fica_disponivel_para_download(self):
+        contrato = self.criar_contrato(numero='011/2026', prazo=1)
+        self.criar_item_contrato(contrato)
+        self.criar_checklist_ativo(contrato)
+        self.criar_formulario_avaliacao(contrato)
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        competencia.medicao_concluida_em = timezone.now()
+        competencia.save(update_fields=['medicao_concluida_em', 'atualizado_em'])
+        avaliacao = competencia.avaliacao_qualidade
+        resposta = avaliacao.itens.get()
+
+        form = AvaliacaoCompetenciaV2Form(
+            data={
+                f'nota_fiscal_{resposta.pk}': '1.00',
+                f'justificativa_fiscal_{resposta.pk}': 'Serviço parcialmente entregue.',
+                f'nota_gestor_{resposta.pk}': '1.00',
+                f'manifestacao_gestor_item_{resposta.pk}': 'Ciente da justificativa e da retenção neste item.',
+                'observacoes': 'Avaliação mensal',
+            },
+            avaliacao=avaliacao,
+            pode_preencher_fiscal=True,
+            pode_preencher_gestor=True,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+        resposta.nota_fiscal_valor = Decimal('1.00')
+        resposta.justificativa_fiscal = 'Serviço parcialmente entregue.'
+        resposta.nota_gestor_valor = Decimal('1.00')
+        resposta.manifestacao_gestor_item = 'Ciente da justificativa e da retenção neste item.'
+        resposta.nota_valor = Decimal('1.00')
+        resposta.save(
+            update_fields=[
+                'nota_fiscal_valor',
+                'justificativa_fiscal',
+                'nota_gestor_valor',
+                'manifestacao_gestor_item',
+                'nota_valor',
+                'atualizado_em',
+            ]
+        )
+        avaliacao.observacoes = 'Avaliação mensal'
+        avaliacao.save(update_fields=['observacoes', 'atualizado_em'])
+
+        competencia.refresh_from_db()
+        avaliacao.refresh_from_db()
+        self.assertIsNone(avaliacao.concluida_em)
+        self.assertFalse(bool(competencia.avaliacao_assinada))
+        view = CompetenciaAvaliacaoUpdateView()
+        view.avaliacao = avaliacao
+        self.assertTrue(view._avaliacao_possui_conteudo_salvo())
+
+    def test_download_da_avaliacao_gera_pdf_com_conteudo_salvo(self):
+        contrato = self.criar_contrato(numero='012/2026', prazo=1)
+        self.criar_item_contrato(contrato)
+        self.criar_checklist_ativo(contrato)
+        self.criar_formulario_avaliacao(contrato)
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        avaliacao = competencia.avaliacao_qualidade
+        resposta = avaliacao.itens.get()
+        resposta.nota_fiscal_valor = Decimal('1.00')
+        resposta.justificativa_fiscal = 'Serviço parcialmente entregue.'
+        resposta.nota_gestor_valor = Decimal('1.00')
+        resposta.manifestacao_gestor_item = 'Ciente da justificativa e da retenção neste item.'
+        resposta.nota_valor = Decimal('1.00')
+        resposta.save(
+            update_fields=[
+                'nota_fiscal_valor',
+                'justificativa_fiscal',
+                'nota_gestor_valor',
+                'manifestacao_gestor_item',
+                'nota_valor',
+                'atualizado_em',
+            ]
+        )
+        avaliacao.observacoes = 'Avaliação mensal'
+        avaliacao.save(update_fields=['observacoes', 'atualizado_em'])
+
+        self.client.login(username='gestor_v2', password='123')
+
+        def fake_converter_docx_para_pdf(docx_file, output_dir):
+            pdf_path = Path(output_dir) / f'{Path(docx_file).stem}.pdf'
+            pdf_path.write_bytes(pdf_minimo_valido())
+            return pdf_path
+
+        with patch('contratos.views._converter_docx_para_pdf', side_effect=fake_converter_docx_para_pdf):
+            response = self.client.get(reverse('contratos:competencia_avaliacao_download', args=[competencia.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertIn('avaliacao_competencia_01_2026.pdf', response['Content-Disposition'])
+
+    def test_atestado_monta_tabelas_de_acompanhamento_e_checklist(self):
+        contrato = self.criar_contrato(numero='014/2026', prazo=12)
+        self.criar_item_contrato(contrato)
+        competencia = CompetenciaPagamento.objects.create(
+            contrato=contrato,
+            periodo_inicio=date(2026, 3, 1),
+            periodo_fim=date(2026, 3, 31),
+            status=CompetenciaPagamento.Status.OB_PENDENTE,
+            data_aceite_definitivo=date(2026, 4, 14),
+            prazo_pagamento_dias=30,
+            numero_nota_fiscal='878',
+            valor_nota_fiscal=Decimal('1000.00'),
+            valor_liberado_final=Decimal('900.00'),
+        )
+        responsavel = contrato.empresa_contratada.responsaveis.create(
+            nome='Gabriel Santos',
+            telefone='11-963277678',
+            email='gabriel@example.com',
+            ativo=True,
+        )
+
+        doc = gerar_ultima_folha_atestado('/root/aplicacoesspi/docs/papel-timbrado-spi.docx', contrato, competencia)
+        texto_tabelas = '\n'.join(celula.text for tabela in doc.tables for linha in tabela.rows for celula in linha.cells)
+
+        self.assertIn('ACOMPANHAMENTO DE PAGAMENTO', texto_tabelas)
+        self.assertIn('CHECKLIST DE VERIFICAÇÃO', texto_tabelas)
+        self.assertIn(contrato.empresa_contratada.razao_social, texto_tabelas)
+        self.assertIn(contrato.processo_sei_gestao_numero, texto_tabelas)
+        self.assertIn(contrato.processo_sei_execucao_numero, texto_tabelas)
+        self.assertIn('14/04/2026', texto_tabelas)
+        self.assertIn('14/05/2026', texto_tabelas)
+        self.assertIn('878', texto_tabelas)
+        self.assertIn(responsavel.nome, texto_tabelas)
+        self.assertIn('11-963277678 | gabriel@example.com', texto_tabelas)
+        self.assertIn('VIGÊNCIA DO CONTRATO', texto_tabelas)
+        self.assertIn('31/12/2026', texto_tabelas)
+
+    def test_avaliacao_com_tres_itens_calcula_media_ponderada_no_total(self):
+        contrato = self.criar_contrato(numero='013/2026', prazo=1)
+        self.criar_item_contrato(contrato)
+        self.criar_checklist_ativo(contrato)
+        formulario = FormularioAvaliacao.objects.create(
+            contrato=contrato,
+            nome='Avaliação do Novo Fluxo',
+            descricao='Modelo com três itens',
+            ativo=True,
+        )
+        EscalaNotaAvaliacao.objects.create(formulario=formulario, ordem=1, valor=Decimal('0.00'), legenda='Insatisfatório')
+        EscalaNotaAvaliacao.objects.create(formulario=formulario, ordem=2, valor=Decimal('1.00'), legenda='Regular')
+        EscalaNotaAvaliacao.objects.create(formulario=formulario, ordem=3, valor=Decimal('3.00'), legenda='Bom')
+        FaixaLiberacaoAvaliacao.objects.create(
+            formulario=formulario,
+            ordem=1,
+            nota_minima=Decimal('0.00'),
+            nota_maxima=Decimal('4.99'),
+            percentual_liberacao=Decimal('75.00'),
+        )
+        FaixaLiberacaoAvaliacao.objects.create(
+            formulario=formulario,
+            ordem=2,
+            nota_minima=Decimal('5.00'),
+            nota_maxima=Decimal('6.74'),
+            percentual_liberacao=Decimal('75.00'),
+        )
+        FaixaLiberacaoAvaliacao.objects.create(
+            formulario=formulario,
+            ordem=3,
+            nota_minima=Decimal('6.75'),
+            nota_maxima=Decimal('9.00'),
+            percentual_liberacao=Decimal('100.00'),
+        )
+        grupo = GrupoAvaliacao.objects.create(formulario=formulario, ordem=1, nome='Grupo A')
+        ItemAvaliacao.objects.create(grupo=grupo, ordem=1, descricao='Item 1', peso_percentual=Decimal('30.00'))
+        ItemAvaliacao.objects.create(grupo=grupo, ordem=2, descricao='Item 2', peso_percentual=Decimal('30.00'))
+        ItemAvaliacao.objects.create(grupo=grupo, ordem=3, descricao='Item 3', peso_percentual=Decimal('40.00'))
+
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        avaliacao = competencia.avaliacao_qualidade
+
+        for resposta in avaliacao.itens.all():
+            resposta.nota_fiscal_valor = Decimal('3.00')
+            resposta.nota_gestor_valor = Decimal('3.00')
+            resposta.nota_valor = Decimal('3.00')
+            resposta.save(
+                update_fields=[
+                    'nota_fiscal_valor',
+                    'nota_gestor_valor',
+                    'nota_valor',
+                    'atualizado_em',
+                ]
+            )
+
+        from .services import recalcular_avaliacao_v2
+        recalcular_avaliacao_v2(avaliacao)
+        avaliacao.refresh_from_db()
+
+        self.assertEqual(avaliacao.nota_final, Decimal('3.00'))
+        self.assertEqual(avaliacao.percentual_liberacao_sugerido, Decimal('75.00'))
+
+        doc = gerar_relatorio_avaliacao_competencia('/root/aplicacoesspi/docs/papel-timbrado-spi.docx', contrato, competencia)
+        texto = '\n'.join(paragrafo.text for paragrafo in doc.paragraphs)
+        self.assertIn('Nota final: 3.00', texto)
+
+    def test_relatorio_da_avaliacao_recalcula_total_antes_do_download(self):
+        contrato = self.criar_contrato(numero='015/2026', prazo=1)
+        self.criar_item_contrato(contrato)
+        self.criar_checklist_ativo(contrato)
+        formulario = FormularioAvaliacao.objects.create(
+            contrato=contrato,
+            nome='Avaliação do Novo Fluxo',
+            descricao='Modelo com três itens',
+            ativo=True,
+        )
+        EscalaNotaAvaliacao.objects.create(formulario=formulario, ordem=1, valor=Decimal('0.00'), legenda='Insatisfatório')
+        EscalaNotaAvaliacao.objects.create(formulario=formulario, ordem=2, valor=Decimal('1.00'), legenda='Regular')
+        EscalaNotaAvaliacao.objects.create(formulario=formulario, ordem=3, valor=Decimal('3.00'), legenda='Bom')
+        FaixaLiberacaoAvaliacao.objects.create(formulario=formulario, ordem=1, nota_minima=Decimal('0.00'), nota_maxima=Decimal('4.99'), percentual_liberacao=Decimal('75.00'))
+        FaixaLiberacaoAvaliacao.objects.create(formulario=formulario, ordem=2, nota_minima=Decimal('5.00'), nota_maxima=Decimal('6.74'), percentual_liberacao=Decimal('75.00'))
+        FaixaLiberacaoAvaliacao.objects.create(formulario=formulario, ordem=3, nota_minima=Decimal('6.75'), nota_maxima=Decimal('9.00'), percentual_liberacao=Decimal('100.00'))
+        grupo = GrupoAvaliacao.objects.create(formulario=formulario, ordem=1, nome='Grupo A')
+        ItemAvaliacao.objects.create(grupo=grupo, ordem=1, descricao='Item 1', peso_percentual=Decimal('30.00'))
+        ItemAvaliacao.objects.create(grupo=grupo, ordem=2, descricao='Item 2', peso_percentual=Decimal('30.00'))
+        ItemAvaliacao.objects.create(grupo=grupo, ordem=3, descricao='Item 3', peso_percentual=Decimal('40.00'))
+
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        avaliacao = competencia.avaliacao_qualidade
+        notas_por_item = [Decimal('1.00'), Decimal('1.00'), Decimal('3.00')]
+        for resposta, nota in zip(avaliacao.itens.order_by('grupo_ordem', 'item_ordem', 'id'), notas_por_item):
+            resposta.nota_fiscal_valor = nota
+            resposta.nota_valor = nota
+            resposta.save(update_fields=['nota_fiscal_valor', 'nota_valor', 'atualizado_em'])
+        avaliacao.nota_final = Decimal('5.00')
+        avaliacao.percentual_liberacao_sugerido = Decimal('75.00')
+        avaliacao.save(update_fields=['nota_final', 'percentual_liberacao_sugerido', 'atualizado_em'])
+
+        doc = gerar_relatorio_avaliacao_competencia('/root/aplicacoesspi/docs/papel-timbrado-spi.docx', contrato, competencia)
+        avaliacao.refresh_from_db()
+        texto = '\n'.join(paragrafo.text for paragrafo in doc.paragraphs)
+
+        self.assertEqual(avaliacao.nota_final, Decimal('1.80'))
+        self.assertIn('Nota final: 1.80', texto)
+
+    def test_formulario_de_medicao_expoe_pro_rata_so_na_primeira_e_ultima_competencia(self):
+        contrato = self.criar_contrato(prazo=3)
+        self.criar_item_contrato(contrato)
+        self.criar_checklist_ativo(contrato)
+        contrato.gerar_competencias()
+        competencias = list(contrato.competencias.order_by('periodo_inicio'))
+
+        form_primeira = CompetenciaMedicaoLoteV2Form(contrato=contrato, competencia=competencias[0])
+        form_intermediaria = CompetenciaMedicaoLoteV2Form(contrato=contrato, competencia=competencias[1])
+        form_ultima = CompetenciaMedicaoLoteV2Form(contrato=contrato, competencia=competencias[2])
+
+        self.assertIn('aplicar_pro_rata', form_primeira.fields)
+        self.assertNotIn('aplicar_pro_rata', form_intermediaria.fields)
+        self.assertIn('aplicar_pro_rata', form_ultima.fields)
+
+    def test_formulario_de_pagamento_calcula_valor_liquido_com_retencoes(self):
+        contrato = self.criar_contrato(numero='015/2026', prazo=1)
+        competencia = contrato.competencias.model.objects.create(
+            contrato=contrato,
+            periodo_inicio=date(2026, 1, 1),
+            periodo_fim=date(2026, 1, 31),
+            status=CompetenciaPagamento.Status.PAGAMENTO_PENDENTE,
+            valor_liberado_sugerido=Decimal('1000.00'),
+        )
+        form = CompetenciaPagamentoExecucaoV2Form(
+            competencia=competencia,
+            data={
+                'valor_nota_fiscal': '1000.00',
+                'retencao_ir': '100.00',
+                'retencao_inss': '50.00',
+                'retencao_iss': '25.00',
+                'retencao_pis_pasep': '10.00',
+                'retencao_cofins': '15.00',
+                'valor_liberado_final': '0.00',
+                'gestor_pagamento': str(self.gestor.pk),
+                'gestor_pagamento_em_exercicio': 'on',
+                'coordenadora_pagamento': str(self.operador.pk),
+                'coordenadora_em_exercicio': 'on',
+                'diretora_pagamento': str(self.fiscal_adm.pk),
+                'diretora_em_exercicio': '',
+                'subsecretario_pagamento': str(self.fiscal_tec.pk),
+                'subsecretario_em_exercicio': '',
+                'data_pagamento': '2026-01-31',
+                'justificativa_divergencia': 'Pagamento líquido após retenções.',
             },
         )
 
-        contrato = Contrato.objects.get(apelido='Contrato com detalhamento')
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['valor_liberado_final'], Decimal('800.00'))
+        self.assertTrue(form.cleaned_data['gestor_pagamento_em_exercicio'])
+
+    def test_formulario_de_pagamento_preenche_gestor_do_contrato_por_padrao(self):
+        contrato = self.criar_contrato(numero='016/2026', prazo=1)
+        competencia = CompetenciaPagamento.objects.create(
+            contrato=contrato,
+            periodo_inicio=date(2026, 1, 1),
+            periodo_fim=date(2026, 1, 31),
+            status=CompetenciaPagamento.Status.PAGAMENTO_PENDENTE,
+            valor_liberado_sugerido=Decimal('100.00'),
+        )
+
+        form = CompetenciaPagamentoExecucaoV2Form(competencia=competencia, instance=competencia)
+
+        self.assertEqual(form.fields['gestor_pagamento'].initial, contrato.gestor_contrato)
+
+    def test_validacao_de_upload_pdf_rejeita_arquivo_corrompido(self):
+        with self.assertRaisesMessage(ValidationError, 'O arquivo enviado não é um PDF válido ou está corrompido.'):
+            validar_upload_pdf(SimpleUploadedFile('corrompido.pdf', b'conteudo invalido', content_type='application/pdf'))
+
+    def test_medicao_persiste_checkbox_de_pro_rata(self):
+        contrato = self.criar_contrato(prazo=2)
+        item = self.criar_item_contrato(contrato, quantidade='2.00', unitario='50.00')
+        self.criar_checklist_ativo(contrato, titulo='Documento mensal')
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.order_by('periodo_inicio').first()
+        checklist_item = competencia.checklist_itens.get()
+
+        self.client.login(username='gestor_v2', password='123')
+        self.client.post(
+            reverse('contratos:competencia_checklist', args=[competencia.pk]),
+            {f'arquivo_{checklist_item.pk}': SimpleUploadedFile('doc.pdf', pdf_minimo_valido(), content_type='application/pdf')},
+        )
+
+        response = self.client.post(
+            reverse('contratos:competencia_medicao', args=[competencia.pk]),
+            {
+                'aplicar_pro_rata': 'on',
+                f'quantidade_{item.pk}': '2.00',
+            },
+        )
+        competencia.refresh_from_db()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(competencia.aplicar_pro_rata)
+
+    def test_sem_checklist_ativo_nao_gera_competencias(self):
+        contrato = self.criar_contrato()
+        self.client.login(username='gestor_v2', password='123')
+
+        response = self.client.post(reverse('contratos:competencias_generate', args=[contrato.pk]))
+
         self.assertRedirects(response, reverse('contratos:contrato_detail', args=[contrato.pk]), fetch_redirect_response=False)
-        self.assertEqual(contrato.detalhamento_itens.count(), 2)
-        self.assertEqual(
-            list(contrato.detalhamento_itens.order_by('ordem').values_list('descricao', flat=True)),
-            ['Primeiro item do detalhamento', 'Segundo item do detalhamento'],
+        self.assertEqual(contrato.competencias.count(), 0)
+
+    def test_nao_gera_competencias_sem_processos_sei_mesmo_em_contrato_legado(self):
+        contrato = self.criar_contrato(numero='099/2026')
+        contrato.processo_sei_gestao_numero = ''
+        contrato.processo_sei_gestao_url = ''
+        contrato.processo_sei_execucao_numero = ''
+        contrato.processo_sei_execucao_url = ''
+        contrato.save(update_fields=[
+            'processo_sei_gestao_numero',
+            'processo_sei_gestao_url',
+            'processo_sei_execucao_numero',
+            'processo_sei_execucao_url',
+            'atualizado_em',
+        ])
+        self.criar_checklist_ativo(contrato)
+        self.client.login(username='gestor_v2', password='123')
+
+        response = self.client.post(reverse('contratos:competencias_generate', args=[contrato.pk]))
+
+        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[contrato.pk]), fetch_redirect_response=False)
+        self.assertEqual(contrato.competencias.count(), 0)
+
+    def test_gera_competencias_da_vigencia_e_nao_duplica(self):
+        contrato = self.criar_contrato(prazo=2)
+        self.criar_item_contrato(contrato, ordem=1, quantidade='1.00', unitario='100.00')
+        self.criar_checklist_ativo(contrato)
+        self.client.login(username='gestor_v2', password='123')
+
+        url = reverse('contratos:competencias_generate', args=[contrato.pk])
+        self.client.post(url)
+        self.client.post(url)
+
+        competencias = list(contrato.competencias.order_by('periodo_inicio'))
+        self.assertEqual(len(competencias), 2)
+        self.assertEqual(competencias[0].periodo_inicio, date(2026, 1, 1))
+        self.assertEqual(competencias[1].periodo_inicio, date(2026, 2, 1))
+        self.assertEqual(competencias[0].status, CompetenciaPagamento.Status.CHECKLIST_PENDENTE)
+
+    def test_criador_do_contrato_pode_gerar_competencias_mesmo_sem_gestor(self):
+        contrato = self.criar_contrato(numero='002/2026', prazo=2, gestor=None, criado_por=self.criador)
+        self.criar_item_contrato(contrato, ordem=1, quantidade='1.00', unitario='100.00')
+        self.criar_checklist_ativo(contrato)
+        self.client.login(username='criador_v2', password='123')
+
+        response = self.client.post(reverse('contratos:competencias_generate', args=[contrato.pk]))
+
+        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[contrato.pk]), fetch_redirect_response=False)
+        self.assertEqual(contrato.competencias.count(), 2)
+
+    def test_detalhe_renderiza_processos_sei(self):
+        contrato = self.criar_contrato(numero='013/2026')
+        self.client.login(username='gestor_v2', password='123')
+
+        response = self.client.get(reverse('contratos:contrato_detail', args=[contrato.pk]))
+
+        self.assertContains(response, 'Processos SEI')
+        self.assertContains(response, contrato.processo_sei_gestao_numero)
+        self.assertContains(response, contrato.processo_sei_execucao_url)
+
+    def test_criador_do_contrato_pode_cadastrar_checklist_e_formulario(self):
+        contrato = self.criar_contrato(numero='003/2026', gestor=None, criado_por=self.criador)
+        self.client.login(username='criador_v2', password='123')
+
+        response_checklist = self.client.post(
+            reverse('contratos:checklist_create', args=[contrato.pk]),
+            {
+                'nome': 'Checklist do criador',
+                'descricao': 'Versão criada pelo responsável pelo cadastro',
+                'observacoes': '',
+                'ativo': 'on',
+            },
         )
-        self.assertEqual(
-            contrato.detalhamento_objeto,
-            '1. Primeiro item do detalhamento\n2. Segundo item do detalhamento',
+        response_formulario = self.client.post(
+            reverse('contratos:avaliacao_form_create', args=[contrato.pk]),
+            {
+                'nome': 'Avaliação do criador',
+                'descricao': 'Modelo criado por quem cadastrou o contrato',
+                'observacoes': '',
+                'ativo': 'on',
+            },
         )
+
+        self.assertRedirects(response_checklist, reverse('contratos:contrato_detail', args=[contrato.pk]), fetch_redirect_response=False)
+        self.assertRedirects(response_formulario, reverse('contratos:contrato_detail', args=[contrato.pk]), fetch_redirect_response=False)
+        self.assertTrue(contrato.checklist_modelos.filter(nome='Checklist do criador').exists())
+        self.assertTrue(contrato.formularios_avaliacao.filter(nome='Avaliação do criador').exists())
+
+    def test_terceiro_sem_gestao_continua_bloqueado_nos_cadastros_estruturantes(self):
+        contrato = self.criar_contrato(numero='004/2026', gestor=None, criado_por=self.criador)
+        self.client.login(username='operador_v2', password='123')
+
+        response = self.client.post(
+            reverse('contratos:checklist_create', args=[contrato.pk]),
+            {
+                'nome': 'Checklist indevido',
+                'descricao': 'Não deveria ser criado',
+                'observacoes': '',
+                'ativo': 'on',
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[contrato.pk]))
+        self.assertContains(response, 'Somente o gestor do contrato, o criador do contrato ou administradores do sistema podem executar esta ação.')
+        self.assertFalse(contrato.checklist_modelos.filter(nome='Checklist indevido').exists())
+
+    def test_detalhe_renderiza_blocos_de_checklist_avaliacao_e_competencias(self):
+        contrato = self.criar_contrato(prazo=1)
+        self.criar_item_contrato(contrato)
+        self.criar_documento_importante(contrato, nome='Minuta assinada')
+        self.criar_checklist_ativo(contrato)
+        self.criar_formulario_avaliacao(contrato)
+        contrato.gerar_competencias()
+        self.client.login(username='gestor_v2', password='123')
+
+        response = self.client.get(reverse('contratos:contrato_detail', args=[contrato.pk]))
+
+        self.assertContains(response, 'Documentos importantes')
+        self.assertContains(response, 'Minuta assinada')
+        self.assertContains(response, 'Monitoramento de prazos')
+        self.assertContains(response, 'Competências geradas')
+        self.assertContains(response, 'Checklist')
+        self.assertContains(response, 'Pagamento')
+
+    def test_criador_pode_cadastrar_documento_importante(self):
+        contrato = self.criar_contrato(numero='005/2026', criado_por=self.criador)
+        self.client.login(username='criador_v2', password='123')
+
+        response = self.client.post(
+            reverse('contratos:documento_importante_create', args=[contrato.pk]),
+            {
+                'nome': 'Ofício de autorização',
+                'arquivo': SimpleUploadedFile('oficio.pdf', pdf_minimo_valido(), content_type='application/pdf'),
+            },
+        )
+
+        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[contrato.pk]), fetch_redirect_response=False)
+        documento = contrato.documentos_importantes.get(nome='Ofício de autorização')
+        self.assertEqual(documento.criado_por, self.criador)
+
+    def test_gestor_pode_editar_e_excluir_documento_importante(self):
+        contrato = self.criar_contrato(numero='006/2026', criado_por=self.criador)
+        documento = self.criar_documento_importante(contrato, nome='Documento inicial', usuario=self.criador)
+        self.client.login(username='gestor_v2', password='123')
+
+        response_update = self.client.post(
+            reverse('contratos:documento_importante_update', args=[documento.pk]),
+            {
+                'nome': 'Documento revisado',
+                'arquivo': SimpleUploadedFile('revisado.pdf', pdf_minimo_valido(), content_type='application/pdf'),
+            },
+        )
+        response_delete = self.client.post(
+            reverse('contratos:documento_importante_delete', args=[documento.pk]),
+        )
+
+        self.assertRedirects(response_update, reverse('contratos:contrato_detail', args=[contrato.pk]), fetch_redirect_response=False)
+        self.assertRedirects(response_delete, reverse('contratos:contrato_detail', args=[contrato.pk]), fetch_redirect_response=False)
+        self.assertFalse(contrato.documentos_importantes.filter(pk=documento.pk).exists())
+
+    def test_autor_do_documento_pode_ver_acoes_e_editar_mesmo_sem_ser_criador_do_contrato(self):
+        contrato = self.criar_contrato(numero='006A/2026', criado_por=self.criador)
+        documento = self.criar_documento_importante(contrato, nome='Documento do operador', usuario=self.operador)
+        self.client.login(username='operador_v2', password='123')
+
+        response_detail = self.client.get(reverse('contratos:contrato_detail', args=[contrato.pk]))
+        response_update = self.client.post(
+            reverse('contratos:documento_importante_update', args=[documento.pk]),
+            {
+                'nome': 'Documento atualizado pelo autor',
+                'arquivo': SimpleUploadedFile('autor.pdf', pdf_minimo_valido(), content_type='application/pdf'),
+            },
+        )
+
+        self.assertContains(response_detail, 'Ações')
+        self.assertContains(response_detail, reverse('contratos:documento_importante_update', args=[documento.pk]))
+        self.assertRedirects(response_update, reverse('contratos:contrato_detail', args=[contrato.pk]), fetch_redirect_response=False)
+        documento.refresh_from_db()
+        self.assertEqual(documento.nome, 'Documento atualizado pelo autor')
+
+    def test_terceiro_nao_pode_gerenciar_documento_importante(self):
+        contrato = self.criar_contrato(numero='007/2026', criado_por=self.criador)
+        documento = self.criar_documento_importante(contrato)
+        self.client.login(username='operador_v2', password='123')
+
+        response = self.client.post(
+            reverse('contratos:documento_importante_update', args=[documento.pk]),
+            {
+                'nome': 'Tentativa indevida',
+                'arquivo': SimpleUploadedFile('indevido.pdf', pdf_minimo_valido(), content_type='application/pdf'),
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[contrato.pk]))
+        self.assertContains(response, 'Somente o gestor do contrato, o criador do contrato, o autor do documento ou administradores do sistema podem editar este documento.')
+        documento.refresh_from_db()
+        self.assertEqual(documento.nome, 'Documento base')
+
+    def test_criador_cobre_avaliacao_fiscal_quando_contrato_ainda_nao_tem_fiscais(self):
+        contrato = self.criar_contrato(
+            numero='008/2026',
+            criado_por=self.criador,
+        )
+        contrato.fiscal_administrativo = None
+        contrato.fiscal_tecnico = None
+        contrato.save(update_fields=['fiscal_administrativo', 'fiscal_tecnico', 'atualizado_em'])
+
+        self.assertTrue(usuario_pode_preencher_avaliacao_fiscal_v2(self.criador, contrato))
+        self.assertFalse(usuario_pode_preencher_avaliacao_fiscal_v2(self.operador, contrato))
+
+    def test_criador_cobre_avaliacao_gestor_quando_contrato_ainda_nao_tem_gestor(self):
+        contrato = self.criar_contrato(
+            numero='009/2026',
+            criado_por=self.criador,
+        )
+        contrato.gestor_contrato = None
+        contrato.save(update_fields=['gestor_contrato', 'atualizado_em'])
+
+        self.assertTrue(usuario_pode_preencher_avaliacao_gestor_v2(self.criador, contrato))
+        self.assertFalse(usuario_pode_preencher_avaliacao_gestor_v2(self.operador, contrato))
+
+    def test_equipe_passa_a_ter_acesso_na_sua_area_quando_for_definida(self):
+        contrato = self.criar_contrato(numero='010/2026', criado_por=self.criador)
+
+        self.assertTrue(usuario_pode_preencher_avaliacao_fiscal_v2(self.fiscal_adm, contrato))
+        self.assertTrue(usuario_pode_preencher_avaliacao_fiscal_v2(self.fiscal_tec, contrato))
+        self.assertTrue(usuario_pode_preencher_avaliacao_gestor_v2(self.gestor, contrato))
+
+    def test_ativar_novo_checklist_atualiza_competencias_em_aberto(self):
+        contrato = self.criar_contrato()
+        self.criar_item_contrato(contrato)
+        checklist_v1 = self.criar_checklist_ativo(contrato, nome='Checklist v1', titulo='FGTS')
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.first()
+        self.assertEqual(list(competencia.checklist_itens.values_list('titulo', flat=True)), ['FGTS'])
+
+        checklist_v2 = ChecklistModelo.objects.create(
+            contrato=contrato,
+            nome='Checklist v2',
+            descricao='Nova versão',
+            ativo=True,
+        )
+        ChecklistModeloItem.objects.create(modelo=checklist_v2, ordem=1, titulo='INSS', obrigatorio=True)
+        checklist_v1.refresh_from_db()
+        competencia.refresh_from_db()
+
+        self.assertFalse(checklist_v1.ativo)
+        self.assertEqual(list(competencia.checklist_itens.values_list('titulo', flat=True)), ['INSS'])
+
+    def test_fluxo_pagamento_sem_avaliacao(self):
+        contrato = self.criar_contrato(prazo=1)
+        self.criar_item_contrato(contrato, quantidade='2.00', unitario='50.00')
+        self.criar_checklist_ativo(contrato, titulo='Documento mensal')
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        checklist_item = competencia.checklist_itens.get()
+
+        self.client.login(username='gestor_v2', password='123')
+        checklist_url = reverse('contratos:competencia_checklist', args=[competencia.pk])
+        medicao_url = reverse('contratos:competencia_medicao', args=[competencia.pk])
+        pagamento_url = reverse('contratos:competencia_pagamento', args=[competencia.pk])
+
+        response_checklist = self.client.post(
+            checklist_url,
+            {f'arquivo_{checklist_item.pk}': SimpleUploadedFile('doc.pdf', pdf_minimo_valido(), content_type='application/pdf')},
+        )
+        self.assertEqual(response_checklist.status_code, 302)
+
+        response_medicao = self.client.post(medicao_url, {f'quantidade_{contrato.itens.get().pk}': '2.00'})
+        self.assertEqual(response_medicao.status_code, 302)
+
+        response_pagamento = self.client.post(
+            pagamento_url,
+            {
+                'nota_fiscal_fatura': SimpleUploadedFile('nf.pdf', pdf_minimo_valido(), content_type='application/pdf'),
+                'valor_nota_fiscal': '115.00',
+                'retencao_ir': '5.00',
+                'retencao_inss': '5.00',
+                'retencao_iss': '3.00',
+                'retencao_pis_pasep': '1.00',
+                'retencao_cofins': '1.00',
+                'atestado_realizacao': SimpleUploadedFile('atestado.pdf', pdf_minimo_valido(), content_type='application/pdf'),
+                'valor_liberado_final': '100.00',
+                'gestor_pagamento': str(self.gestor.pk),
+                'gestor_pagamento_em_exercicio': '',
+                'coordenadora_pagamento': str(self.operador.pk),
+                'coordenadora_em_exercicio': 'on',
+                'diretora_pagamento': str(self.fiscal_adm.pk),
+                'diretora_em_exercicio': '',
+                'subsecretario_pagamento': str(self.fiscal_tec.pk),
+                'subsecretario_em_exercicio': '',
+                'data_pagamento': '2026-01-31',
+                'justificativa_divergencia': '',
+            },
+        )
+        competencia.refresh_from_db()
+
+        self.assertEqual(response_pagamento.status_code, 302)
+        self.assertEqual(competencia.status, CompetenciaPagamento.Status.PAGAMENTO_REGISTRADO)
+        self.assertEqual(competencia.valor_medido, Decimal('100.00'))
+        self.assertEqual(competencia.valor_nota_fiscal, Decimal('115.00'))
+        self.assertEqual(competencia.total_retencoes, Decimal('15.00'))
+        self.assertEqual(competencia.valor_liberado_sugerido, Decimal('100.00'))
+        self.assertEqual(competencia.valor_liberado_final, Decimal('100.00'))
+
+        # Agora inicia a geração assíncrona, consulta o status e faz o download do PDF pronto.
+        start_url = reverse('contratos:competencia_download_docs_start', args=[competencia.pk])
+        response_start = self.client.post(start_url)
+        competencia.refresh_from_db()
+        self.assertEqual(response_start.status_code, 200)
+        job = ExportacaoDocumentosCompetencia.objects.get(pk=response_start.json()['job_id'])
+        status_url = reverse('contratos:competencia_download_docs_status', args=[job.pk])
+        response_status = self.client.get(status_url)
+        self.assertEqual(response_status.status_code, 200)
+        self.assertEqual(response_status.json()['status'], ExportacaoDocumentosCompetencia.Status.CONCLUIDO)
+
+        download_url = reverse('contratos:competencia_download_docs_file', args=[job.pk])
+        response_download = self.client.get(download_url)
+        self.assertEqual(response_download.status_code, 200)
+        self.assertEqual(response_download['Content-Type'], 'application/pdf')
+        self.assertEqual(competencia.status, CompetenciaPagamento.Status.PAGA)
+
+        doc = gerar_ultima_folha_atestado('/root/aplicacoesspi/docs/papel-timbrado-spi.docx', contrato, competencia)
+        texto = '\n'.join(paragrafo.text for paragrafo in doc.paragraphs)
+        tabela_texto = '\n'.join(celula.text for tabela in doc.tables for linha in tabela.rows for celula in linha.cells)
+        self.assertIn('ATESTADO DE REALIZAÇÃO', texto)
+        self.assertIn('ACOMPANHAMENTO DE PAGAMENTO', tabela_texto)
+        self.assertIn('CHECKLIST DE VERIFICAÇÃO', tabela_texto)
+        self.assertIn(contrato.processo_sei_gestao_numero, tabela_texto)
+        self.assertIn('VIGÊNCIA DO CONTRATO', tabela_texto)
+        self.assertIn('Coordenadora - em exercício', texto)
+
+    def test_exportacao_documentos_impede_acesso_de_outro_usuario(self):
+        contrato = self.criar_contrato(numero='020/2026', prazo=1)
+        self.criar_item_contrato(contrato, quantidade='1.00', unitario='10.00')
+        self.criar_checklist_ativo(contrato, titulo='Documento mensal')
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        competencia.status = CompetenciaPagamento.Status.PAGA
+        competencia.valor_nota_fiscal = Decimal('10.00')
+        competencia.valor_liberado_final = Decimal('10.00')
+        competencia.nota_fiscal_fatura = SimpleUploadedFile('nf.pdf', pdf_minimo_valido(), content_type='application/pdf')
+        competencia.save()
+
+        self.client.login(username='gestor_v2', password='123')
+        response_start = self.client.post(reverse('contratos:competencia_download_docs_start', args=[competencia.pk]))
+        job = ExportacaoDocumentosCompetencia.objects.get(pk=response_start.json()['job_id'])
+        self.client.logout()
+
+        self.client.login(username='operador_v2', password='123')
+        response_status = self.client.get(reverse('contratos:competencia_download_docs_status', args=[job.pk]))
+        self.assertEqual(response_status.status_code, 403)
+
+    def test_exportacao_documentos_informa_qual_pdf_esta_corrompido(self):
+        contrato = self.criar_contrato(numero='021/2026', prazo=1)
+        self.criar_item_contrato(contrato, quantidade='1.00', unitario='10.00')
+        self.criar_checklist_ativo(contrato, titulo='Documento mensal')
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        checklist_item = competencia.checklist_itens.get()
+        ChecklistCompetenciaAnexo.objects.create(
+            item=checklist_item,
+            arquivo=SimpleUploadedFile('corrompido.pdf', b'nao eh pdf', content_type='application/pdf'),
+            nome_exibicao='corrompido.pdf',
+        )
+        competencia.status = CompetenciaPagamento.Status.PAGA
+        competencia.valor_nota_fiscal = Decimal('10.00')
+        competencia.valor_liberado_final = Decimal('10.00')
+        competencia.nota_fiscal_fatura = SimpleUploadedFile('nf.pdf', pdf_minimo_valido(), content_type='application/pdf')
+        competencia.save()
+
+        def fake_converter_docx_para_pdf(docx_file, output_dir):
+            """Gera PDFs mínimos em disco para isolar o teste na etapa de mesclagem."""
+
+            caminho_pdf = Path(output_dir) / f'{Path(docx_file).stem}.pdf'
+            caminho_pdf.write_bytes(pdf_minimo_valido())
+            return caminho_pdf
+
+        self.client.login(username='gestor_v2', password='123')
+        with patch('contratos.views._converter_docx_para_pdf', side_effect=fake_converter_docx_para_pdf):
+            response_start = self.client.post(reverse('contratos:competencia_download_docs_start', args=[competencia.pk]))
+
+        self.assertEqual(response_start.status_code, 200)
+        job = ExportacaoDocumentosCompetencia.objects.get(pk=response_start.json()['job_id'])
+        self.assertEqual(job.status, ExportacaoDocumentosCompetencia.Status.ERRO)
+        self.assertIn('Checklist - Documento mensal', job.erro_detalhe)
+
+        response_status = self.client.get(reverse('contratos:competencia_download_docs_status', args=[job.pk]))
+        self.assertEqual(response_status.status_code, 200)
+        self.assertIn('Checklist - Documento mensal', response_status.json()['erro_detalhe'])
+
+    def test_fluxo_com_avaliacao_exige_justificativa_e_manifestacao(self):
+        contrato = self.criar_contrato(prazo=1)
+        self.criar_item_contrato(contrato, quantidade='2.00', unitario='50.00')
+        self.criar_checklist_ativo(contrato)
+        self.criar_formulario_avaliacao(contrato)
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        checklist_item = competencia.checklist_itens.get()
+
+        self.client.login(username='gestor_v2', password='123')
+        self.client.post(
+            reverse('contratos:competencia_checklist', args=[competencia.pk]),
+            {f'arquivo_{checklist_item.pk}': SimpleUploadedFile('doc.pdf', pdf_minimo_valido(), content_type='application/pdf')},
+        )
+        self.client.post(
+            reverse('contratos:competencia_medicao', args=[competencia.pk]),
+            {f'quantidade_{contrato.itens.get().pk}': '2.00'},
+        )
+        avaliacao = competencia.avaliacao_qualidade
+        resposta = avaliacao.itens.get()
+
+        response_invalido = self.client.post(
+            reverse('contratos:competencia_avaliacao', args=[competencia.pk]),
+            {
+                f'nota_fiscal_{resposta.pk}': '1.00',
+                f'justificativa_fiscal_{resposta.pk}': '',
+                'observacoes': '',
+            },
+        )
+        self.assertContains(response_invalido, 'Informe a justificativa do fiscal')
+
+        response_pendente = self.client.post(
+            reverse('contratos:competencia_avaliacao', args=[competencia.pk]),
+            {
+                f'nota_fiscal_{resposta.pk}': '1.00',
+                f'justificativa_fiscal_{resposta.pk}': 'Serviço parcialmente entregue.',
+                'observacoes': 'Avaliação mensal',
+            },
+        )
+        competencia.refresh_from_db()
+        avaliacao.refresh_from_db()
+        resposta.refresh_from_db()
+
+        self.assertEqual(response_pendente.status_code, 302)
+        self.assertEqual(competencia.status, CompetenciaPagamento.Status.AVALIACAO_PENDENTE)
+        self.assertIsNone(avaliacao.concluida_em)
+        self.assertEqual(resposta.nota_fiscal_valor, Decimal('1.00'))
+        self.assertIsNone(resposta.nota_gestor_valor)
+        self.assertEqual(resposta.justificativa_fiscal, 'Serviço parcialmente entregue.')
+        self.assertEqual(resposta.manifestacao_gestor_item, '')
+        self.assertIsNotNone(resposta.justificativa_fiscal_preenchida_por)
+        self.assertIsNotNone(resposta.justificativa_fiscal_preenchida_em)
+        self.assertEqual(competencia.etapas[2], ('Avaliação', 'pending'))
+
+        response_form = self.client.get(reverse('contratos:competencia_avaliacao', args=[competencia.pk]))
+        self.assertContains(response_form, 'Preenchido por')
+
+        response_valido = self.client.post(
+            reverse('contratos:competencia_avaliacao', args=[competencia.pk]),
+            {
+                f'nota_gestor_{resposta.pk}': '1.00',
+                f'manifestacao_gestor_item_{resposta.pk}': 'Ciente da justificativa e da retenção neste item.',
+                'observacoes': 'Avaliação mensal',
+            },
+        )
+        competencia.refresh_from_db()
+        avaliacao.refresh_from_db()
+        resposta.refresh_from_db()
+
+        self.assertEqual(response_valido.status_code, 302)
+        self.assertEqual(competencia.status, CompetenciaPagamento.Status.PAGAMENTO_PENDENTE)
+        self.assertEqual(avaliacao.nota_final, Decimal('1.00'))
+        self.assertEqual(avaliacao.percentual_liberacao_sugerido, Decimal('75.00'))
+        self.assertEqual(competencia.valor_liberado_sugerido, Decimal('75.00'))
+        self.assertEqual(resposta.nota_gestor_valor, Decimal('1.00'))
+        self.assertEqual(resposta.manifestacao_gestor_item, 'Ciente da justificativa e da retenção neste item.')
+        self.assertIsNotNone(resposta.manifestacao_gestor_item_preenchida_por)
+        self.assertIsNotNone(resposta.manifestacao_gestor_item_preenchida_em)
+        self.assertEqual(competencia.etapas[2], ('Avaliação', 'done'))
+
+    def test_fluxo_assincrono_da_avaliacao_mantem_nota_do_fiscal_sem_preencher_nota_do_gestor(self):
+        contrato = self.criar_contrato(numero='012/2026', prazo=1)
+        self.criar_item_contrato(contrato, quantidade='2.00', unitario='50.00')
+        self.criar_checklist_ativo(contrato)
+        self.criar_formulario_avaliacao(contrato)
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        checklist_item = competencia.checklist_itens.get()
+
+        self.client.login(username='gestor_v2', password='123')
+        self.client.post(
+            reverse('contratos:competencia_checklist', args=[competencia.pk]),
+            {f'arquivo_{checklist_item.pk}': SimpleUploadedFile('doc.pdf', pdf_minimo_valido(), content_type='application/pdf')},
+        )
+        self.client.post(
+            reverse('contratos:competencia_medicao', args=[competencia.pk]),
+            {f'quantidade_{contrato.itens.get().pk}': '2.00'},
+        )
+        avaliacao = competencia.avaliacao_qualidade
+        resposta = avaliacao.itens.get()
+
+        self.client.post(
+            reverse('contratos:competencia_avaliacao', args=[competencia.pk]),
+            {
+                f'nota_fiscal_{resposta.pk}': '1.00',
+                f'justificativa_fiscal_{resposta.pk}': 'Serviço parcialmente entregue.',
+                'observacoes': 'Avaliação mensal',
+            },
+        )
+        resposta.refresh_from_db()
+        self.assertEqual(resposta.nota_fiscal_valor, Decimal('1.00'))
+        self.assertIsNone(resposta.nota_gestor_valor)
+
+        response_form = self.client.get(reverse('contratos:competencia_avaliacao', args=[competencia.pk]))
+        self.assertContains(response_form, '0.00 - Insatisfatório')
+
+    def test_fiscal_pode_salvar_mesmo_com_select_do_gestor_vindo_zerado_no_post(self):
+        contrato = self.criar_contrato(numero='013/2026', prazo=1)
+        self.criar_item_contrato(contrato, quantidade='2.00', unitario='50.00')
+        self.criar_checklist_ativo(contrato)
+        self.criar_formulario_avaliacao(contrato)
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        checklist_item = competencia.checklist_itens.get()
+
+        self.client.login(username='gestor_v2', password='123')
+        self.client.post(
+            reverse('contratos:competencia_checklist', args=[competencia.pk]),
+            {f'arquivo_{checklist_item.pk}': SimpleUploadedFile('doc.pdf', pdf_minimo_valido(), content_type='application/pdf')},
+        )
+        self.client.post(
+            reverse('contratos:competencia_medicao', args=[competencia.pk]),
+            {f'quantidade_{contrato.itens.get().pk}': '2.00'},
+        )
+        avaliacao = competencia.avaliacao_qualidade
+        resposta = avaliacao.itens.get()
+
+        response = self.client.post(
+            reverse('contratos:competencia_avaliacao', args=[competencia.pk]),
+            {
+                f'nota_fiscal_{resposta.pk}': '1.00',
+                f'justificativa_fiscal_{resposta.pk}': 'Serviço parcialmente entregue.',
+                f'nota_gestor_{resposta.pk}': '0.00',
+                f'manifestacao_gestor_item_{resposta.pk}': '',
+                'observacoes': 'Avaliação mensal',
+            },
+        )
+        resposta.refresh_from_db()
+        competencia.refresh_from_db()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(resposta.nota_fiscal_valor, Decimal('1.00'))
+        self.assertIsNone(resposta.nota_gestor_valor)
+        self.assertEqual(competencia.status, CompetenciaPagamento.Status.AVALIACAO_PENDENTE)
+
+    def test_avaliacao_conclui_quando_fiscal_da_nota_maxima_e_gestor_da_nota_baixa_com_manifestacao(self):
+        contrato = self.criar_contrato(numero='014/2026', prazo=1)
+        self.criar_item_contrato(contrato, quantidade='2.00', unitario='50.00')
+        self.criar_checklist_ativo(contrato)
+        self.criar_formulario_avaliacao(contrato)
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        checklist_item = competencia.checklist_itens.get()
+
+        self.client.login(username='gestor_v2', password='123')
+        self.client.post(
+            reverse('contratos:competencia_checklist', args=[competencia.pk]),
+            {f'arquivo_{checklist_item.pk}': SimpleUploadedFile('doc.pdf', pdf_minimo_valido(), content_type='application/pdf')},
+        )
+        self.client.post(
+            reverse('contratos:competencia_medicao', args=[competencia.pk]),
+            {f'quantidade_{contrato.itens.get().pk}': '2.00'},
+        )
+        avaliacao = competencia.avaliacao_qualidade
+        resposta = avaliacao.itens.get()
+
+        self.client.post(
+            reverse('contratos:competencia_avaliacao', args=[competencia.pk]),
+            {
+                f'nota_fiscal_{resposta.pk}': '3.00',
+                f'justificativa_fiscal_{resposta.pk}': '',
+                'observacoes': 'Fiscal sem ressalvas',
+            },
+        )
+        response = self.client.post(
+            reverse('contratos:competencia_avaliacao', args=[competencia.pk]),
+            {
+                f'nota_gestor_{resposta.pk}': '0.00',
+                f'manifestacao_gestor_item_{resposta.pk}': 'Gestor registrou inconformidade.',
+                'observacoes': 'Gestor apontou restrições',
+            },
+        )
+        competencia.refresh_from_db()
+        avaliacao.refresh_from_db()
+        resposta.refresh_from_db()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(competencia.status, CompetenciaPagamento.Status.PAGAMENTO_PENDENTE)
+        self.assertIsNotNone(avaliacao.concluida_em)
+        self.assertEqual(resposta.nota_fiscal_valor, Decimal('3.00'))
+        self.assertEqual(resposta.nota_gestor_valor, Decimal('0.00'))
+        self.assertEqual(resposta.nota_valor, Decimal('0.00'))
+
+    def test_relatorio_da_avaliacao_exporta_itens_quando_competencia_exige_qualidade(self):
+        contrato = self.criar_contrato(numero='011/2026', prazo=1)
+        self.criar_item_contrato(contrato, quantidade='2.00', unitario='50.00')
+        self.criar_checklist_ativo(contrato)
+        self.criar_formulario_avaliacao(contrato)
+        contrato.gerar_competencias()
+        competencia = contrato.competencias.get()
+        checklist_item = competencia.checklist_itens.get()
+
+        self.client.login(username='gestor_v2', password='123')
+        self.client.post(
+            reverse('contratos:competencia_checklist', args=[competencia.pk]),
+            {f'arquivo_{checklist_item.pk}': SimpleUploadedFile('doc.pdf', pdf_minimo_valido(), content_type='application/pdf')},
+        )
+        self.client.post(
+            reverse('contratos:competencia_medicao', args=[competencia.pk]),
+            {f'quantidade_{contrato.itens.get().pk}': '2.00'},
+        )
+        avaliacao = competencia.avaliacao_qualidade
+        resposta = avaliacao.itens.get()
+        self.client.post(
+            reverse('contratos:competencia_avaliacao', args=[competencia.pk]),
+            {
+                f'nota_fiscal_{resposta.pk}': '1.00',
+                f'justificativa_fiscal_{resposta.pk}': 'Serviço parcialmente entregue.',
+                'observacoes': 'Avaliação mensal',
+            },
+        )
+        self.client.post(
+            reverse('contratos:competencia_avaliacao', args=[competencia.pk]),
+            {
+                f'nota_gestor_{resposta.pk}': '1.00',
+                f'manifestacao_gestor_item_{resposta.pk}': 'Ciente da justificativa e da retenção neste item.',
+                'observacoes': 'Avaliação mensal',
+            },
+        )
+
+        doc = gerar_relatorio_avaliacao_competencia('/root/aplicacoesspi/docs/papel-timbrado-spi.docx', contrato, competencia)
+        texto = '\n'.join(paragrafo.text for paragrafo in doc.paragraphs)
+        tabela_texto = '\n'.join(celula.text for tabela in doc.tables for linha in tabela.rows for celula in linha.cells)
+
+        self.assertIn('RELATÓRIO DE AVALIAÇÃO DE QUALIDADE', texto)
+        self.assertIn('Qualidade da entrega', tabela_texto)
+        self.assertIn('Serviço parcialmente entregue.', tabela_texto)
+        self.assertIn('Ciente da justificativa e da retenção neste item.', tabela_texto)
+
+    def test_nao_permita_criar_formulario_de_avaliacao_apos_gerar_competencias(self):
+        contrato = self.criar_contrato()
+        self.criar_item_contrato(contrato)
+        self.criar_checklist_ativo(contrato)
+        contrato.gerar_competencias()
+        self.client.login(username='gestor_v2', password='123')
+
+        response = self.client.post(
+            reverse('contratos:avaliacao_form_create', args=[contrato.pk]),
+            {
+                'nome': 'Avaliação tardia',
+                'descricao': 'Não deveria deixar',
+                'ativo': 'on',
+                'observacoes': '',
+            },
+        )
+
+        self.assertRedirects(response, reverse('contratos:contrato_detail', args=[contrato.pk]), fetch_redirect_response=False)

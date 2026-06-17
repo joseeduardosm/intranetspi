@@ -2,6 +2,7 @@
 # Cobre regras principais de setores: árvore, permissões, vínculos e organograma.
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 
@@ -49,6 +50,7 @@ class SetoresTests(TestCase):
                 'nome': setor.group.name,
                 'parent': '',
                 'lider': '',
+                'sistemico': '',
                 'ativo': 'on',
                 'usuarios': [self.user.pk, self.other.pk],
             },
@@ -85,7 +87,7 @@ class SetoresTests(TestCase):
         self.client.login(username='admin_setor', password='123')
         response = self.client.post(
             reverse('setores:create'),
-            {'nome': 'Planejamento', 'parent': '', 'lider': self.user.pk, 'ativo': 'on', 'usuarios': [self.user.pk]},
+            {'nome': 'Planejamento', 'parent': '', 'lider': self.user.pk, 'sistemico': '', 'ativo': 'on', 'usuarios': [self.user.pk]},
         )
         self.assertRedirects(response, reverse('setores:list'), fetch_redirect_response=False)
         setor = SetorNode.objects.get(group__name='Planejamento')
@@ -120,6 +122,51 @@ class SetoresTests(TestCase):
         self.assertContains(response, 'Tecnologia')
         self.assertContains(response, self.user.username)
         self.assertContains(response, 'ramalContactModal')
+
+    def test_grupo_sistemico_nao_aparece_no_organograma(self):
+        setor_real = self.create_setor(name='Tecnologia')
+        grupo_sistemico = self.create_setor(name='ACL Contratos', sistemico=True)
+
+        tree = build_setor_tree()
+
+        nomes = [node['setor'].group.name for node in tree]
+        self.assertIn(setor_real.group.name, nomes)
+        self.assertNotIn(grupo_sistemico.group.name, nomes)
+
+    def test_grupo_sistemico_nao_pode_ser_setor_primario_do_usuario(self):
+        grupo_sistemico = self.create_setor(name='ACL Contratos', sistemico=True)
+
+        with self.assertRaises(ValidationError):
+            ensure_user_primary_setor(self.user, grupo_sistemico)
+
+    def test_formulario_de_setor_exibe_checkbox_sistemico(self):
+        self.client.login(username='admin_setor', password='123')
+
+        response = self.client.get(reverse('setores:create'))
+
+        self.assertContains(response, 'Grupo sistêmico')
+        self.assertContains(response, 'name="sistemico"', html=False)
+
+    def test_setor_sistemico_nao_preenche_texto_legado_do_perfil(self):
+        grupo_sistemico = self.create_setor(name='ACL Contratos', sistemico=True)
+        form = SetorForm(
+            data={
+                'nome': grupo_sistemico.group.name,
+                'parent': '',
+                'lider': '',
+                'sistemico': 'on',
+                'ativo': 'on',
+                'usuarios': [self.user.pk],
+            },
+            instance=grupo_sistemico,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        self.user.perfil.refresh_from_db()
+
+        self.assertEqual(self.user.perfil.setor, '')
+        self.assertTrue(UserSetorMembership.objects.filter(user=self.user, setor=grupo_sistemico).exists())
 
     def test_exclusao_bloqueada_para_setor_com_filhos_ou_membros(self):
         self.client.login(username='admin_setor', password='123')

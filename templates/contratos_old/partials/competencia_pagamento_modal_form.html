@@ -1,0 +1,19 @@
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 07/06/2026 -->
+<!-- Objetivo: Receber os anexos finais do pagamento da competência e concluir o fluxo em modal. -->
+<form method="post" action="{% url 'contratos:competencia_pagamento_executar' competencia.pk %}?modal=1" enctype="multipart/form-data" data-competencia-pagamento-modal-form>
+  {% csrf_token %}
+  {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+  {% for field in form.visible_fields %}
+    <div class="mb-3">
+      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+      {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+  {% endfor %}
+  {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+  <div class="d-flex gap-2 justify-content-end">
+    <button class="btn btn-light" type="button" data-bs-dismiss="modal">Cancelar</button>
+    <button class="btn btn-success" type="submit">Concluir pagamento</button>
+  </div>
+</form>

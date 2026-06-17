@@ -14,6 +14,7 @@ SYSTEM_USERNAMES = {"root"}
 HIDDEN_SELECTOR_USERNAMES = SYSTEM_USERNAMES | {
     "adminx",
     "adminy",
+    "antigravity",
     "joaox",
     "joaoy",
     "u1",

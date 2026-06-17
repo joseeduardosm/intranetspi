@@ -37,6 +37,14 @@
           </div>
           <div class="col-xl-6">
             <div class="form-check mt-4 pt-2">
+              {{ form.sistemico }}
+              <label class="form-check-label" for="{{ form.sistemico.id_for_label }}">{{ form.sistemico.label }}</label>
+            </div>
+            <div class="form-text">Grupos sistêmicos servem apenas para concessão de acessos e não aparecem no organograma nem no seletor de setor dos perfis.</div>
+            {% for error in form.sistemico.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-xl-6">
+            <div class="form-check mt-4 pt-2">
               {{ form.ativo }}
               <label class="form-check-label" for="{{ form.ativo.id_for_label }}">{{ form.ativo.label }}</label>
             </div>

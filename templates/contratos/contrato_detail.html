@@ -1,45 +1,33 @@
 {% extends "base.html" %}
 {% load static %}
 {% load contratos_extras %}
-<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 06/06/2026 -->
-<!-- Objetivo: Exibir a visão 360º do contrato e seus fluxos satélites. -->
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
+<!-- Objetivo: Exibir o resumo do contrato V2 com itens, checklist, avaliação, competências e contatos internos. -->
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">
   <link rel="stylesheet" href="{% static 'usuarios/css/ramais.css' %}">
 {% endblock %}
 
 {% block content %}
-  <div class="spi-page-title d-flex justify-content-between align-items-start">
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
     <div>
       <h1>{{ contrato.numero_contrato }} - {{ contrato.apelido }}</h1>
       <p>{{ contrato.objeto }}</p>
     </div>
     <div class="d-flex gap-2">
-      <a class="btn btn-outline-secondary" href="{% url 'contratos:dashboard' contrato.pk %}">Painel</a>
-      <a class="btn btn-primary" href="{% url 'contratos:contrato_update' contrato.pk %}">Editar contrato</a>
+      <a class="btn btn-outline-secondary" href="{% url 'contratos:contrato_list' %}">Voltar</a>
+      {% if not contrato.competencias.exists %}
+        <a class="btn btn-primary" href="{% url 'contratos:contrato_update' contrato.pk %}">Editar contrato</a>
+      {% endif %}
     </div>
   </div>
 
-  <section class="contratos-summary-grid mb-4">
-    <article class="card border-0 shadow-sm contratos-summary-card">
-      <div class="card-body">
-        <span class="contratos-kicker">Situação</span>
-        <h2>{{ contrato.situacao_atual }}</h2>
-        <p>{{ contrato.prazo_atual_display }}</p>
-      </div>
-    </article>
-    <article class="card border-0 shadow-sm contratos-summary-card">
-      <div class="card-body">
-        <span class="contratos-kicker">Regime</span>
-        <h2>{{ contrato.regime_atual }}</h2>
-        <p>Limite ordinário: {{ contrato.data_limite_vigencia|date:"d/m/Y" }}</p>
-      </div>
-    </article>
+  <section class="contratos-summary-grid">
     <article class="card border-0 shadow-sm contratos-summary-card">
       <div class="card-body">
         <span class="contratos-kicker">Valor global</span>
         <h2>R$ {{ contrato.valor_global|brl }}</h2>
-        <p>Base mensal: R$ {{ contrato.base_mensal|brl }}</p>
+        <p>Base mensal: R$ {{ contrato.base_mensal|brl }}{% if contrato.get_mes_reajuste_display %} • Mês de reajuste: {{ contrato.get_mes_reajuste_display }}{% endif %}</p>
       </div>
     </article>
     <article class="card border-0 shadow-sm contratos-summary-card">
@@ -47,387 +35,853 @@
         <span class="contratos-kicker">Empresa</span>
         <h2>{{ contrato.empresa_contratada.razao_social }}</h2>
         <p>{{ contrato.empresa_contratada.cnpj }}</p>
+        {% if responsavel_empresa_principal %}
+          <p class="mb-0">{{ responsavel_empresa_principal.nome }} • {{ responsavel_empresa_principal.telefone|default:'-' }} • {{ responsavel_empresa_principal.email|default:'-' }}</p>
+        {% endif %}
+      </div>
+    </article>
+    <article class="card border-0 shadow-sm contratos-summary-card">
+      <div class="card-body">
+        <span class="contratos-kicker">Execução financeira</span>
+        <h2>R$ {{ contrato.valor_executado|brl }}</h2>
+        <p>Saldo restante: R$ {{ contrato.valor_saldo|brl }}</p>
       </div>
     </article>
   </section>
 
-  <div class="row g-4">
-    <div class="col-xl-8">
-      <section class="card border-0 shadow-sm mb-4">
-        <div class="card-header contratos-section-header">
-          <h2>Itens do contrato</h2>
-          <a class="btn btn-sm btn-primary" href="{% url 'contratos:item_create' contrato.pk %}">Novo item</a>
+  <section class="card border-0 shadow-sm mt-4">
+    <div class="card-header contratos-section-header">
+      <h2>Processos SEI</h2>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        {% for processo in processos_sei %}
+          <div class="col-md-6">
+            <div class="border rounded-3 p-3 h-100">
+              <span class="contratos-kicker">{{ processo.label }}</span>
+              <div class="mt-2"><strong>Número:</strong> {{ processo.numero }}</div>
+              <div class="mt-2">
+                <strong>Link:</strong>
+                {% if processo.url %}
+                  <a href="{{ processo.url }}" target="_blank" rel="noopener noreferrer">{{ processo.url }}</a>
+                {% else %}
+                  -
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="card border-0 shadow-sm mt-4 contratos-v2-timeline-section">
+    <div class="card-header contratos-section-header">
+      <h2>Vigência e Timeline</h2>
+    </div>
+    <div class="card-body">
+      <div class="contratos-v2-timeline-wrapper">
+        <div class="contratos-v2-timeline-track">
+          <div class="contratos-v2-timeline-fill" style="width: {{ timeline.progresso_percentual }}%;"></div>
+          {% for marco in timeline.marcos %}
+            <div class="contratos-v2-timeline-tick {% if marco.passado %}is-past{% endif %} {% if marco.is_initial %}is-initial{% endif %} {% if marco.is_end %}is-end{% endif %} {% if marco.is_current %}is-current{% endif %}" style="left: {{ marco.percentual_posicao }}%;">
+              {% if marco.mostrar_texto %}
+                <span class="contratos-v2-timeline-label">
+                  {{ marco.mes_ano }}
+                  {% if marco.is_start %}<br><small>Início</small>{% endif %}
+                  {% if marco.is_initial %}<br><small>Prazo Inicial ({{ timeline.prazo_inicial }}m)</small>{% endif %}
+                  {% if marco.is_end %}<br><small>Máximo ({{ timeline.meses_max }}m)</small>{% endif %}
+                  {% if marco.is_current %}<br><small>Atual</small>{% endif %}
+                </span>
+              {% endif %}
+            </div>
+          {% endfor %}
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card border-0 shadow-sm mt-4">
+    <div class="card-header contratos-section-header">
+      <h2>Equipe de Execução</h2>
+    </div>
+    <div class="card-body contratos-responsaveis-grid">
+      {% for responsavel in responsaveis %}
+        <button
+          class="birthday-person-card contratos-responsavel-card"
+          type="button"
+          data-bs-toggle="modal"
+          data-bs-target="#ramalContactModal"
+          data-name="{{ responsavel.nome }}"
+          data-cargo="{{ responsavel.cargo }}"
+          data-setor="{{ responsavel.setor }}"
+          data-email="{{ responsavel.email }}"
+          data-ramal="{{ responsavel.ramal }}"
+          data-celular="{{ responsavel.celular }}"
+          data-whatsapp="{{ responsavel.whatsapp }}"
+          data-local="{{ responsavel.local }}"
+          data-photo="{{ responsavel.foto_url }}"
+          aria-label="Ver contato de {{ responsavel.nome }}"
+        >
+          <span class="birthday-person-avatar">
+            {% if responsavel.foto_url %}
+              <img src="{{ responsavel.foto_url }}" alt="{{ responsavel.nome }}">
+            {% else %}
+              <span>{{ responsavel.iniciais }}</span>
+            {% endif %}
+          </span>
+          <span class="birthday-person-copy">
+            <small class="contratos-responsavel-label">{{ responsavel.label }}</small>
+            <strong>{{ responsavel.nome }}</strong>
+            <small>{{ responsavel.cargo }}</small>
+          </span>
+          <span class="birthday-person-meta">
+            <small>{{ responsavel.ramal }}</small>
+            <span class="birthday-person-arrow" aria-hidden="true">›</span>
+          </span>
+        </button>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card border-0 shadow-sm mt-4">
+    <div class="card-header contratos-section-header justify-content-between">
+      <h2>Itens do contrato</h2>
+      {% if not contrato.competencias.exists %}
+        <a class="btn btn-sm btn-primary" href="{% url 'contratos:item_create' contrato.pk %}">Novo item</a>
+      {% endif %}
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0 contratos-items-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Descrição</th>
+            <th>SIAFÍSICO</th>
+            <th>CATMAT/CATSER</th>
+            <th>Quantidade Mensal</th>
+            <th>Quantidade Acumulada</th>
+            <th>Quantidade Executada</th>
+            <th>Quantidade Disponível</th>
+            <th>Valor unitário</th>
+            <th>Subtotal mensal</th>
+            <th>Vigência</th>
+            {% if not contrato.competencias.exists %}
+              <th class="text-end">Ações</th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in contrato.itens.all %}
+            <tr>
+              <td>{{ item.ordem }}</td>
+              <td>{{ item.descricao }}</td>
+              <td>{{ item.codigo_siafisico|default:"-" }}</td>
+              <td>{{ item.codigo_catmat_catser|default:"-" }}</td>
+              <td>{{ item.quantidade }}</td>
+              <td>{{ item.quantidade_acumulada }}</td>
+              <td>{{ item.quantidade_executada }}</td>
+              <td>{{ item.quantidade_disponivel }}</td>
+              <td>R$ {{ item.valor_unitario|brl }}</td>
+              <td>R$ {{ item.valor_subtotal|brl }}</td>
+              <td>{{ contrato.vigencia_total_meses }} meses</td>
+              {% if not contrato.competencias.exists %}
+                <td class="text-end">
+                  <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary contratos-actions-toggle" type="button" data-bs-toggle="dropdown" title="Ações">...</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item" href="{% url 'contratos:item_update' contrato.pk item.pk %}">Editar</a></li>
+                      <li><a class="dropdown-item text-danger" href="{% url 'contratos:item_delete' contrato.pk item.pk %}">Excluir</a></li>
+                    </ul>
+                  </div>
+                </td>
+              {% endif %}
+            </tr>
+          {% empty %}
+            <tr><td colspan="{% if contrato.competencias.exists %}11{% else %}12{% endif %}" class="text-center text-muted py-4">Nenhum item cadastrado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card border-0 shadow-sm mt-4">
+    <div class="card-header contratos-section-header justify-content-between">
+      <h2>Documentos importantes</h2>
+      {% if usuario_pode_criar_documentos_importantes %}
+        <a class="btn btn-sm btn-primary" href="{% url 'contratos:documento_importante_create' contrato.pk %}">Novo documento</a>
+      {% endif %}
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0 contratos-items-table">
+        <thead>
+          <tr>
+            <th style="width: 90px;">ID</th>
+            <th>Nome</th>
+            <th style="width: 140px;">Download</th>
+            <th>Usuário que inseriu</th>
+            <th style="width: 180px;">Data de inserção</th>
+            {% if usuario_tem_acoes_documentos_importantes %}
+              <th class="text-end" style="width: 110px;">Ações</th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for documento in documentos_importantes %}
+            <tr>
+              <td class="font-monospace">{{ documento.pk }}</td>
+              <td>{{ documento.nome }}</td>
+              <td>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ documento.arquivo.url }}" download>
+                  Download
+                </a>
+              </td>
+              <td>{{ documento.inserido_por_display }}</td>
+              <td>{{ documento.criado_em|date:"d/m/Y H:i" }}</td>
+              {% if usuario_tem_acoes_documentos_importantes %}
+                <td class="text-end">
+                  {% if documento.usuario_pode_gerir %}
+                    <div class="dropdown">
+                      <button
+                        class="btn btn-sm btn-outline-secondary contratos-actions-toggle"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        data-bs-boundary="viewport"
+                        data-bs-popper-config='{"strategy":"fixed"}'
+                        title="Ações do documento"
+                      >...</button>
+                      <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="{% url 'contratos:documento_importante_update' documento.pk %}">Editar</a></li>
+                        <li><a class="dropdown-item text-danger" href="{% url 'contratos:documento_importante_delete' documento.pk %}">Excluir</a></li>
+                      </ul>
+                    </div>
+                  {% else %}
+                    <span class="text-muted">-</span>
+                  {% endif %}
+                </td>
+              {% endif %}
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="{% if usuario_tem_acoes_documentos_importantes %}6{% else %}5{% endif %}" class="text-center text-muted py-4">
+                Nenhum documento importante cadastrado.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% if contrato.competencias.exists %}
+    <section class="card border-0 shadow-sm mt-4">
+      <div class="card-header contratos-section-header justify-content-between">
+        <h2>Monitoramento de prazos</h2>
+        {% if usuario_pode_gerir %}
+          <a class="btn btn-sm btn-primary" href="{% url 'contratos:prazo_create' contrato.pk %}">Adicionar prazo</a>
+        {% endif %}
+      </div>
+      <div class="card-body">
         <div class="table-responsive">
-          <table class="table table-sm align-middle mb-0 contratos-itens-table">
+          <table class="table table-hover align-middle mb-0 text-nowrap">
             <thead>
               <tr>
-                <th>Item</th>
-                <th>Descrição</th>
-                <th>Quantidade</th>
-                <th>Valor unitário</th>
-                <th>Subtotal</th>
-                <th>Referencial</th>
-                <th>Vigência</th>
-                <th class="text-end">Ações</th>
+                <th>Nome</th>
+                <th>Anexo</th>
+                <th>Prazo</th>
+                {% if usuario_pode_gerir %}
+                  <th class="text-end">Ações</th>
+                {% endif %}
               </tr>
             </thead>
             <tbody>
-              {% for item in contrato.itens.all %}
-                <tr>
-                  <td>{{ item.ordem }}</td>
-                  <td>{{ item.descricao }}</td>
-                  <td>{{ item.quantidade }}</td>
-                  <td>R$ {{ item.valor_unitario|brl }}</td>
-                  <td>R$ {{ item.valor_subtotal|brl }}</td>
-                  <td>R$ {{ item.valor_referencial|brl }}</td>
-                  <td>{{ contrato.vigencia_total_meses }} meses</td>
-                  <td class="text-end">
-                    <div class="spi-action-menu contratos-action-menu">
-                      <button class="btn btn-sm btn-outline-secondary spi-action-menu-toggle" type="button" aria-label="Ações do item" aria-expanded="false" title="Ações">...</button>
-                      <div class="spi-action-menu-panel" role="menu" hidden>
-                        <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'contratos:item_update' contrato.pk item.pk %}">Editar</a>
-                        <a class="btn btn-sm btn-outline-danger" role="menuitem" href="{% url 'contratos:item_delete' contrato.pk item.pk %}">Excluir</a>
+              {% for prazo in contrato.prazos_ativos %}
+                <tr class="prazo-linha-{{ prazo.cor_classe }}">
+                  <td class="text-wrap"><strong>{{ prazo.nome }}</strong></td>
+                  <td>
+                    {% if prazo.anexo %}
+                      <a href="{{ prazo.anexo.url }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Visualizar anexo">
+                        📎 Anexo
+                      </a>
+                    {% else %}
+                      <span class="text-muted">-</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="d-flex align-items-center gap-3">
+                      <div class="d-flex flex-column">
+                        <span class="text-nowrap">{{ prazo.data_limite|date:"d/m/Y" }}</span>
+                        {% if prazo.data_inicio %}
+                          <small class="text-muted">Início: {{ prazo.data_inicio|date:"d/m/Y" }}</small>
+                        {% endif %}
+                      </div>
+                      <div class="progress flex-grow-1" style="height: 8px; min-width: 100px;" title="Evolução: {{ prazo.percentual_decorrido }}%">
+                        <div class="progress-bar bg-{{ prazo.cor_classe }}" role="progressbar" style="width: {{ prazo.percentual_decorrido }}%;" aria-valuenow="{{ prazo.percentual_decorrido }}" aria-valuemin="0" aria-valuemax="100"></div>
                       </div>
                     </div>
                   </td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="8" class="text-muted">Nenhum item cadastrado.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card border-0 shadow-sm mb-4">
-        <div class="card-header contratos-section-header">
-          <h2>Termos aditivos</h2>
-          <a class="btn btn-sm btn-primary" href="{% url 'contratos:aditivo_create' contrato.pk %}">Novo aditivo</a>
-        </div>
-        <div class="table-responsive">
-          <table class="table table-sm align-middle mb-0">
-            <thead>
-              <tr>
-                <th>Termo</th>
-                <th>Tipo</th>
-                <th>Início</th>
-                <th>Término</th>
-                <th>Meses</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for aditivo in contrato.aditivos.all %}
-                <tr>
-                  <td>{{ aditivo.numero_termo }}</td>
-                  <td>{{ aditivo.get_tipo_display }}</td>
-                  <td>{{ aditivo.data_inicio|date:"d/m/Y" }}</td>
-                  <td>{{ aditivo.data_termino|date:"d/m/Y" }}</td>
-                  <td>{{ aditivo.quantidade_meses }}</td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="5" class="text-muted">Nenhum aditivo registrado.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card border-0 shadow-sm mb-4">
-        <div class="card-header contratos-section-header">
-          <h2>Documentos</h2>
-          <a class="btn btn-sm btn-primary" href="{% url 'contratos:documento_create' contrato.pk %}">Novo documento</a>
-        </div>
-        <ul class="list-group list-group-flush">
-          {% for documento in contrato.documentos.all %}
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-              <div>
-                <strong>{{ documento.descricao }}</strong>
-                <div class="text-muted small">{{ documento.get_tipo_display }} • {{ documento.data_documento|date:"d/m/Y" }}</div>
-              </div>
-              <a class="btn btn-sm btn-outline-secondary" href="{{ documento.arquivo.url }}" target="_blank" rel="noopener">Abrir</a>
-            </li>
-          {% empty %}
-            <li class="list-group-item text-muted">Nenhum documento anexado.</li>
-          {% endfor %}
-        </ul>
-      </section>
-
-      <section class="card border-0 shadow-sm mb-4">
-        <div class="card-header contratos-section-header">
-          <div>
-            <h2>Diário de bordo</h2>
-            <p class="mb-0 text-muted">Ocorrências auditáveis da execução contratual.</p>
-          </div>
-          <div class="d-flex gap-2">
-            <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos:ocorrencia_export_xlsx' contrato.pk %}">XLSX</a>
-            <a class="btn btn-sm btn-primary" href="{% url 'contratos:ocorrencia_create' contrato.pk %}">Nova ocorrência</a>
-          </div>
-        </div>
-        <div class="card-body contratos-timeline">
-          {% for ocorrencia in contrato.ocorrencias.all %}
-            <article class="contratos-timeline-item">
-              <div class="contratos-timeline-date">{{ ocorrencia.data_registro|date:"d/m/Y" }} {{ ocorrencia.hora_registro|time:"H:i" }}</div>
-              <h3>{{ ocorrencia.tipo_ocorrencia }}</h3>
-              <p>{{ ocorrencia.descricao }}</p>
-              <div class="text-muted small">
-                {% if ocorrencia.usuario %}{{ ocorrencia.usuario.get_full_name|default:ocorrencia.usuario.username }}{% else %}Sem usuário{% endif %}
-                • <a href="{% url 'contratos:ocorrencia_anexo_create' ocorrencia.pk %}">Adicionar anexo</a>
-              </div>
-            </article>
-          {% empty %}
-            <p class="text-muted mb-0">Nenhuma ocorrência registrada.</p>
-          {% endfor %}
-        </div>
-      </section>
-    </div>
-
-    <div class="col-xl-4">
-      <section class="card border-0 shadow-sm mb-4">
-        <div class="card-header contratos-section-header">
-          <h2>Responsáveis internos</h2>
-        </div>
-        <div class="card-body">
-          <div class="contratos-responsaveis-stack">
-            {% for responsavel in responsaveis_internos %}
-              <button
-                class="birthday-person-card contratos-responsavel-card"
-                type="button"
-                data-ramal-card-open
-                data-name="{{ responsavel.nome }}"
-                data-photo="{{ responsavel.foto_url }}"
-                data-cargo="{{ responsavel.cargo }}"
-                data-setor="{{ responsavel.setor }}"
-                data-email="{{ responsavel.email }}"
-                data-ramal="{{ responsavel.ramal }}"
-                data-celular="{{ responsavel.celular }}"
-                data-whatsapp="{{ responsavel.whatsapp }}"
-                data-local="{{ responsavel.local }}"
-                onclick="openContratoResponsavelModal(this)"
-                aria-label="Ver contato de {{ responsavel.nome }}"
-              >
-                <span class="birthday-person-avatar">
-                  {% if responsavel.foto_url %}
-                    <img src="{{ responsavel.foto_url }}" alt="{{ responsavel.nome }}">
-                  {% else %}
-                    <span>{{ responsavel.iniciais }}</span>
+                  {% if usuario_pode_gerir %}
+                    <td class="text-end">
+                      <div class="dropdown">
+                        <button
+                          class="btn btn-sm btn-outline-secondary contratos-actions-toggle"
+                          type="button"
+                          data-bs-toggle="dropdown"
+                          data-bs-boundary="viewport"
+                          data-bs-popper-config='{"strategy":"fixed"}'
+                          title="Ações"
+                        >...</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li><a class="dropdown-item" href="{% url 'contratos:prazo_update' prazo.pk %}">Editar</a></li>
+                          <li>
+                            <form method="post" action="{% url 'contratos:prazo_concluir' prazo.pk %}" style="display:inline;">
+                              {% csrf_token %}
+                              <button type="submit" class="dropdown-item">Concluir</button>
+                            </form>
+                          </li>
+                          <li><a class="dropdown-item text-danger" href="{% url 'contratos:prazo_delete' prazo.pk %}">Excluir</a></li>
+                        </ul>
+                      </div>
+                    </td>
                   {% endif %}
-                </span>
-                <span class="birthday-person-copy">
-                  <small class="contratos-responsavel-label">{{ responsavel.label }}</small>
-                  <strong>{{ responsavel.nome }}</strong>
-                  <small>{{ responsavel.cargo }}</small>
-                </span>
-                <span class="birthday-person-meta">
-                  <small>{{ responsavel.ramal }}</small>
-                  <span class="birthday-person-arrow" aria-hidden="true">›</span>
-                </span>
-              </button>
-            {% endfor %}
-          </div>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="{% if usuario_pode_gerir %}4{% else %}3{% endif %}" class="text-center text-muted py-4">
+                    Nenhum prazo cadastrado para monitoramento.
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
-      </section>
+      </div>
+    </section>
+  {% endif %}
 
-      <section class="card border-0 shadow-sm mb-4">
-        <div class="card-header contratos-section-header">
-          <h2>Checklist padrão</h2>
-          <a class="btn btn-sm btn-primary" href="{% url 'contratos:checklist_modelo_create' contrato.pk %}">Novo item</a>
-        </div>
-        {% if not contrato.possui_checklist_padrao %}
-          <div class="card-body pb-0">
-            <div class="alert alert-warning mb-0">
-              Cadastre o checklist padrão deste contrato para liberar as competências e iniciar os pagamentos.
-            </div>
-          </div>
-        {% endif %}
-        <ul class="list-group list-group-flush">
-          {% for item in contrato.checklist_modelos.all %}
-            <li class="list-group-item">{{ item.ordem }}. {{ item.titulo }}</li>
-          {% empty %}
-            <li class="list-group-item text-muted">Cadastre o checklist padrão deste contrato.</li>
-          {% endfor %}
-        </ul>
-      </section>
-
-      <section class="card border-0 shadow-sm mb-4">
-        <div class="card-header contratos-section-header">
-          <h2>Avaliação de Qualidade</h2>
-          <a class="btn btn-sm btn-primary" href="{% url 'contratos:modelo_qualidade_create' contrato.pk %}">Novo modelo</a>
-        </div>
-        <div class="card-body">
-          {% for modelo in contrato.modelos_qualidade.all %}
-            <article class="mb-3">
-              <strong>{{ modelo.nome }}</strong>
-              <div class="small text-muted mb-2">Vigência {{ modelo.vigencia_inicio|date:"d/m/Y" }}</div>
-              <div class="d-flex gap-2 flex-wrap">
-                <a class="btn btn-sm btn-outline-secondary" href="{% url 'contratos:grupo_qualidade_create' modelo.pk %}">Novo grupo</a>
-              </div>
-            </article>
-          {% empty %}
-            <p class="text-muted mb-0">Nenhuma avaliação de qualidade cadastrada.</p>
-          {% endfor %}
-        </div>
-      </section>
-
-      <section class="card border-0 shadow-sm mb-4">
-        <div class="card-header contratos-section-header">
-          <h2>Eventos financeiros</h2>
-          <a class="btn btn-sm btn-primary" href="{% url 'contratos:evento_create' contrato.pk %}">Novo evento</a>
-        </div>
-        <ul class="list-group list-group-flush">
-          {% for evento in contrato.eventos_financeiros.all %}
-            <li class="list-group-item">
-              <strong>{{ evento.get_tipo_display }}</strong>
-              <div class="small text-muted">{{ evento.indice_aplicado }} • base {{ evento.data_base|date:"d/m/Y" }}</div>
-              <a class="small" href="{% url 'contratos:evento_item_create' evento.pk %}">Adicionar item reajustado</a>
-            </li>
-          {% empty %}
-            <li class="list-group-item text-muted">Nenhum evento financeiro registrado.</li>
-          {% endfor %}
-        </ul>
-      </section>
-    </div>
-  </div>
-
-  <section class="card border-0 shadow-sm">
+  {% if not contrato.competencias.exists %}
+  <section class="card border-0 shadow-sm mt-4">
     <div class="card-header contratos-section-header">
-      <h2>Competências de pagamento</h2>
-      <a class="btn btn-sm btn-primary" href="{% url 'contratos:competencia_create' contrato.pk %}">Nova competência</a>
+      <h2>Checklist Padrão</h2>
     </div>
     <div class="card-body">
-      {% for competencia in competencias %}
-        <article class="contratos-competencia-card">
-          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-            <div>
-              <h3>{{ competencia.periodo_inicio|date:"m/Y" }}</h3>
-              <p class="text-muted mb-1">{{ competencia.periodo_inicio|date:"d/m/Y" }} a {{ competencia.periodo_fim|date:"d/m/Y" }}</p>
-              <p class="mb-0">Status: <strong>{{ competencia.get_status_display }}</strong></p>
-              <p class="mb-0 text-muted small">{% if competencia.gerada_automaticamente %}Competência automática{% else %}Competência manual{% endif %}</p>
-              {% if competencia.aguardando_checklist_padrao %}
-                <p class="mb-0 text-warning small">Bloqueada até o checklist padrão do contrato ser cadastrado e replicado.</p>
-              {% endif %}
-            </div>
-            <div class="text-end">
-              <div><strong>Previsto:</strong> R$ {{ competencia.valor_previsto|brl }}</div>
-              <div><strong>Medido:</strong> R$ {{ competencia.valor_medido|brl }}</div>
-              <div><strong>Liberado:</strong> R$ {{ competencia.valor_liberado|brl }}</div>
-            </div>
+      {% if checklists_padrao_ativos %}
+        <form method="post" action="{% url 'contratos:checklist_padrao_carregar' contrato.pk %}">
+          {% csrf_token %}
+          <div class="d-flex flex-column gap-2">
+            {% for checklist_padrao in checklists_padrao_ativos %}
+              <label class="form-check d-flex align-items-start gap-2">
+                <input
+                  class="form-check-input mt-1"
+                  type="radio"
+                  name="checklist_padrao_id"
+                  value="{{ checklist_padrao.pk }}"
+                  {% if forloop.first %}checked{% endif %}
+                >
+                <span>
+                  <strong>{{ checklist_padrao.nome }}</strong>
+                  {% if checklist_padrao.descricao %}
+                    <span class="d-block text-muted small mt-1">{{ checklist_padrao.descricao }}</span>
+                  {% endif %}
+                </span>
+              </label>
+            {% endfor %}
           </div>
+          {% if usuario_pode_carregar_checklist_padrao %}
+            <div class="d-flex justify-content-end mt-3">
+              <button class="btn btn-sm btn-primary" type="submit">Carregar Checklist</button>
+            </div>
+          {% endif %}
+        </form>
+      {% else %}
+        <p class="text-muted mb-0">Nenhum checklist padrão global ativo disponível para carga.</p>
+      {% endif %}
+    </div>
+  </section>
 
+  <section class="card border-0 shadow-sm mt-4">
+    <div class="card-header contratos-section-header justify-content-between">
+      <h2>Versões de checklist</h2>
+      {% if usuario_pode_gerir %}
+        <div class="d-flex gap-2">
+          {% if not contrato.competencias.exists %}
+            <a class="btn btn-sm btn-primary" href="{% url 'contratos:checklist_create' contrato.pk %}">Nova versão</a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% for checklist in contrato.checklist_modelos.all %}
+        <article class="contratos-version-card">
+          <div class="d-flex justify-content-between flex-wrap gap-2">
+            <div>
+              <strong>{{ checklist.nome }}</strong>
+              {% if checklist.ativo %}<span class="badge text-bg-success ms-2">Ativo</span>{% else %}<span class="badge text-bg-secondary ms-2">Inativo</span>{% endif %}
+              {% if checklist.descricao %}<p class="text-muted mt-2 mb-2">{{ checklist.descricao }}</p>{% endif %}
+            </div>
+            {% if usuario_pode_gerir and not contrato.competencias.exists %}
+              <div class="dropdown">
+                <button
+                  class="btn btn-sm btn-outline-secondary contratos-actions-toggle"
+                  type="button"
+                  data-bs-toggle="dropdown"
+                  data-bs-boundary="viewport"
+                  data-bs-popper-config='{"strategy":"fixed"}'
+                  title="Ações"
+                >...</button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li><a class="dropdown-item" href="{% url 'contratos:checklist_update' checklist.pk %}">Editar versão</a></li>
+                  <li><a class="dropdown-item" href="{% url 'contratos:checklist_item_create' checklist.pk %}">Novo item</a></li>
+                  <li><a class="dropdown-item text-danger" href="{% url 'contratos:checklist_delete' checklist.pk %}">Excluir</a></li>
+                </ul>
+              </div>
+            {% endif %}
+          </div>
+          <div class="table-responsive mt-3">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Ordem</th>
+                  <th>Título</th>
+                  <th>Obrigatório</th>
+                  {% if not contrato.competencias.exists %}
+                    <th class="text-end">Ações</th>
+                  {% endif %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in checklist.itens.all %}
+                  <tr>
+                    <td>{{ item.ordem }}</td>
+                    <td>{{ item.titulo }}</td>
+                    <td>{% if item.obrigatorio %}Sim{% else %}Não{% endif %}</td>
+                    {% if not contrato.competencias.exists %}
+                      <td class="text-end">
+                        {% if usuario_pode_gerir %}
+                          <div class="dropdown">
+                            <button
+                              class="btn btn-sm btn-outline-secondary contratos-actions-toggle"
+                              type="button"
+                              data-bs-toggle="dropdown"
+                              data-bs-boundary="viewport"
+                              data-bs-popper-config='{"strategy":"fixed"}'
+                              title="Ações"
+                            >...</button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                              <li><a class="dropdown-item" href="{% url 'contratos:checklist_item_update' item.pk %}">Editar</a></li>
+                              <li><a class="dropdown-item text-danger" href="{% url 'contratos:checklist_item_delete' item.pk %}">Excluir</a></li>
+                            </ul>
+                          </div>
+                        {% endif %}
+                      </td>
+                    {% endif %}
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="{% if contrato.competencias.exists %}3{% else %}4{% endif %}" class="text-muted">Nenhum item cadastrado nesta versão.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      {% empty %}
+        <p class="text-muted mb-0">O contrato nasce sem checklist. Cadastre uma versão para liberar a geração de competências.</p>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if not contrato.competencias.exists %}
+  <section class="card border-0 shadow-sm mt-4">
+    <div class="card-header contratos-section-header justify-content-between">
+      <h2>Formulários de avaliação</h2>
+      {% if usuario_pode_gerir and not contrato.competencias.exists %}<a class="btn btn-sm btn-primary" href="{% url 'contratos:avaliacao_form_create' contrato.pk %}">Novo formulário</a>{% endif %}
+    </div>
+    <div class="card-body">
+      {% for formulario in contrato.formularios_avaliacao.all %}
+        <article class="contratos-version-card">
+          <div class="d-flex justify-content-between flex-wrap gap-2">
+            <div>
+              <strong>{{ formulario.nome }}</strong>
+              {% if formulario.ativo %}<span class="badge text-bg-success ms-2">Ativo</span>{% else %}<span class="badge text-bg-secondary ms-2">Inativo</span>{% endif %}
+              {% if formulario.descricao %}<p class="text-muted mt-2 mb-2">{{ formulario.descricao }}</p>{% endif %}
+            </div>
+            {% if usuario_pode_gerir %}
+              <div class="dropdown">
+                <button
+                  class="btn btn-sm btn-outline-secondary contratos-actions-toggle"
+                  type="button"
+                  data-bs-toggle="dropdown"
+                  data-bs-boundary="viewport"
+                  data-bs-popper-config='{"strategy":"fixed"}'
+                  title="Ações"
+                >...</button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_form_update' formulario.pk %}">Editar</a></li>
+                  <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_escala_create' formulario.pk %}">Nova nota</a></li>
+                  <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_faixa_create' formulario.pk %}">Nova faixa</a></li>
+                  <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_grupo_create' formulario.pk %}">Novo grupo</a></li>
+                  <li><a class="dropdown-item text-danger" href="{% url 'contratos:avaliacao_form_delete' formulario.pk %}">Excluir</a></li>
+                </ul>
+              </div>
+            {% endif %}
+          </div>
           <div class="row g-3 mt-1">
             <div class="col-lg-4">
-              <h4>Checklist</h4>
-              {% if competencia.aguardando_checklist_padrao %}
-                <div class="alert alert-warning py-2">
-                  Aguardando checklist padrão do contrato para liberar esta competência.
-                </div>
-              {% endif %}
-              <ul class="list-group">
-                {% for item in competencia.checklist_itens.all %}
-                  <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <span>{{ item.titulo }}</span>
-                    <div class="d-flex gap-2 align-items-center">
-                      <span class="btn btn-sm {% if item.anexo_principal %}btn-success{% else %}btn-outline-secondary{% endif %} disabled" aria-disabled="true">
-                        {% if item.anexo_principal %}Concluído{% else %}Pendente{% endif %}
-                      </span>
-                      <div class="spi-action-menu contratos-action-menu">
-                        <button class="btn btn-sm btn-outline-secondary spi-action-menu-toggle" type="button" aria-label="Ações do anexo" aria-expanded="false" title="Ações">...</button>
-                        <div class="spi-action-menu-panel" role="menu" hidden>
-                          {% if item.anexo_principal %}
-                            <a class="btn btn-sm btn-outline-secondary" role="menuitem" href="{% url 'contratos:checklist_anexo_update' item.pk %}">Editar</a>
-                            <a
-                              class="btn btn-sm btn-outline-secondary"
-                              role="menuitem"
-                              href="{{ item.anexo_principal.arquivo.url }}"
-                              target="_blank"
-                              rel="noopener"
-                              title="Abrir PDF em nova aba"
-                            >Ver</a>
-                            <form method="post" action="{% url 'contratos:checklist_anexo_delete' item.pk %}">
-                              {% csrf_token %}
-                              <button class="btn btn-sm btn-outline-danger w-100" type="submit" role="menuitem">Limpar</button>
-                            </form>
-                          {% else %}
-                            <a
-                              class="btn btn-sm btn-outline-secondary"
-                              role="menuitem"
-                              href="{% url 'contratos:checklist_anexo_create' item.pk %}"
-                              data-checklist-anexo-modal-open
-                              data-url="{% url 'contratos:checklist_anexo_create' item.pk %}?modal=1"
-                            >Anexar</a>
-                          {% endif %}
-                        </div>
+              <h3 class="contratos-subtitle">Escala</h3>
+              <ul class="list-unstyled mb-0">
+                {% for escala in formulario.escalas.all %}
+                  <li class="contratos-inline-action">
+                    <span>{{ escala.valor }} - {{ escala.legenda }}</span>
+                    {% if usuario_pode_gerir %}
+                      <div class="dropdown">
+                        <button
+                          class="btn btn-sm btn-outline-secondary contratos-actions-toggle"
+                          type="button"
+                          data-bs-toggle="dropdown"
+                          data-bs-boundary="viewport"
+                          data-bs-popper-config='{"strategy":"fixed"}'
+                          title="Ações"
+                        >...</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_escala_update' escala.pk %}">Editar</a></li>
+                          <li><a class="dropdown-item text-danger" href="{% url 'contratos:avaliacao_escala_delete' escala.pk %}">Excluir</a></li>
+                        </ul>
                       </div>
-                    </div>
+                    {% endif %}
                   </li>
                 {% empty %}
-                  <li class="list-group-item text-muted">Sem checklist replicado.</li>
+                  <li class="text-muted">Sem notas cadastradas.</li>
                 {% endfor %}
               </ul>
             </div>
-
             <div class="col-lg-4">
-              <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-                <h4 class="mb-0">Medição</h4>
-                {% if competencia.aguardando_checklist_padrao %}
-                  <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Nova medição</span>
-                {% else %}
-                  <a class="btn btn-sm btn-outline-primary" href="{% url 'contratos:medicao_create' competencia.pk %}">Nova medição</a>
-                {% endif %}
-              </div>
-              <ul class="list-group">
-                {% for medicao in competencia.medicoes.all %}
-                  <li class="list-group-item">
-                    Item {{ medicao.item_contrato.ordem }} • {{ medicao.quantidade }} × R$ {{ medicao.valor_unitario_aplicado|brl }}
-                    <div class="small text-muted">Subtotal: R$ {{ medicao.valor_subtotal|brl }}</div>
+              <h3 class="contratos-subtitle">Faixas de liberação</h3>
+              <ul class="list-unstyled mb-0">
+                {% for faixa in formulario.faixas_liberacao.all %}
+                  <li class="contratos-inline-action">
+                    <span>{{ faixa.percentual_liberacao }}% para notas de {{ faixa.nota_minima }}{% if faixa.nota_maxima %} até {{ faixa.nota_maxima }}{% endif %}</span>
+                    {% if usuario_pode_gerir %}
+                      <div class="dropdown">
+                        <button
+                          class="btn btn-sm btn-outline-secondary contratos-actions-toggle"
+                          type="button"
+                          data-bs-toggle="dropdown"
+                          data-bs-boundary="viewport"
+                          data-bs-popper-config='{"strategy":"fixed"}'
+                          title="Ações"
+                        >...</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_faixa_update' faixa.pk %}">Editar</a></li>
+                          <li><a class="dropdown-item text-danger" href="{% url 'contratos:avaliacao_faixa_delete' faixa.pk %}">Excluir</a></li>
+                        </ul>
+                      </div>
+                    {% endif %}
                   </li>
                 {% empty %}
-                  <li class="list-group-item text-muted">Sem medições.</li>
+                  <li class="text-muted">Sem faixas cadastradas.</li>
                 {% endfor %}
               </ul>
             </div>
-
             <div class="col-lg-4">
-              {% if mostrar_avaliacao_qualidade_competencia %}
-                <h4>Avaliação de qualidade</h4>
-                {% if competencia.aguardando_checklist_padrao %}
-                  <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Criar avaliação</span>
-                {% elif competencia.avaliacao_qualidade %}
-                  <div class="contratos-quality-box">
-                    <div><strong>Modelo:</strong> {{ competencia.avaliacao_qualidade.modelo.nome }}</div>
-                    <div><strong>Desempenho:</strong> {{ competencia.avaliacao_qualidade.percentual_desempenho }}%</div>
-                    <div><strong>Ajuste:</strong> R$ {{ competencia.avaliacao_qualidade.valor_ajuste|brl }}</div>
-                    <div><strong>Valor final:</strong> R$ {{ competencia.avaliacao_qualidade.valor_final_ajustado|brl }}</div>
-                    <a class="btn btn-sm btn-outline-secondary mt-2" href="{% url 'contratos:avaliacao_item_create' competencia.avaliacao_qualidade.pk %}">Nova pontuação</a>
+              <h3 class="contratos-subtitle">Grupos e itens</h3>
+              {% for grupo in formulario.grupos.all %}
+                <div class="contratos-group-box">
+                  <div class="d-flex justify-content-between gap-2">
+                    <strong>{{ grupo.ordem }}. {{ grupo.nome }}</strong>
+                    {% if usuario_pode_gerir %}
+                      <div class="dropdown">
+                        <button
+                          class="btn btn-sm btn-outline-secondary contratos-actions-toggle"
+                          type="button"
+                          data-bs-toggle="dropdown"
+                          data-bs-boundary="viewport"
+                          data-bs-popper-config='{"strategy":"fixed"}'
+                          title="Ações"
+                        >...</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_grupo_update' grupo.pk %}">Editar</a></li>
+                          <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_item_create' grupo.pk %}">Novo item</a></li>
+                          <li><a class="dropdown-item text-danger" href="{% url 'contratos:avaliacao_grupo_delete' grupo.pk %}">Excluir</a></li>
+                        </ul>
+                      </div>
+                    {% endif %}
                   </div>
-                {% else %}
-                  <a class="btn btn-sm btn-outline-primary" href="{% url 'contratos:avaliacao_create' competencia.pk %}">Criar avaliação</a>
-                {% endif %}
-              {% else %}
-                <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-                  <h4 class="mb-0">Pagamento</h4>
-                  {% if competencia.pode_liberar %}
-                    <a class="btn btn-sm btn-success" href="{% url 'contratos:competencia_pagamento_executar' competencia.pk %}">Inserir pagamento</a>
-                  {% elif competencia.aguardando_checklist_padrao %}
-                    <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Inserir pagamento</span>
-                  {% endif %}
+                  <ul class="mt-2 mb-0">
+                    {% for item in grupo.itens.all %}
+                      <li class="contratos-inline-action">
+                        <span>{{ item.ordem }}. {{ item.descricao|truncatechars:80 }}</span>
+                        {% if usuario_pode_gerir %}
+                          <div class="dropdown">
+                            <button
+                              class="btn btn-sm btn-outline-secondary contratos-actions-toggle"
+                              type="button"
+                              data-bs-toggle="dropdown"
+                              data-bs-boundary="viewport"
+                              data-bs-popper-config='{"strategy":"fixed"}'
+                              title="Ações"
+                            >...</button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                              <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_item_update' item.pk %}">Editar</a></li>
+                              <li><a class="dropdown-item text-danger" href="{% url 'contratos:avaliacao_item_delete' item.pk %}">Excluir</a></li>
+                            </ul>
+                          </div>
+                        {% endif %}
+                      </li>
+                    {% empty %}
+                      <li class="text-muted">Sem itens neste grupo.</li>
+                    {% endfor %}
+                  </ul>
                 </div>
-              {% endif %}
-              {% if mostrar_avaliacao_qualidade_competencia %}
-                {% if competencia.pode_liberar %}
-                  <a class="btn btn-sm btn-success mt-2" href="{% url 'contratos:competencia_pagamento_executar' competencia.pk %}">Inserir pagamento</a>
-                {% elif competencia.aguardando_checklist_padrao %}
-                  <span class="btn btn-sm btn-outline-secondary mt-2 disabled" aria-disabled="true">Inserir pagamento</span>
-                {% endif %}
-              {% endif %}
+              {% empty %}
+                <p class="text-muted mb-0">Nenhum grupo cadastrado.</p>
+              {% endfor %}
             </div>
           </div>
         </article>
       {% empty %}
-        <p class="text-muted mb-0">Nenhuma competência cadastrada.</p>
+        <p class="text-muted mb-0">A avaliação de qualidade é opcional. Se não houver formulário ativo, o fluxo seguirá apenas com checklist, medição e pagamento.</p>
       {% endfor %}
     </div>
   </section>
+  {% endif %}
+
+  <section class="card border-0 shadow-sm mt-4">
+    <div class="card-header contratos-section-header justify-content-between">
+      <h2>Competências geradas</h2>
+      {% if usuario_pode_gerir and not contrato.competencias.exists %}
+        <form method="post" action="{% url 'contratos:competencias_generate' contrato.pk %}" id="formGerarCompetencias">
+          {% csrf_token %}
+          <button class="btn btn-sm {% if contrato.checklist_ativo %}btn-primary{% else %}btn-outline-primary{% endif %}" type="button" id="btnDispararModalCompetencias" {% if not contrato.checklist_ativo %}disabled{% endif %}>Gerar competências</button>
+        </form>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <div id="competencias-paginadas-list">
+        {% for competencia in contrato.competencias.all %}
+          <article class="contratos-competencia-card {{ competencia.monitoramento_fundo_classe }}">
+            <div class="d-flex justify-content-between flex-wrap gap-3 align-items-start">
+              <div>
+                <strong>{{ competencia.periodo_inicio|date:"m/Y" }}</strong>
+                <p class="text-muted mb-2">{{ competencia.periodo_inicio|date:"d/m/Y" }} a {{ competencia.periodo_fim|date:"d/m/Y" }}</p>
+                <span class="badge text-bg-light border">{{ competencia.status_marcador }}</span>
+              </div>
+              <div class="contratos-competencia-values">
+                <div><small>Previsto</small><strong>R$ {{ competencia.valor_previsto|brl }}</strong></div>
+                <div><small>Medido</small><strong>R$ {{ competencia.valor_medido|brl }}</strong></div>
+                <div><small>Sugerido</small><strong>R$ {{ competencia.valor_liberado_sugerido|brl }}</strong></div>
+              </div>
+            </div>
+            {% if competencia.monitoramento_etapa %}
+              <div class="mt-3">
+                <div class="d-flex justify-content-between align-items-center gap-2">
+                  <strong>{{ competencia.monitoramento_etapa }}</strong>
+                  <small class="text-muted">{{ competencia.monitoramento_percentual }}%</small>
+                </div>
+                <div class="contratos-competencia-timeline-wrapper mt-2" title="Prazo monitorado da competência">
+                  <div class="contratos-competencia-timeline-track">
+                    <div class="contratos-competencia-timeline-fill is-{{ competencia.monitoramento_cor }}" style="width: {{ competencia.monitoramento_percentual }}%;"></div>
+                    {% for marco in competencia.monitoramento_marcos %}
+                      <div class="contratos-competencia-timeline-tick{% if marco.passado %} is-past is-{{ competencia.monitoramento_cor }}{% endif %}{% if marco.atual %} is-current is-{{ competencia.monitoramento_cor }}{% endif %}{% if marco.inicial %} is-initial{% endif %}{% if marco.final %} is-end{% endif %}" style="left: {{ marco.percentual_posicao }}%;"></div>
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
+            {% endif %}
+            <div class="d-flex flex-wrap gap-2 mt-3">
+              {% if usuario_pode_medicao %}
+                {% if competencia.medicao_disponivel %}
+                  <a class="btn btn-sm contratos-stage-btn{% if competencia.medicao_estado == 'done' %} is-done{% elif competencia.medicao_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_medicao' competencia.pk %}">Medição</a>
+                {% else %}
+                  <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true">Medição</span>
+                {% endif %}
+              {% endif %}
+              {% if competencia.exige_avaliacao and usuario_pode_avaliacao %}
+                {% if competencia.avaliacao_disponivel %}
+                  <a class="btn btn-sm contratos-stage-btn{% if competencia.avaliacao_estado == 'done' %} is-done{% elif competencia.avaliacao_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_avaliacao' competencia.pk %}">Avaliação</a>
+                {% else %}
+                  <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true">Avaliação</span>
+                {% endif %}
+              {% endif %}
+              {% if usuario_pode_checklist %}
+                {% if competencia.checklist_disponivel %}
+                  <a class="btn btn-sm contratos-stage-btn{% if competencia.checklist_estado == 'done' %} is-done{% elif competencia.checklist_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_checklist' competencia.pk %}">Checklist</a>
+                {% else %}
+                  <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true">Checklist</span>
+                {% endif %}
+              {% endif %}
+              {% if usuario_pode_gerir %}
+                {% if competencia.download_disponivel %}
+                  <div class="dropdown">
+                    <button class="btn btn-sm contratos-stage-btn{% if competencia.download_estado == 'done' %} is-done{% elif competencia.download_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" type="button" data-bs-toggle="dropdown">Download</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item btn-baixar-documentos" href="#" data-start-url="{% url 'contratos:competencia_download_docs_start' competencia.pk %}?tipo_saida=unificado">Baixar unificado</a></li>
+                      <li><a class="dropdown-item btn-baixar-documentos" href="#" data-start-url="{% url 'contratos:competencia_download_docs_start' competencia.pk %}?tipo_saida=separado">Baixar separado</a></li>
+                    </ul>
+                  </div>
+                {% else %}
+                  <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true">Download</span>
+                {% endif %}
+                {% if competencia.ob_disponivel %}
+                  <a class="btn btn-sm contratos-stage-btn{% if competencia.ob_estado == 'done' %} is-done{% elif competencia.ob_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_ob' competencia.pk %}">Ordem Bancária</a>
+                {% else %}
+                  <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true">Ordem Bancária</span>
+                {% endif %}
+              {% endif %}
+            </div>
+          </article>
+        {% empty %}
+          <p class="text-muted mb-0">Nenhuma competência gerada ainda.</p>
+        {% endfor %}
+      </div>
+
+      <!-- Paginação de Competências -->
+      {% if contrato.competencias.exists %}
+        <nav aria-label="Navegação das competências" class="mt-4">
+          <ul class="pagination pagination-sm justify-content-center mb-0" id="competencias-paginacao">
+            <!-- Populada dinamicamente por JavaScript -->
+          </ul>
+        </nav>
+      {% endif %}
+    </div>
+  </section>
+
+
+
+  <!-- Modal de Confirmação para Geração de Competências -->
+  <div class="modal fade" id="confirmarCompetenciasModal" tabindex="-1" aria-labelledby="confirmarCompetenciasModalTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header bg-light">
+          <h5 class="modal-title" id="confirmarCompetenciasModalTitle">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-exclamation-triangle-fill text-warning me-2" viewBox="0 0 16 16">
+              <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"/>
+            </svg>
+            Confirmação de Geração de Competências
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-warning border-0 bg-warning-subtle text-warning-emphasis">
+            <h6 class="alert-heading fw-bold mb-1">Atenção! Esta ação é irreversível.</h6>
+            <p class="mb-0 small">
+              Ao gerar as competências de execução e pagamento, a estrutura de itens do contrato, as versões de checklist e o formulário de avaliação serão <strong>congelados</strong>. Certifique-se de que todas as informações abaixo estão corretas antes de prosseguir.
+            </p>
+          </div>
+
+          <p class="mt-3">Você tem certeza de que deseja gerar as competências de execução e pagamento para toda a vigência do contrato com os seguintes dados?</p>
+
+          <!-- Itens do Contrato -->
+          <div class="mb-4">
+            <h6 class="fw-bold border-bottom pb-2 text-primary">1. Itens do Contrato</h6>
+            <div class="table-responsive">
+              <table class="table table-sm table-bordered table-striped align-middle" style="font-size: 0.85rem;">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width: 60px;" class="text-center">Item</th>
+                    <th>Descrição</th>
+                    <th style="width: 120px;" class="text-end">Qtd. Mensal</th>
+                    <th style="width: 120px;" class="text-end">Vl. Unitário</th>
+                    <th style="width: 120px;" class="text-end">Subtotal Mensal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in contrato.itens.all %}
+                    <tr>
+                      <td class="text-center font-monospace">{{ item.ordem }}</td>
+                      <td>{{ item.descricao }}</td>
+                      <td class="text-end">{{ item.quantidade }}</td>
+                      <td class="text-end">R$ {{ item.valor_unitario|brl }}</td>
+                      <td class="text-end fw-semibold">R$ {{ item.valor_subtotal|brl }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr>
+                      <td colspan="5" class="text-center text-muted">Nenhum item cadastrado.</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Checklist Documental -->
+          <div class="mb-4">
+            <h6 class="fw-bold border-bottom pb-2 text-primary">2. Checklist Documental (Lista de Documentos)</h6>
+            {% if contrato.checklist_ativo %}
+              <div class="card border border-light-subtle shadow-none bg-light-subtle">
+                <div class="card-header py-2 bg-light">
+                  <strong class="small text-muted">Checklist Ativo:</strong> <span class="fw-bold text-dark">{{ contrato.checklist_ativo.nome }}</span>
+                </div>
+                <ul class="list-group list-group-flush" style="font-size: 0.85rem;">
+                  {% for item in contrato.checklist_ativo.itens.all %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-2 bg-transparent">
+                      <div>
+                        <span class="text-muted fw-bold me-2 font-monospace">{{ item.ordem }}.</span>
+                        <span>{{ item.titulo }}</span>
+                      </div>
+                      {% if item.obrigatorio %}
+                        <span class="badge text-bg-danger rounded-pill px-2" style="font-size: 0.7rem;">Obrigatório</span>
+                      {% else %}
+                        <span class="badge text-bg-secondary rounded-pill px-2" style="font-size: 0.7rem;">Opcional</span>
+                      {% endif %}
+                    </li>
+                  {% empty %}
+                    <li class="list-group-item text-muted py-2 bg-transparent text-center">Nenhum documento cadastrado nesta versão.</li>
+                  {% endfor %}
+                </ul>
+              </div>
+            {% else %}
+              <div class="alert alert-danger py-2 px-3 small border-0 mb-0">
+                Nenhum checklist ativo no contrato. A geração de competências não é permitida sem um checklist ativo.
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Avaliação de Qualidade -->
+          <div class="mb-3">
+            <h6 class="fw-bold border-bottom pb-2 text-primary">3. Avaliação de Qualidade</h6>
+            {% if contrato.formulario_avaliacao_ativo %}
+              <div class="card border border-light-subtle shadow-none bg-light-subtle">
+                <div class="card-header py-2 bg-light">
+                  <strong class="small text-muted">Formulário de Avaliação Ativo:</strong> <span class="fw-bold text-dark">{{ contrato.formulario_avaliacao_ativo.nome }}</span>
+                </div>
+                <div class="card-body p-2" style="font-size: 0.85rem;">
+                  {% for grupo in contrato.formulario_avaliacao_ativo.grupos.all %}
+                    <div class="{% if not forloop.first %}mt-3{% endif %}">
+                      <div class="fw-bold text-secondary mb-1" style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                        Grupo: {{ grupo.nome }}
+                      </div>
+                      <ul class="list-group list-group-flush">
+                        {% for item in grupo.itens.all %}
+                          <li class="list-group-item py-1 bg-transparent border-0 d-flex justify-content-between align-items-start ps-0 pe-0">
+                            <span class="text-dark"><span class="text-muted font-monospace me-1">{{ item.ordem }}.</span>{{ item.descricao }}</span>
+                            <span class="badge text-bg-info rounded-pill ms-2 text-white fw-semibold" style="font-size: 0.7rem; flex-shrink: 0;">Peso: {{ item.peso_percentual }}%</span>
+                          </li>
+                        {% empty %}
+                          <li class="list-group-item py-1 bg-transparent border-0 text-muted ps-0 pe-0">Nenhum item neste grupo.</li>
+                        {% endfor %}
+                      </ul>
+                    </div>
+                  {% empty %}
+                    <p class="text-muted mb-0 text-center py-2">Nenhum grupo cadastrado nesta avaliação.</p>
+                  {% endfor %}
+                </div>
+              </div>
+            {% else %}
+              <div class="text-muted font-italic ps-2" style="font-size: 0.9rem;">
+                <em>Sem avaliação de qualidade</em>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Não, cancelar</button>
+          <button type="button" class="btn btn-primary px-4" id="btnConfirmarGeracaoCompetencias" disabled>
+            Sim, gerar competências (10s)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="modal fade" id="ramalContactModal" tabindex="-1" aria-labelledby="ramalContactModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered ramal-contact-dialog">
@@ -438,399 +892,377 @@
             <img id="ramalContactPhoto" src="" alt="">
           </div>
           <div class="ramal-contact-data">
-            <section class="ramal-contact-field ramal-contact-field-name">
-              <span>Nome</span>
-              <h2 id="ramalContactModalTitle"></h2>
-            </section>
-            <section class="ramal-contact-field ramal-contact-field-cargo">
-              <span>Cargo</span>
-              <p id="ramalContactCargo"></p>
-            </section>
-            <section class="ramal-contact-field ramal-contact-field-setor">
-              <span>Setor</span>
-              <p id="ramalContactSetor"></p>
-            </section>
-            <section class="ramal-contact-field ramal-contact-field-email">
-              <span>E-mail</span>
-              <button
-                id="ramalContactEmail"
-                class="ramal-contact-email ramal-email-trigger"
-                type="button"
-                data-email=""
-                aria-label="Abrir ações para o e-mail"
-              ></button>
-            </section>
-            <section class="ramal-contact-field ramal-contact-field-ramal">
-              <span>Ramal</span>
-              <p id="ramalContactRamal"></p>
-            </section>
-            <section class="ramal-contact-field ramal-contact-field-celular" id="ramalContactCelularWrapper" style="display: none;">
-              <span>Celular</span>
-              <p><a id="ramalContactCelular" href="" target="_blank" rel="noopener" style="color: #198754; text-decoration: none; font-weight: bold;"></a></p>
-            </section>
-            <section class="ramal-contact-field ramal-contact-field-local">
-              <span>Localização</span>
-              <p id="ramalContactLocal"></p>
-            </section>
+            <section class="ramal-contact-field ramal-contact-field-name"><span>Nome</span><h2 id="ramalContactModalTitle"></h2></section>
+            <section class="ramal-contact-field ramal-contact-field-cargo"><span>Cargo</span><p id="ramalContactCargo"></p></section>
+            <section class="ramal-contact-field ramal-contact-field-setor"><span>Setor</span><p id="ramalContactSetor"></p></section>
+            <section class="ramal-contact-field ramal-contact-field-email"><span>E-mail</span><button id="ramalContactEmail" class="ramal-contact-email ramal-email-trigger" type="button" data-email="" aria-label="Abrir ações para o e-mail"></button></section>
+            <section class="ramal-contact-field ramal-contact-field-ramal"><span>Ramal</span><p id="ramalContactRamal"></p></section>
+            <section class="ramal-contact-field ramal-contact-field-celular" id="ramalContactCelularWrapper" style="display: none;"><span>Celular</span><p><a id="ramalContactCelular" href="" target="_blank" rel="noopener" style="color: #198754; text-decoration: none; font-weight: bold;"></a></p></section>
+            <section class="ramal-contact-field ramal-contact-field-local"><span>Localização</span><p id="ramalContactLocal"></p></section>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="modal fade" id="checklistAnexoModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-      <div class="modal-content border-0 shadow-lg contratos-modal">
-        <div class="modal-header border-0">
-          <h2 class="modal-title fs-5">Anexar documento do checklist</h2>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+  <!-- Modal de Aguarde para Geração do PDF -->
+  <div class="modal fade" id="baixarDocsAguardeModal" tabindex="-1" aria-labelledby="baixarDocsAguardeModalTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-light">
+          <h5 class="modal-title" id="baixarDocsAguardeModalTitle">Preparando documentos</h5>
         </div>
-        <div class="modal-body" data-checklist-anexo-modal-body>
-          <div class="text-muted">Carregando formulário...</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal fade" id="checklistPreviewModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-      <div class="modal-content border-0 shadow-lg contratos-modal">
-        <div class="modal-header border-0">
-          <h2 class="modal-title fs-5" id="checklistPreviewTitle">Visualização do anexo</h2>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-        </div>
-        <div class="modal-body">
-          <iframe
-            id="checklistPreviewFrame"
-            title="Pré-visualização do anexo do checklist"
-            style="width: 100%; min-height: 70vh; border: 1px solid rgba(20, 54, 66, 0.12); border-radius: 0.75rem;"
-          ></iframe>
-          <div class="mt-3">
-            <a class="btn btn-outline-secondary" id="checklistPreviewOpenLink" href="#" target="_blank" rel="noopener">Abrir em nova aba</a>
+        <div class="modal-body py-4">
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="spinner-border text-success flex-shrink-0" role="status"></div>
+            <div>
+              <p class="mb-1 fw-bold" id="baixarDocsEtapaAtual">Iniciando geração do PDF consolidado.</p>
+              <p class="text-muted small mb-0" id="baixarDocsMensagem">Aguarde enquanto o sistema prepara as capas, anexos e relatórios.</p>
+            </div>
           </div>
+          <div class="progress" role="progressbar" aria-label="Progresso da geração do PDF" aria-valuemin="0" aria-valuemax="100">
+            <div
+              class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+              id="baixarDocsProgressBar"
+              style="width: 0%;"
+            >0%</div>
+          </div>
+          <p class="text-muted small mt-3 mb-0">O download começará automaticamente quando o arquivo estiver pronto.</p>
+          <div class="alert alert-danger mt-3 d-none" id="baixarDocsErroBox"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+          <button type="button" class="btn btn-primary d-none" id="baixarDocsTentarNovamente">Tentar novamente</button>
         </div>
       </div>
     </div>
   </div>
+{% endblock %}
 
-  <div class="ramal-email-popover" id="ramalEmailPopover" role="tooltip" hidden>
-    <div class="ramal-email-popover-address" id="ramalEmailPopoverAddress"></div>
-    <div class="ramal-email-popover-actions">
-      <a class="ramal-email-action" id="ramalEmailTeams" href="#" target="_blank" rel="noopener">
-        <span class="ramal-email-logo ramal-email-logo-teams" aria-hidden="true">
-          <svg viewBox="0 0 24 24" focusable="false">
-            <rect x="7" y="4" width="13" height="14" rx="2"></rect>
-            <rect x="3" y="7" width="10" height="10" rx="1.5"></rect>
-            <path d="M6 10h4M8 10v5"></path>
-          </svg>
-        </span>
-        <span>Teams</span>
-      </a>
-      <a class="ramal-email-action" id="ramalEmailOutlook" href="#" target="_blank" rel="noopener">
-        <span class="ramal-email-logo ramal-email-logo-outlook" aria-hidden="true">
-          <svg viewBox="0 0 24 24" focusable="false">
-            <rect x="4" y="6" width="15" height="12" rx="2"></rect>
-            <rect x="2" y="8" width="10" height="8" rx="1.5"></rect>
-            <path d="M5 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0M12 9l4 3l4-3"></path>
-          </svg>
-        </span>
-        <span>Outlook</span>
-      </a>
-      <button class="ramal-email-action" id="ramalEmailCopy" type="button">
-        <span class="ramal-email-logo ramal-email-logo-copy" aria-hidden="true">
-          <svg viewBox="0 0 24 24" focusable="false">
-            <rect x="8" y="8" width="10" height="12" rx="2"></rect>
-            <path d="M6 16h-.5A1.5 1.5 0 0 1 4 14.5v-9A1.5 1.5 0 0 1 5.5 4h8A1.5 1.5 0 0 1 15 5.5V6"></path>
-          </svg>
-        </span>
-        <span id="ramalEmailCopyText">Copiar</span>
-      </button>
-    </div>
-  </div>
+{% block extra_js %}
   <script>
-    function positionContratoActionMenu(menu) {
-      var toggle = menu.querySelector('.spi-action-menu-toggle');
-      var panel = menu.querySelector('.spi-action-menu-panel');
-      if (!toggle || !panel) {
-        return;
-      }
-      var rect = toggle.getBoundingClientRect();
-      var maxTop = Math.max(8, window.innerHeight - panel.offsetHeight - 8);
-      panel.style.right = 'auto';
-      panel.style.left = Math.max(8, rect.right - panel.offsetWidth) + 'px';
-      panel.style.top = Math.min(maxTop, Math.max(8, rect.top + (rect.height / 2) - (panel.offsetHeight / 2))) + 'px';
-    }
-
-    function closeContratoActionMenus(exceptToggle) {
-      document.querySelectorAll('.spi-action-menu.is-open').forEach(function (menu) {
-        if (!exceptToggle || !menu.contains(exceptToggle)) {
-          menu.classList.remove('is-open');
-          var panel = menu.querySelector('.spi-action-menu-panel');
-          if (panel) {
-            panel.hidden = true;
-            panel.style.left = '';
-            panel.style.right = '';
-            panel.style.top = '';
-          }
-          var openToggle = menu.querySelector('.spi-action-menu-toggle');
-          if (openToggle) {
-            openToggle.setAttribute('aria-expanded', 'false');
-          }
-        }
-      });
-    }
-
-    document.addEventListener('click', function (event) {
-      var toggle = event.target.closest('.spi-action-menu-toggle');
-      closeContratoActionMenus(toggle);
-      if (!toggle) {
-        return;
-      }
-      var menu = toggle.closest('.spi-action-menu');
-      var isOpen = menu.classList.toggle('is-open');
-      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      var panel = menu.querySelector('.spi-action-menu-panel');
-      if (panel) {
-        panel.hidden = !isOpen;
-      }
-      if (isOpen) {
-        positionContratoActionMenu(menu);
-      }
-      event.preventDefault();
-    });
-
-    document.addEventListener('keydown', function (event) {
-      if (event.key !== 'Escape') {
-        return;
-      }
-      closeContratoActionMenus();
-    });
-
-    window.addEventListener('scroll', function () {
-      document.querySelectorAll('.spi-action-menu.is-open').forEach(positionContratoActionMenu);
-    }, true);
-
-    window.addEventListener('resize', function () {
-      document.querySelectorAll('.spi-action-menu.is-open').forEach(positionContratoActionMenu);
-    });
-
-    (function () {
-      const modalElement = document.getElementById('checklistAnexoModal');
-      const modalBody = modalElement ? modalElement.querySelector('[data-checklist-anexo-modal-body]') : null;
-      if (!modalElement || !modalBody) {
-        return;
-      }
-
-      const modal = new bootstrap.Modal(modalElement);
-
-      const loadModalForm = async (url) => {
-        modalBody.innerHTML = '<div class="text-muted">Carregando formulário...</div>';
-        try {
-          const response = await fetch(url, {
-            headers: {'X-Requested-With': 'XMLHttpRequest'}
-          });
-          modalBody.innerHTML = await response.text();
-        } catch (error) {
-          modalBody.innerHTML = '<div class="alert alert-danger mb-0">Não foi possível carregar o formulário de anexo agora.</div>';
-        }
-      };
-
-      document.addEventListener('click', async function (event) {
-        const openButton = event.target.closest('[data-checklist-anexo-modal-open]');
-        if (!openButton) {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        modal.show();
-        await loadModalForm(openButton.dataset.url);
-      });
-
-      modalBody.addEventListener('submit', async function (event) {
-        const form = event.target.closest('[data-checklist-anexo-modal-form]');
-        if (!form) {
-          return;
-        }
-        event.preventDefault();
-        const response = await fetch(form.action, {
-          method: 'POST',
-          headers: {'X-Requested-With': 'XMLHttpRequest'},
-          body: new FormData(form),
-        });
-        const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const payload = await response.json();
-          if (payload.success) {
-            modal.hide();
-            window.location.reload();
-          }
-          return;
-        }
-        modalBody.innerHTML = await response.text();
-      });
-    }());
-
-    (function () {
-      const modalElement = document.getElementById('checklistPreviewModal');
-      const frame = document.getElementById('checklistPreviewFrame');
-      const title = document.getElementById('checklistPreviewTitle');
-      const link = document.getElementById('checklistPreviewOpenLink');
-      if (!modalElement || !frame || !title || !link) {
-        return;
-      }
-
-      const modal = new bootstrap.Modal(modalElement);
-
-      document.addEventListener('click', function (event) {
-        const trigger = event.target.closest('[data-checklist-preview-open]');
-        if (!trigger) {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        const url = trigger.dataset.fileUrl || '';
-        const name = trigger.dataset.fileName || 'Visualização do anexo';
-        const pdfUrl = url ? `${url}#toolbar=1&navpanes=0&view=FitH` : '';
-        title.textContent = name;
-        frame.src = pdfUrl;
-        link.href = url;
-        modal.show();
-      });
-
-      modalElement.addEventListener('hidden.bs.modal', function () {
-        frame.src = '';
-        link.href = '#';
-      });
-    }());
-
     const ramalContactModal = document.getElementById('ramalContactModal');
     if (ramalContactModal) {
-      const ramalModalInstance = bootstrap.Modal.getOrCreateInstance(ramalContactModal);
-
-      window.openContratoResponsavelModal = function (trigger) {
-        if (!trigger) {
-          return;
-        }
+      ramalContactModal.addEventListener('show.bs.modal', (event) => {
+        const trigger = event.relatedTarget;
+        if (!trigger) return;
         const name = trigger.dataset.name || '-';
         const photo = trigger.dataset.photo || '';
-
         document.getElementById('ramalContactModalTitle').textContent = name;
         document.getElementById('ramalContactCargo').textContent = trigger.dataset.cargo || '-';
         document.getElementById('ramalContactSetor').textContent = trigger.dataset.setor || '-';
-        const modalEmail = document.getElementById('ramalContactEmail');
         const email = trigger.dataset.email || '-';
+        const modalEmail = document.getElementById('ramalContactEmail');
         modalEmail.textContent = email;
         modalEmail.dataset.email = email;
-        modalEmail.title = email;
-        modalEmail.setAttribute('aria-label', `Abrir ações para ${email}`);
-        const ramalVal = trigger.dataset.ramal || '-';
-        document.getElementById('ramalContactRamal').textContent = (ramalVal !== '-' && ramalVal !== '') ? 'R: ' + ramalVal : '-';
+        document.getElementById('ramalContactRamal').textContent = trigger.dataset.ramal ? 'R: ' + trigger.dataset.ramal : '-';
         document.getElementById('ramalContactLocal').textContent = trigger.dataset.local || '-';
-
         const celular = trigger.dataset.celular || '';
         const whatsapp = trigger.dataset.whatsapp || '';
         const celularWrapper = document.getElementById('ramalContactCelularWrapper');
         const celularElement = document.getElementById('ramalContactCelular');
-        if (celularWrapper && celularElement) {
-          if (celular) {
-            celularElement.textContent = 'Celular: ' + celular;
-            celularElement.href = whatsapp || '#';
-            celularWrapper.style.display = 'block';
-          } else {
-            celularWrapper.style.display = 'none';
-          }
+        if (celular) {
+          celularElement.textContent = 'Celular: ' + celular;
+          celularElement.href = whatsapp;
+          celularWrapper.style.display = 'block';
+        } else {
+          celularWrapper.style.display = 'none';
         }
-
         const photoElement = document.getElementById('ramalContactPhoto');
         photoElement.src = photo;
         photoElement.alt = name;
-        ramalModalInstance.show();
-      };
-    }
-
-    const ramalEmailPopover = document.getElementById('ramalEmailPopover');
-    const ramalEmailPopoverAddress = document.getElementById('ramalEmailPopoverAddress');
-    const ramalEmailTeams = document.getElementById('ramalEmailTeams');
-    const ramalEmailOutlook = document.getElementById('ramalEmailOutlook');
-    const ramalEmailCopy = document.getElementById('ramalEmailCopy');
-    const ramalEmailCopyText = document.getElementById('ramalEmailCopyText');
-    const ramalEmailTrigger = document.getElementById('ramalContactEmail');
-
-    function closeRamalEmailPopover() {
-      if (!ramalEmailPopover) return;
-      ramalEmailPopover.hidden = true;
-      ramalEmailPopover.dataset.email = '';
-      if (ramalEmailCopyText) {
-        ramalEmailCopyText.textContent = 'Copiar';
-      }
-    }
-
-    function positionRamalEmailPopover(trigger) {
-      if (!ramalEmailPopover || !trigger) return;
-      const rect = trigger.getBoundingClientRect();
-      const top = rect.bottom + window.scrollY + 10;
-      const left = Math.max(12, rect.left + window.scrollX);
-      ramalEmailPopover.style.top = `${top}px`;
-      ramalEmailPopover.style.left = `${left}px`;
-    }
-
-    if (ramalEmailTrigger) {
-      ramalEmailTrigger.addEventListener('click', function () {
-        const email = (ramalEmailTrigger.dataset.email || '').trim();
-        if (!email || email === '-') {
-          return;
-        }
-        const alreadyOpen = !ramalEmailPopover.hidden && ramalEmailPopover.dataset.email === email;
-        if (alreadyOpen) {
-          closeRamalEmailPopover();
-          return;
-        }
-        ramalEmailPopover.hidden = false;
-        ramalEmailPopover.dataset.email = email;
-        ramalEmailPopoverAddress.textContent = email;
-        ramalEmailTeams.href = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`;
-        ramalEmailOutlook.href = `mailto:${encodeURIComponent(email)}`;
-        if (ramalEmailCopyText) {
-          ramalEmailCopyText.textContent = 'Copiar';
-        }
-        positionRamalEmailPopover(ramalEmailTrigger);
       });
     }
 
-    if (ramalEmailCopy) {
-      ramalEmailCopy.addEventListener('click', async function () {
-        const email = ramalEmailPopover ? ramalEmailPopover.dataset.email || '' : '';
-        if (!email) {
-          return;
-        }
-        try {
-          await navigator.clipboard.writeText(email);
-          if (ramalEmailCopyText) {
-            ramalEmailCopyText.textContent = 'Copiado';
+    // Lógica para o modal de confirmação de geração de competências
+    document.addEventListener('DOMContentLoaded', function() {
+      const btnDisparar = document.getElementById('btnDispararModalCompetencias');
+      const formGerar = document.getElementById('formGerarCompetencias');
+      const modalElement = document.getElementById('confirmarCompetenciasModal');
+      const btnConfirmar = document.getElementById('btnConfirmarGeracaoCompetencias');
+      
+      if (btnDisparar && modalElement && btnConfirmar && formGerar) {
+        const modal = new bootstrap.Modal(modalElement);
+        let timer = null;
+        let tempoRestante = 10;
+        
+        btnDisparar.addEventListener('click', function() {
+          modal.show();
+        });
+        
+        modalElement.addEventListener('shown.bs.modal', function() {
+          tempoRestante = 10;
+          btnConfirmar.disabled = true;
+          btnConfirmar.textContent = `Sim, gerar competências (${tempoRestante}s)`;
+          
+          if (timer) clearInterval(timer);
+          
+          timer = setInterval(function() {
+            tempoRestante--;
+            if (tempoRestante > 0) {
+              btnConfirmar.textContent = `Sim, gerar competências (${tempoRestante}s)`;
+            } else {
+              clearInterval(timer);
+              btnConfirmar.disabled = false;
+              btnConfirmar.textContent = 'Sim, gerar competências';
+            }
+          }, 1000);
+        });
+        
+        modalElement.addEventListener('hidden.bs.modal', function() {
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
           }
-        } catch (error) {
-          if (ramalEmailCopyText) {
-            ramalEmailCopyText.textContent = 'Falhou';
-          }
-        }
-      });
-    }
-
-    document.addEventListener('click', function (event) {
-      if (!ramalEmailPopover || ramalEmailPopover.hidden) {
-        return;
+          btnConfirmar.disabled = true;
+          btnConfirmar.textContent = 'Sim, gerar competências (10s)';
+        });
+        
+        btnConfirmar.addEventListener('click', function() {
+          // Desabilita para evitar múltiplos envios
+          btnConfirmar.disabled = true;
+          btnConfirmar.textContent = 'Processando...';
+          formGerar.submit();
+        });
       }
-      if (event.target.closest('#ramalEmailPopover') || event.target.closest('#ramalContactEmail')) {
-        return;
-      }
-      closeRamalEmailPopover();
     });
 
-    window.addEventListener('resize', function () {
-      if (!ramalEmailPopover || ramalEmailPopover.hidden || !ramalEmailTrigger) {
-        return;
+    // Lógica para geração assíncrona do PDF consolidado com polling por etapas
+    document.addEventListener('DOMContentLoaded', function() {
+      const baixarBtns = document.querySelectorAll('.btn-baixar-documentos');
+      const modalElement = document.getElementById('baixarDocsAguardeModal');
+      const etapaElement = document.getElementById('baixarDocsEtapaAtual');
+      const mensagemElement = document.getElementById('baixarDocsMensagem');
+      const progressBar = document.getElementById('baixarDocsProgressBar');
+      const erroBox = document.getElementById('baixarDocsErroBox');
+      const btnRetry = document.getElementById('baixarDocsTentarNovamente');
+
+      if (baixarBtns.length && modalElement && etapaElement && mensagemElement && progressBar && erroBox && btnRetry) {
+        const modal = new bootstrap.Modal(modalElement);
+        let pollingHandle = null;
+        let ultimoStartUrl = '';
+
+        function getCsrfToken() {
+          const cookie = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('csrftoken='));
+          return cookie ? decodeURIComponent(cookie.split('=')[1]) : '';
+        }
+
+        function resetModalState() {
+          etapaElement.textContent = 'Iniciando geração do PDF consolidado.';
+          mensagemElement.textContent = 'Aguarde enquanto o sistema prepara as capas, anexos e relatórios.';
+          progressBar.style.width = '0%';
+          progressBar.textContent = '0%';
+          progressBar.setAttribute('aria-valuenow', '0');
+          progressBar.classList.remove('bg-danger');
+          progressBar.classList.add('bg-success', 'progress-bar-striped', 'progress-bar-animated');
+          erroBox.classList.add('d-none');
+          erroBox.textContent = '';
+          btnRetry.classList.add('d-none');
+        }
+
+        function stopPolling() {
+          if (pollingHandle) {
+            clearInterval(pollingHandle);
+            pollingHandle = null;
+          }
+        }
+
+        function atualizarModalComStatus(data) {
+          const percentual = Number(data.percentual || 0);
+          etapaElement.textContent = data.etapa_atual || 'Processando documentos';
+          mensagemElement.textContent = data.mensagem || 'Aguarde a finalização do PDF consolidado.';
+          progressBar.style.width = `${percentual}%`;
+          progressBar.textContent = `${percentual}%`;
+          progressBar.setAttribute('aria-valuenow', `${percentual}`);
+        }
+
+        function tratarErro(mensagem) {
+          stopPolling();
+          progressBar.classList.remove('bg-success', 'progress-bar-striped', 'progress-bar-animated');
+          progressBar.classList.add('bg-danger');
+          erroBox.textContent = mensagem || 'Não foi possível gerar o PDF consolidado.';
+          erroBox.classList.remove('d-none');
+          btnRetry.classList.remove('d-none');
+          etapaElement.textContent = 'Falha na geração';
+          mensagemElement.textContent = 'Revise a mensagem abaixo e tente novamente.';
+        }
+
+        async function acompanharJob(statusUrl) {
+          stopPolling();
+          pollingHandle = setInterval(async function() {
+            try {
+              const response = await fetch(statusUrl, {
+                headers: {
+                  'X-Requested-With': 'XMLHttpRequest',
+                },
+              });
+              const data = await response.json();
+              if (!response.ok) {
+                throw new Error(data.detail || 'Não foi possível consultar o andamento da exportação.');
+              }
+              atualizarModalComStatus(data);
+              if (data.status === 'CONCLUIDO' && data.download_url) {
+                stopPolling();
+                progressBar.style.width = '100%';
+                progressBar.textContent = '100%';
+                progressBar.setAttribute('aria-valuenow', '100');
+                window.location.href = data.download_url;
+                setTimeout(function() {
+                  modal.hide();
+                }, 800);
+              } else if (data.status === 'ERRO') {
+                tratarErro(data.erro_detalhe || data.mensagem || 'Não foi possível gerar o PDF consolidado.');
+              }
+            } catch (error) {
+              tratarErro(error.message);
+            }
+          }, 1500);
+        }
+
+        async function iniciarGeracao(startUrl) {
+          ultimoStartUrl = startUrl;
+          resetModalState();
+          modal.show();
+          try {
+            const response = await fetch(startUrl, {
+              method: 'POST',
+              headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
+              },
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.detail || 'Não foi possível iniciar a geração do PDF.');
+            }
+            atualizarModalComStatus(data);
+            const statusUrl = `/contratos/competencias/download-docs/jobs/${data.job_id}/status/`;
+            acompanharJob(statusUrl);
+          } catch (error) {
+            tratarErro(error.message);
+          }
+        }
+
+        btnRetry.addEventListener('click', function() {
+          if (ultimoStartUrl) {
+            iniciarGeracao(ultimoStartUrl);
+          }
+        });
+
+        modalElement.addEventListener('hidden.bs.modal', function() {
+          stopPolling();
+        });
+
+        baixarBtns.forEach(btn => {
+          btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            iniciarGeracao(this.dataset.startUrl);
+          });
+        });
       }
-      positionRamalEmailPopover(ramalEmailTrigger);
+    });
+
+    // =========================================================================
+    // Paginação local e dinâmica das Competências Geradas (de 5 em 5)
+    // =========================================================================
+    document.addEventListener('DOMContentLoaded', function() {
+      // Seleciona todos os cards de competência e o container de paginação
+      const cards = document.querySelectorAll('#competencias-paginadas-list .contratos-competencia-card');
+      const paginacaoContainer = document.getElementById('competencias-paginacao');
+      
+      // Se não houver competências ou o container de paginação, interrompe a execução
+      if (!cards.length || !paginacaoContainer) return;
+      
+      const itemsPerPage = 5;
+      const totalPages = Math.ceil(cards.length / itemsPerPage);
+      let currentPage = 1;
+      
+      // Função responsável por renderizar a página específica
+      function renderPage(page) {
+        currentPage = page;
+        const start = (page - 1) * itemsPerPage;
+        const end = start + itemsPerPage;
+        
+        // Exibe apenas os cards pertencentes à página atual e esconde os outros
+        cards.forEach((card, index) => {
+          if (index >= start && index < end) {
+            card.style.display = 'block';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+        
+        // Atualiza a barra de navegação/botões da paginação
+        renderPaginationControls();
+      }
+      
+      // Função responsável por construir e renderizar os botões de paginação (Bootstrap)
+      function renderPaginationControls() {
+        paginacaoContainer.innerHTML = '';
+        
+        // Botão "Anterior"
+        const prevLi = document.createElement('li');
+        prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+        const prevLink = document.createElement('a');
+        prevLink.className = 'page-link';
+        prevLink.href = '#';
+        prevLink.textContent = 'Anterior';
+        prevLink.setAttribute('aria-label', 'Página anterior');
+        if (currentPage > 1) {
+          prevLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            renderPage(currentPage - 1);
+          });
+        } else {
+          prevLink.addEventListener('click', function(e) { e.preventDefault(); });
+        }
+        prevLi.appendChild(prevLink);
+        paginacaoContainer.appendChild(prevLi);
+        
+        // Botões para páginas numeradas
+        for (let i = 1; i <= totalPages; i++) {
+          const pageLi = document.createElement('li');
+          pageLi.className = `page-item ${currentPage === i ? 'active' : ''}`;
+          const pageLink = document.createElement('a');
+          pageLink.className = 'page-link';
+          pageLink.href = '#';
+          pageLink.textContent = i;
+          if (currentPage !== i) {
+            pageLink.addEventListener('click', function(e) {
+              e.preventDefault();
+              renderPage(i);
+            });
+          } else {
+            pageLink.addEventListener('click', function(e) { e.preventDefault(); });
+          }
+          pageLi.appendChild(pageLink);
+          paginacaoContainer.appendChild(pageLi);
+        }
+        
+        // Botão "Próximo"
+        const nextLi = document.createElement('li');
+        nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+        const nextLink = document.createElement('a');
+        nextLink.className = 'page-link';
+        nextLink.href = '#';
+        nextLink.textContent = 'Próximo';
+        nextLink.setAttribute('aria-label', 'Próxima página');
+        if (currentPage < totalPages) {
+          nextLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            renderPage(currentPage + 1);
+          });
+        } else {
+          nextLink.addEventListener('click', function(e) { e.preventDefault(); });
+        }
+        nextLi.appendChild(nextLink);
+        paginacaoContainer.appendChild(nextLi);
+      }
+      
+      // Inicializa exibindo a primeira página de competências
+      renderPage(1);
     });
   </script>
 {% endblock %}

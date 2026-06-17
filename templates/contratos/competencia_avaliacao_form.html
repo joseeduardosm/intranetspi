@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% load static %}
-{% load contratos_v2_extras %}
+{% load contratos_extras %}
 <!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
 <!-- Objetivo: Permitir o preenchimento da avaliação de qualidade da competência com justificativas e manifestação do gestor. -->
-{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos_v2/css/contratos_v2.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
 
 {% block content %}
   <div class="spi-page-title">
@@ -11,13 +11,13 @@
     <p>{{ contrato.numero_contrato }} • {{ avaliacao.formulario.nome }}</p>
   </div>
 
-  <div class="card border-0 shadow-sm contratos-v2-form-card">
+  <div class="card border-0 shadow-sm contratos-form-card">
     <div class="card-body p-4">
-      <form method="post">
+      <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         {% regroup avaliacao.itens.all by grupo_nome as grupos %}
         {% for grupo in grupos %}
-          <section class="contratos-v2-avaliacao-group">
+          <section class="contratos-avaliacao-group">
             <div class="mb-3">
               <h2>{{ grupo.grouper }}</h2>
             </div>
@@ -30,42 +30,52 @@
               {% item_field_errors form resposta.pk 'justificativa_fiscal' as justificativa_fiscal_errors %}
               {% item_field_errors form resposta.pk 'nota_gestor' as nota_gestor_errors %}
               {% item_field_errors form resposta.pk 'manifestacao_gestor_item' as manifestacao_item_errors %}
-              <article class="contratos-v2-avaliacao-item" data-avaliacao-item data-max-nota="{{ form.max_nota_js }}">
+              <article class="contratos-avaliacao-item" data-avaliacao-item data-max-nota="{{ form.max_nota_js }}">
                 <strong>{{ resposta.item_ordem }}. {{ resposta.item_descricao }}</strong>
                 {% if resposta.item_observacoes_padrao %}<p class="text-muted mt-2">{{ resposta.item_observacoes_padrao }}</p>{% endif %}
-                <div class="contratos-v2-avaliacao-grid mt-3">
-                  <section class="contratos-v2-avaliacao-role" data-avaliacao-role="fiscal">
-                    <div class="contratos-v2-avaliacao-role-head">
+                <div class="contratos-avaliacao-grid mt-3">
+                  <section class="contratos-avaliacao-role" data-avaliacao-role="fiscal">
+                    <div class="contratos-avaliacao-role-head">
                       <h3>Fiscal</h3>
                     </div>
                     <div class="mt-3">
                       <label class="form-label" for="{{ nota_fiscal_field.id_for_label }}">Nota do fiscal</label>
                       {{ nota_fiscal_field.as_widget|safe }}
                       {% for error in nota_fiscal_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                      {% item_audit_footer resposta 'nota_fiscal' as nota_fiscal_footer %}
+                      {% if nota_fiscal_footer %}
+                        <!-- O log da nota fica sempre visível quando houver histórico, independentemente do valor lançado. -->
+                        <div class="form-text contratos-audit-footer">{{ nota_fiscal_footer }}</div>
+                      {% endif %}
                     </div>
-                    <div class="contratos-v2-avaliacao-textarea-wrap mt-3" data-avaliacao-textarea-wrap>
+                    <div class="contratos-avaliacao-textarea-wrap mt-3" data-avaliacao-textarea-wrap>
                       <label class="form-label" for="{{ justificativa_fiscal_field.id_for_label }}">Justificativa do fiscal - nota <span data-nota-display>{{ nota_fiscal_field.value|default:"-" }}</span></label>
                       {{ justificativa_fiscal_field }}
                       {% for error in justificativa_fiscal_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                       {% item_audit_footer resposta 'justificativa_fiscal' as justificativa_footer %}
-                      {% if justificativa_footer %}<div class="form-text contratos-v2-audit-footer">{{ justificativa_footer }}</div>{% endif %}
+                      {% if justificativa_footer %}<div class="form-text contratos-audit-footer">{{ justificativa_footer }}</div>{% endif %}
                     </div>
                   </section>
-                  <section class="contratos-v2-avaliacao-role" data-avaliacao-role="gestor">
-                    <div class="contratos-v2-avaliacao-role-head">
+                  <section class="contratos-avaliacao-role" data-avaliacao-role="gestor">
+                    <div class="contratos-avaliacao-role-head">
                       <h3>Gestor</h3>
                     </div>
                     <div class="mt-3">
                       <label class="form-label" for="{{ nota_gestor_field.id_for_label }}">Nota do gestor</label>
                       {{ nota_gestor_field.as_widget|safe }}
                       {% for error in nota_gestor_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                      {% item_audit_footer resposta 'nota_gestor' as nota_gestor_footer %}
+                      {% if nota_gestor_footer %}
+                        <!-- O log da nota do gestor também precisa aparecer mesmo quando a nota não exige texto complementar. -->
+                        <div class="form-text contratos-audit-footer">{{ nota_gestor_footer }}</div>
+                      {% endif %}
                     </div>
-                    <div class="contratos-v2-avaliacao-textarea-wrap mt-3" data-avaliacao-textarea-wrap>
+                    <div class="contratos-avaliacao-textarea-wrap mt-3" data-avaliacao-textarea-wrap>
                       <label class="form-label" for="{{ manifestacao_item_field.id_for_label }}">Manifestação do gestor - nota <span data-nota-display>{{ nota_gestor_field.value|default:"-" }}</span></label>
                       {{ manifestacao_item_field }}
                       {% for error in manifestacao_item_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                       {% item_audit_footer resposta 'manifestacao_gestor_item' as manifestacao_footer %}
-                      {% if manifestacao_footer %}<div class="form-text contratos-v2-audit-footer">{{ manifestacao_footer }}</div>{% endif %}
+                      {% if manifestacao_footer %}<div class="form-text contratos-audit-footer">{{ manifestacao_footer }}</div>{% endif %}
                     </div>
                   </section>
                 </div>
@@ -75,13 +85,24 @@
         {% endfor %}
 
         <div class="mb-3">
+          <label class="form-label" for="{{ form.avaliacao_assinada.id_for_label }}">{{ form.avaliacao_assinada.label }}</label>
+          {{ form.avaliacao_assinada }}
+          {% if competencia.avaliacao_assinada %}
+            <div class="form-text">Arquivo atual: <a href="{{ competencia.avaliacao_assinada.url }}" target="_blank" rel="noopener">visualizar PDF</a></div>
+          {% endif %}
+          {% for error in form.avaliacao_assinada.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="mb-3">
           <label class="form-label" for="{{ form.observacoes.id_for_label }}">{{ form.observacoes.label }}</label>
           {{ form.observacoes }}
           {% for error in form.observacoes.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
         </div>
         {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
         <div class="d-flex gap-2 justify-content-end mt-4">
-          <a class="btn btn-light" href="{% url 'contratos_v2:contrato_detail' contrato.pk %}">Cancelar</a>
+          <a class="btn btn-light" href="{% url 'contratos:contrato_detail' contrato.pk %}">Cancelar</a>
+          {% if avaliacao_tem_conteudo %}
+            <a class="btn btn-outline-secondary" href="{% url 'contratos:competencia_avaliacao_download' competencia.pk %}">Baixar avaliação</a>
+          {% endif %}
           <button class="btn btn-primary" type="submit">Salvar avaliação</button>
         </div>
       </form>

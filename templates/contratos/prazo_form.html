@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% load static %}
-<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
-<!-- Objetivo: Reaproveitar um formulário genérico para os cadastros satélite do Contratos V2. -->
-{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos_v2/css/contratos_v2.css' %}">{% endblock %}
+<!-- Criado em 14/06/2026 -->
+<!-- Objetivo: Cadastrar e editar prazos de monitoramento do contrato V2 pós-competências. -->
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
 
 {% block content %}
   <div class="spi-page-title">
     <h1>{{ titulo }}</h1>
+    <p>{{ contrato.numero_contrato }} - {{ contrato.apelido }}</p>
   </div>
-  <div class="card border-0 shadow-sm contratos-v2-form-card">
+  <div class="card border-0 shadow-sm contratos-form-card">
     <div class="card-body p-4">
       <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
@@ -23,8 +24,8 @@
         {% endfor %}
         {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
         <div class="d-flex gap-2 justify-content-end">
-          <a class="btn btn-light" href="{{ cancel_url }}">Cancelar</a>
-          <button class="btn btn-primary" type="submit">Salvar</button>
+          <a class="btn btn-light" href="{% url 'contratos:contrato_detail' contrato.pk %}">Cancelar</a>
+          <button class="btn btn-primary" type="submit">Salvar prazo</button>
         </div>
       </form>
     </div>

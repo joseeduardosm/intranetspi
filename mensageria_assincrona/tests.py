@@ -21,6 +21,7 @@ from .services import (
     agendar_mensagem,
     cancelar_mensagem,
     criar_mensagem_rascunho,
+    enviar_mensagens_automaticas_aniversario,
     listar_pendentes_usuario,
     marcar_ciente,
     marcar_visualizacao,
@@ -39,7 +40,7 @@ class MensageriaBaseTest(TestCase):
         self.sem_acl = User.objects.create_user(username="clara", password="123", first_name="Clara")
         self.inativo = User.objects.create_user(username="desligado", password="123", is_active=False)
 
-        for user in [self.admin, self.destinatario, self.destinatario_2, self.sem_acl]:
+        for user in [self.admin, self.destinatario, self.destinatario_2, self.sem_acl, self.inativo]:
             perfil, _created = UsuarioPerfil.objects.get_or_create(user=user)
             perfil.nome_completo = user.get_full_name() or user.username
             perfil.save(update_fields=["nome_completo", "atualizado_em"])
@@ -130,6 +131,62 @@ class MensageriaServiceTests(MensageriaBaseTest):
         self.assertEqual(mensagem.status_envio, Mensagem.StatusEnvio.PUBLICADA)
         self.assertEqual(mensagem.destinos.filter(usuario=self.destinatario).count(), 1)
 
+    def test_envio_automatico_de_aniversario_publica_mensagem_para_aniversariante_do_dia(self):
+        hoje = timezone.localdate()
+        self.destinatario.perfil.data_nascimento = hoje
+        self.destinatario.perfil.nome_completo = "Ana Silva"
+        self.destinatario.perfil.save(update_fields=["data_nascimento", "nome_completo", "atualizado_em"])
+
+        total = enviar_mensagens_automaticas_aniversario(referencia=hoje)
+
+        self.assertEqual(total, 1)
+        destino = MensagemDestino.objects.get(usuario=self.destinatario)
+        self.assertEqual(destino.mensagem.assunto, "Feliz aniversário!")
+        self.assertEqual(destino.mensagem.status_envio, Mensagem.StatusEnvio.PUBLICADA)
+        self.assertIn("Ana Silva,", destino.corpo_snapshot)
+        self.assertIn("Feliz aniversário!", destino.corpo_snapshot)
+
+    def test_envio_automatico_de_aniversario_nao_duplica_no_mesmo_dia(self):
+        hoje = timezone.localdate()
+        self.destinatario.perfil.data_nascimento = hoje
+        self.destinatario.perfil.nome_completo = "Ana Silva"
+        self.destinatario.perfil.save(update_fields=["data_nascimento", "nome_completo", "atualizado_em"])
+
+        primeiro_total = enviar_mensagens_automaticas_aniversario(referencia=hoje)
+        segundo_total = enviar_mensagens_automaticas_aniversario(referencia=hoje)
+
+        self.assertEqual(primeiro_total, 1)
+        self.assertEqual(segundo_total, 0)
+        self.assertEqual(MensagemDestino.objects.filter(usuario=self.destinatario).count(), 1)
+
+    def test_envio_automatico_de_aniversario_nao_envia_para_aniversariante_do_mes_fora_do_dia(self):
+        hoje = timezone.localdate()
+        outro_dia_mesmo_mes = hoje.replace(day=1 if hoje.day != 1 else 2)
+        self.destinatario.perfil.data_nascimento = outro_dia_mesmo_mes
+        self.destinatario.perfil.nome_completo = "Ana Silva"
+        self.destinatario.perfil.save(update_fields=["data_nascimento", "nome_completo", "atualizado_em"])
+
+        total = enviar_mensagens_automaticas_aniversario(referencia=hoje)
+
+        self.assertEqual(total, 0)
+        self.assertFalse(MensagemDestino.objects.filter(usuario=self.destinatario).exists())
+
+    def test_command_de_aniversario_processa_so_usuarios_ativos_do_dia(self):
+        hoje = timezone.localdate()
+        self.destinatario.perfil.data_nascimento = hoje
+        self.destinatario.perfil.nome_completo = "Ana Silva"
+        self.destinatario.perfil.save(update_fields=["data_nascimento", "nome_completo", "atualizado_em"])
+        self.inativo.perfil.data_nascimento = hoje
+        self.inativo.perfil.nome_completo = "Inativo"
+        self.inativo.perfil.save(update_fields=["data_nascimento", "nome_completo", "atualizado_em"])
+
+        output = StringIO()
+        call_command("enviar_mensagens_aniversario", stdout=output)
+
+        self.assertIn("1 mensagem(ns) de aniversário enviada(s)", output.getvalue())
+        self.assertTrue(MensagemDestino.objects.filter(usuario=self.destinatario).exists())
+        self.assertFalse(MensagemDestino.objects.filter(usuario=self.inativo).exists())
+
 
 class MensageriaViewTests(MensageriaBaseTest):
     """Cobre acesso à inbox, proteção do admin e componentes globais da UI."""
@@ -163,6 +220,35 @@ class MensageriaViewTests(MensageriaBaseTest):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Gerencie comunicados internos")
+
+    def test_url_raiz_da_mensageria_exibe_tabela_administrativa(self):
+        self.client.login(username="admin-mensageria", password="123")
+
+        response = self.client.get(reverse("mensageria:root"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Payload e-mail")
+        self.assertContains(response, "Atualizada em")
+
+    def test_listagem_admin_ordena_por_coluna_solicitada(self):
+        antiga = criar_mensagem_rascunho(assunto="Zulu", corpo="Corpo B", criada_por=self.admin)
+        antiga.created_at = timezone.now() - timezone.timedelta(days=1)
+        antiga.updated_at = antiga.created_at
+        antiga.save(update_fields=["created_at", "updated_at"])
+
+        nova = criar_mensagem_rascunho(assunto="Alpha", corpo="Corpo A", criada_por=self.admin)
+        nova.created_at = timezone.now()
+        nova.updated_at = nova.created_at
+        nova.save(update_fields=["created_at", "updated_at"])
+
+        self.client.login(username="admin-mensageria", password="123")
+        response = self.client.get(reverse("mensageria:admin_list"), {"sort": "assunto", "dir": "asc"})
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertLess(content.index("Alpha"), content.index("Zulu"))
+        self.assertContains(response, "Origem pública")
+        self.assertContains(response, "Criada por")
 
     def test_usuario_nao_confirma_ciencia_de_mensagem_alheia(self):
         mensagem = self._criar_mensagem_para(self.destinatario)

@@ -12,6 +12,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from setores.models import UserSetorMembership
+from usuarios.models import UsuarioPerfil
 
 from .models import Mensagem, MensagemDestino, MensagemEvento
 
@@ -62,6 +63,78 @@ def criar_mensagem_rascunho(*, assunto, corpo, prioridade=Mensagem.Prioridade.NO
     )
     registrar_evento(mensagem, MensagemEvento.TipoAcao.CRIACAO, usuario=criada_por)
     return mensagem
+
+
+def corpo_mensagem_aniversario(nome_destinatario):
+    """Monta o texto institucional padrão usado no aniversário individual."""
+
+    return (
+        f"{nome_destinatario},\n\n"
+        "A Secretaria de Parcerias em Investimentos parabeniza você por mais um ano de vida.\n\n"
+        "Desejamos que esta data seja marcada por alegria, saúde, prosperidade e muitas realizações. "
+        "Que o novo ciclo traga novas oportunidades, conquistas e momentos especiais ao lado de familiares, "
+        "amigos e colegas.\n\n"
+        "Agradecemos sua dedicação, profissionalismo e contribuição para o serviço público.\n\n"
+        "Feliz aniversário!"
+    )
+
+
+def _mensagem_aniversario_ja_existe(perfil, referencia):
+    """Evita disparo duplicado para o mesmo perfil na mesma data de execução."""
+
+    return Mensagem.objects.filter(
+        origem_tipo=Mensagem.OrigemTipo.SISTEMA,
+        origem_app="usuarios",
+        origem_model="UsuarioPerfil",
+        origem_pk=f"aniversario:{perfil.pk}:{referencia.isoformat()}",
+    ).exists()
+
+
+def _criar_mensagem_aniversario_para_perfil(perfil, referencia):
+    """Cria e publica a mensagem de aniversário individual com rastreabilidade de origem."""
+
+    nome = (
+        (perfil.nome_completo or "").strip()
+        or perfil.user.get_full_name().strip()
+        or perfil.user.username
+    )
+    mensagem = criar_mensagem_rascunho(
+        assunto="Feliz aniversário!",
+        corpo=corpo_mensagem_aniversario(nome),
+        prioridade=Mensagem.Prioridade.NORMAL,
+    )
+    # A origem identifica de forma única o aniversário do perfil na data corrente.
+    mensagem.origem_tipo = Mensagem.OrigemTipo.SISTEMA
+    mensagem.origem_app = "usuarios"
+    mensagem.origem_model = "UsuarioPerfil"
+    mensagem.origem_pk = f"aniversario:{perfil.pk}:{referencia.isoformat()}"
+    mensagem.save(update_fields=["origem_tipo", "origem_app", "origem_model", "origem_pk", "updated_at"])
+    mensagem.usuarios_alvo.add(perfil.user)
+    publicar_mensagem(mensagem, publicada_em=timezone.now())
+    return mensagem
+
+
+def enviar_mensagens_automaticas_aniversario(referencia=None):
+    """Dispara mensagens internas para os usuários ativos que fazem aniversário no dia."""
+
+    data_referencia = referencia or timezone.localdate()
+    perfis_aniversariantes = (
+        UsuarioPerfil.objects.filter(
+            data_nascimento__month=data_referencia.month,
+            data_nascimento__day=data_referencia.day,
+            user__is_active=True,
+        )
+        .select_related("user")
+        .order_by("nome_completo", "user__username", "pk")
+    )
+
+    enviados = 0
+    for perfil in perfis_aniversariantes:
+        if _mensagem_aniversario_ja_existe(perfil, data_referencia):
+            continue
+        _criar_mensagem_aniversario_para_perfil(perfil, data_referencia)
+        enviados += 1
+    return enviados
 
 
 def _destinatarios_publicacao(mensagem: Mensagem) -> list[User]:
