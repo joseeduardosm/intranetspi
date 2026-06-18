@@ -282,6 +282,14 @@ class SolicitacaoDetailView(ReservaCarrosMixin, DetailView):
         context["fiscal_payload"] = _dados_usuario(self.object.fiscal_responsavel)
         context["pode_editar"] = _pode_editar_reserva(self.request.user, self.object, _nivel_usuario(self))
         context["pode_analisar"] = _pode_analisar(self) and self.object.status == ReservaCarro.Status.AGUARDANDO_APROVACAO
+        # Resolve o nome humano do responsável em cada evento para evitar exibir apenas o login no histórico.
+        context["eventos_historico"] = [
+            {
+                "evento": evento,
+                "usuario_nome": (_dados_usuario(evento.usuario)["nome"] if evento.usuario else "") or "Sistema",
+            }
+            for evento in self.object.eventos.all()
+        ]
         return context
 
 

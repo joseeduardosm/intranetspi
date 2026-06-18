@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count
 from django.db.models.functions import TruncMonth
+from django.urls import reverse
 from django.utils import timezone
 
 from mensageria_assincrona.services import criar_mensagem_rascunho, publicar_mensagem
@@ -71,6 +72,36 @@ def _datas_serie_display(reservas):
     if not datas:
         return "-"
     return f"{_format_date(datas[0])} a {_format_date(datas[-1])}" if len(datas) > 1 else _format_date(datas[0])
+
+
+def _mensagem_nova_solicitacao_para_fiscais(reservas):
+    """Monta a mensagem interna enviada ao grupo fiscal quando nasce uma nova solicitação."""
+
+    reserva = reservas.first()
+    intervalo = _datas_serie_display(reservas)
+    link_analise = reverse("reserva_garagem:fila_fiscal_analise", args=[reserva.pk])
+    assunto = f"Nova solicitação de reserva de garagem #{reserva.pk}"
+    corpo = (
+        "Uma nova solicitação de reserva de garagem aguarda análise fiscal.\n\n"
+        f"Solicitante: {reserva.responsavel}\n"
+        f"Período: {intervalo}\n"
+        f"Vaga solicitada: {reserva.vaga.nome_exibicao}\n"
+        f"Placa: {reserva.placa_veiculo}\n"
+        f"Veículo: {reserva.marca_veiculo} {reserva.modelo_veiculo} - {reserva.cor_veiculo}\n"
+        f"Observações: {reserva.observacoes or '-'}\n\n"
+        f"Analisar solicitação: {link_analise}"
+    )
+    payload = {
+        "tipo": "nova_solicitacao_reserva_garagem",
+        "reserva_id": reserva.pk,
+        "serie_id": str(reserva.serie_id or ""),
+        "status": reserva.status,
+        "vaga": reserva.vaga.nome_exibicao,
+        "placa": reserva.placa_veiculo,
+        "datas": [data.isoformat() for data in reservas.values_list("data", flat=True)],
+        "link_analise": link_analise,
+    }
+    return assunto, corpo, payload
 
 
 def _mensagem_reserva_deferida(reservas):
@@ -146,6 +177,29 @@ def notificar_solicitante(reservas, usuario_responsavel=None):
         payload_email=payload,
     )
     mensagem.usuarios_alvo.add(reserva.solicitante)
+    publicar_mensagem(mensagem, usuario=usuario_responsavel)
+    return mensagem
+
+
+def notificar_fiscais_nova_solicitacao(reservas, usuario_responsavel=None):
+    """Publica uma mensagem para todos os usuários do grupo fiscal com link direto de análise."""
+
+    group = fiscal_group()
+    if not group:
+        return None
+
+    usuarios_fiscais = list(group.user_set.filter(is_active=True).distinct())
+    if not usuarios_fiscais:
+        return None
+
+    assunto, corpo, payload = _mensagem_nova_solicitacao_para_fiscais(reservas)
+    mensagem = criar_mensagem_rascunho(
+        assunto=assunto,
+        corpo=corpo,
+        criada_por=usuario_responsavel,
+        payload_email=payload,
+    )
+    mensagem.usuarios_alvo.add(*usuarios_fiscais)
     publicar_mensagem(mensagem, usuario=usuario_responsavel)
     return mensagem
 

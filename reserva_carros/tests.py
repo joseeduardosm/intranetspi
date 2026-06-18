@@ -331,6 +331,16 @@ class ReservaCarrosViewTests(ReservaCarrosBaseTest):
             response = self.client.get(reverse(f"reserva_carros:{url_name}"))
             self.assertEqual(response.status_code, 200)
 
+    def test_agenda_exibe_botao_configuracao_para_controle_total(self):
+        """A agenda principal deve expor o atalho de configuração no mesmo fluxo da garagem."""
+
+        self.client.login(username="admin-carros", password="123")
+
+        response = self.client.get(reverse("reserva_carros:agenda"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("reserva_carros:configuracao"))
+
     def test_controle_total_exclui_carro_e_motorista(self):
         self.client.login(username="admin-carros", password="123")
         carro = Carro.objects.create(marca="Fiat", modelo="Pulse", placa="XYZ9K88")
@@ -353,6 +363,21 @@ class ReservaCarrosViewTests(ReservaCarrosBaseTest):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f'value="{data_escolhida}T09:00"', html=False)
         self.assertContains(response, f'value="{data_escolhida}T18:00"', html=False)
+
+    def test_detalhe_exibe_nome_em_vez_do_login_no_historico(self):
+        """O histórico deve mostrar o nome do usuário responsável pela ação, não o username."""
+
+        reserva = self._reserva()
+        self.client.login(username="solicitante", password="123")
+        self.client.post(
+            reverse("reserva_carros:solicitacao_cancel", args=[reserva.pk]),
+        )
+
+        response = self.client.get(reverse("reserva_carros:solicitacao_detail", args=[reserva.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ana")
+        self.assertNotContains(response, "<p>solicitante</p>", html=False)
 
     def test_agenda_renderiza_viagem_multidia(self):
         saida = self._saida_base()

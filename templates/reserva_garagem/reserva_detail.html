@@ -33,11 +33,6 @@
       <strong>{{ reserva.get_status_display }}</strong>
       <span>Solicitada em {{ reserva.criado_em|date:"d/m/Y H:i" }}</span>
     </article>
-    <article class="reserva-espacos-surface reserva-espacos-kpi">
-      <small>Série</small>
-      <strong>{% if serie_count %}{{ serie_count }} ocorrência(s){% else %}Avulsa{% endif %}</strong>
-      <span>{{ reserva.serie_descricao }}</span>
-    </article>
   </section>
 
   <section class="reserva-espacos-surface reserva-espacos-detail-card">
@@ -60,11 +55,11 @@
   <section class="reserva-espacos-surface mt-4">
     <h2>Histórico da reserva</h2>
     <div class="reserva-garagem-history-list">
-      {% for evento in reserva.eventos.all %}
+      {% for item in eventos_historico %}
         <article class="reserva-garagem-history-item">
-          <strong>{{ evento.get_acao_display }}</strong>
-          <span>{{ evento.criado_em|date:"d/m/Y H:i" }}</span>
-          <p>{{ evento.usuario|default:"Sistema" }}</p>
+          <strong>{{ item.evento.get_acao_display }}</strong>
+          <span>{{ item.evento.criado_em|date:"d/m/Y H:i" }}</span>
+          <p>{{ item.usuario_nome }}</p>
         </article>
       {% empty %}
         <p class="text-muted mb-0">Nenhum evento registrado.</p>

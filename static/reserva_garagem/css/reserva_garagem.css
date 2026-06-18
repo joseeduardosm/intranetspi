@@ -73,7 +73,7 @@
 .reserva-garagem-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: .75rem;
+  gap: .9rem;
 }
 
 .reserva-garagem-weekdays {
@@ -87,8 +87,8 @@
 }
 
 .reserva-garagem-day {
-  min-height: 145px;
-  padding: .85rem;
+  min-height: 220px;
+  padding: 1rem;
   border-radius: 1rem;
   border: 1px solid #dbe4f0;
   background: #fff;
@@ -128,53 +128,70 @@
   font-size: 1rem;
 }
 
-.reserva-garagem-day-events {
-  display: flex;
-  flex-direction: column;
-  gap: .45rem;
+.reserva-garagem-day-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(.9rem, max-content));
+  justify-content: start;
+  align-content: start;
+  gap: .28rem;
 }
 
-.reserva-garagem-event {
+.reserva-garagem-slot {
   position: relative;
-  color: #fff;
-  border-radius: .9rem;
-  padding: .55rem .65rem;
-  text-decoration: none;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, .10);
+  width: .87rem;
+  height: .87rem;
+  border-radius: 999px;
+  display: inline-flex;
+  border: 1.5px solid transparent;
+  background: #22c55e;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .08);
+  padding: 0;
+  cursor: default;
+  appearance: none;
+  align-items: center;
+  justify-content: center;
 }
 
-.reserva-garagem-event:hover .reserva-garagem-tooltip {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
+.reserva-garagem-slot.is-available {
+  background: #22c55e;
 }
 
-.reserva-garagem-event-title {
-  display: block;
-  font-weight: 700;
+.reserva-garagem-slot.is-occupied {
+  background: #ef4444;
 }
 
-.reserva-garagem-event small {
-  display: block;
-  color: rgba(255, 255, 255, .88);
+.reserva-garagem-slot.is-mine {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, .18);
 }
 
-.reserva-garagem-tooltip {
+.reserva-garagem-slot:focus-visible {
+  outline: 2px solid #1f4b99;
+  outline-offset: 2px;
+}
+
+.reserva-garagem-slot-tooltip {
   position: absolute;
-  left: 0;
-  top: calc(100% + .45rem);
-  z-index: 8;
-  min-width: 230px;
-  max-width: 320px;
+  left: 50%;
+  bottom: calc(100% + .45rem);
+  transform: translateX(-50%) translateY(.25rem);
+  border-radius: .55rem;
   background: #0f172a;
   color: #fff;
-  border-radius: .9rem;
-  padding: .8rem .95rem;
-  box-shadow: 0 20px 45px rgba(15, 23, 42, .2);
+  padding: .3rem .5rem;
+  font-size: .78rem;
+  line-height: 1.1;
+  white-space: nowrap;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(6px);
-  transition: opacity .18s ease, transform .18s ease;
+  transition: opacity .15s ease, transform .15s ease;
+  z-index: 10;
+}
+
+.reserva-garagem-slot:hover .reserva-garagem-slot-tooltip,
+.reserva-garagem-slot:focus-visible .reserva-garagem-slot-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .reserva-garagem-color-swatch {

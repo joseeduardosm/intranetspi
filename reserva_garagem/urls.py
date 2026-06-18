@@ -12,6 +12,7 @@ urlpatterns = [
     path("", views.AgendaReservaGaragemView.as_view(), name="agenda"),
     path("dashboard/", views.ReservaGaragemDashboardView.as_view(), name="dashboard"),
     path("reservas/", views.ReservaListView.as_view(), name="reserva_list"),
+    path("reservas/vagas-disponiveis/", views.vagas_disponiveis_api, name="vagas_disponiveis"),
     path("reservas/nova/", views.ReservaCreateView.as_view(), name="reserva_create"),
     path("reservas/<int:pk>/", views.ReservaDetailView.as_view(), name="reserva_detail"),
     path("reservas/<int:pk>/editar/", views.ReservaUpdateView.as_view(), name="reserva_update"),

@@ -70,11 +70,11 @@
   <section class="reserva-espacos-surface mt-4">
     <h2>Histórico da solicitação</h2>
     <div class="reserva-carros-history-list">
-      {% for evento in reserva.eventos.all %}
+      {% for item in eventos_historico %}
         <article class="reserva-carros-history-item">
-          <strong>{{ evento.get_acao_display }}</strong>
-          <span>{{ evento.criado_em|date:"d/m/Y H:i" }}</span>
-          <p>{{ evento.usuario|default:"Sistema" }}</p>
+          <strong>{{ item.evento.get_acao_display }}</strong>
+          <span>{{ item.evento.criado_em|date:"d/m/Y H:i" }}</span>
+          <p>{{ item.usuario_nome }}</p>
         </article>
       {% empty %}
         <p class="text-muted mb-0">Nenhum evento registrado.</p>
@@ -82,4 +82,3 @@
     </div>
   </section>
 {% endblock %}
-

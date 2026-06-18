@@ -27,6 +27,7 @@
       {% if pode_gerenciar_base %}
         <a class="btn btn-outline-secondary" href="{% url 'reserva_carros:carro_list' %}">Carros</a>
         <a class="btn btn-outline-secondary" href="{% url 'reserva_carros:motorista_list' %}">Motoristas</a>
+        <a class="btn btn-outline-secondary" href="{% url 'reserva_carros:configuracao' %}">Configuração</a>
       {% endif %}
     </div>
   </div>
@@ -106,24 +107,17 @@
       return d;
     };
 
-    const enableDayClick = (element, dateObj) => {
+    const buildAddAction = (dateObj, ariaLabel) => {
       {% if pode_solicitar_viagem %}
-        const targetUrl = buildCreateUrl(dateObj);
-        element.classList.add("reserva-espacos-clickable-day");
-        element.setAttribute("role", "link");
-        element.setAttribute("tabindex", "0");
-        element.setAttribute("aria-label", `Criar solicitação em ${dateObj.toLocaleDateString(locale)}`);
-        element.addEventListener("click", (event) => {
-          if (event.target.closest("a")) return;
-          window.location.href = targetUrl;
-        });
-        element.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            window.location.href = targetUrl;
-          }
-        });
+        // Expõe a criação da solicitação em um botão explícito por dia, sem clique no card inteiro.
+        const anchor = document.createElement("a");
+        anchor.href = buildCreateUrl(dateObj);
+        anchor.className = "reserva-espacos-add";
+        anchor.setAttribute("aria-label", ariaLabel);
+        anchor.textContent = "+";
+        return anchor;
       {% endif %}
+      return null;
     };
 
     const viagensFiltradas = () => viagens.filter((item) => activeCar === "all" || String(item.carro_id) === String(activeCar));
@@ -229,12 +223,17 @@
         const inMonth = pointer.getMonth() === currentDate.getMonth();
         cell.className = `reserva-espacos-day-cell${inMonth ? "" : " is-muted"}`;
         if (dateKey(pointer) === dateKey(today)) cell.classList.add("is-today");
-        enableDayClick(cell, pointer);
 
+        const head = document.createElement("div");
+        head.className = "reserva-espacos-day-head";
         const dayLabel = document.createElement("div");
         dayLabel.className = "reserva-espacos-day-number";
         dayLabel.textContent = pointer.getDate();
-        cell.appendChild(dayLabel);
+        head.appendChild(dayLabel);
+
+        const addAction = buildAddAction(pointer, `Criar solicitação em ${pointer.toLocaleDateString(locale)}`);
+        if (addAction) head.appendChild(addAction);
+        cell.appendChild(head);
 
         const markers = document.createElement("div");
         markers.className = "reserva-espacos-marker-row";
@@ -268,11 +267,20 @@
         const column = document.createElement("section");
         column.className = "reserva-espacos-range-column";
         if (dateKey(current) === dateKey(today)) column.classList.add("is-today");
-        enableDayClick(column, current);
 
         const head = document.createElement("div");
         head.className = "reserva-espacos-range-head";
-        head.innerHTML = `<strong>${labels[current.getDay()]}</strong><span>${current.toLocaleDateString(locale)}</span>`;
+        const headTop = document.createElement("div");
+        headTop.className = "reserva-espacos-range-head-top";
+        headTop.innerHTML = `<strong>${labels[current.getDay()]}</strong>`;
+
+        const addAction = buildAddAction(current, `Criar solicitação em ${current.toLocaleDateString(locale)}`);
+        if (addAction) headTop.appendChild(addAction);
+
+        head.appendChild(headTop);
+        const dateLabel = document.createElement("span");
+        dateLabel.textContent = current.toLocaleDateString(locale);
+        head.appendChild(dateLabel);
         column.appendChild(head);
 
         const list = document.createElement("div");

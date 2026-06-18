@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 <!-- Criado por OpenAI Codex em 17/06/2026 -->
-<!-- Calendário mensal all-day das reservas de garagem com filtro por vaga. -->
+<!-- Calendário quinzenal da garagem com disponibilidade consolidada por vaga. -->
 
 {% block title %}Reserva de garagem{% endblock %}
 
@@ -13,7 +13,6 @@
   <div class="spi-page-title d-flex justify-content-between align-items-start gap-3 flex-wrap">
     <div>
       <h1>Reserva de garagem</h1>
-      <p>Agenda mensal das solicitações pendentes e deferidas para ocupação das vagas.</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
       {% if pode_solicitar_reserva %}
@@ -53,49 +52,35 @@
     <div class="reserva-garagem-grid" id="calendar-grid"></div>
   </section>
 
-  {{ reservas_data|json_script:"reservas-data" }}
+  {{ vagas_data|json_script:"vagas-data" }}
+  {{ ocupacoes_data|json_script:"ocupacoes-data" }}
 
   <script>
     const locale = "pt-BR";
-    const reservas = JSON.parse(document.getElementById("reservas-data")?.textContent || "[]");
+    const usuarioLogadoNome = "{{ usuario_logado_nome|default:''|escapejs }}";
+    const vagas = JSON.parse(document.getElementById("vagas-data")?.textContent || "[]");
+    const ocupacoes = JSON.parse(document.getElementById("ocupacoes-data")?.textContent || "[]");
     const filtroVaga = document.getElementById("calendar-vaga-filter");
     const titleEl = document.getElementById("calendar-title");
     const weekdaysEl = document.getElementById("calendar-weekdays");
     const gridEl = document.getElementById("calendar-grid");
     const today = new Date();
-    let currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-
+    const FORTNIGHT_DAYS = 14;
     const cloneDate = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const fortnightStartFor = (date) => {
+      const copy = cloneDate(date);
+      const day = copy.getDate();
+      copy.setDate(day <= 15 ? 1 : 16);
+      return copy;
+    };
+    let currentPeriodStart = fortnightStartFor(today);
+
     const pad = (value) => String(value).padStart(2, "0");
     const dateKey = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-    const startOfWeek = (date) => {
-      const copy = cloneDate(date);
-      copy.setDate(copy.getDate() - copy.getDay());
-      return copy;
-    };
-    const endOfWeek = (date) => {
-      const copy = cloneDate(date);
-      copy.setDate(copy.getDate() + (6 - copy.getDay()));
-      return copy;
-    };
-    const escapeHtml = (value) => String(value || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-
-    const reservasFiltradas = () => reservas.filter((item) => filtroVaga.value === "all" || String(item.vaga_id) === String(filtroVaga.value));
-
-    const reservasPorDia = () => {
-      const grouped = {};
-      reservasFiltradas().forEach((item) => {
-        const key = item.inicio;
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(item);
-      });
-      return grouped;
-    };
+    const vagasFiltradas = () => vagas.filter((item) => filtroVaga.value === "all" || String(item.id) === String(filtroVaga.value));
+    const ocupacoesPorDiaEVaga = new Map(
+      ocupacoes.map((item) => [`${item.data}:${item.vaga_id}`, item]),
+    );
 
     const updateQueryString = () => {
       const params = new URLSearchParams(window.location.search);
@@ -108,17 +93,11 @@
       window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
     };
 
-    const buildTooltip = (item) => `
-      <strong>${escapeHtml(item.vaga_nome)}</strong><br>
-      Solicitante: ${escapeHtml(item.solicitante_nome || "-")}<br>
-      Placa: ${escapeHtml(item.placa || "-")}<br>
-      Veículo: ${escapeHtml(item.veiculo || "-")}<br>
-      Status: ${escapeHtml(item.status_label || "-")}<br>
-      Observações: ${escapeHtml(item.observacoes || "-")}
-    `;
-
     const render = () => {
-      titleEl.textContent = currentMonth.toLocaleDateString(locale, { month: "long", year: "numeric" });
+      const periodStart = cloneDate(currentPeriodStart);
+      const periodEnd = cloneDate(currentPeriodStart);
+      periodEnd.setDate(periodEnd.getDate() + (FORTNIGHT_DAYS - 1));
+      titleEl.textContent = `${periodStart.toLocaleDateString(locale)} a ${periodEnd.toLocaleDateString(locale)}`;
       weekdaysEl.innerHTML = "";
       gridEl.innerHTML = "";
       ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].forEach((label) => {
@@ -128,19 +107,15 @@
         weekdaysEl.appendChild(el);
       });
 
-      const first = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-      const last = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
-      const start = startOfWeek(first);
-      const end = endOfWeek(last);
-      const grouped = reservasPorDia();
+      const vagasDoDia = vagasFiltradas();
 
-      for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+      for (let offset = 0; offset < FORTNIGHT_DAYS; offset += 1) {
+        const cursor = cloneDate(currentPeriodStart);
+        cursor.setDate(cursor.getDate() + offset);
         const key = dateKey(cursor);
-        const isCurrentMonth = cursor.getMonth() === currentMonth.getMonth();
         const isToday = key === dateKey(today);
         const cell = document.createElement("article");
-        cell.className = `reserva-garagem-day${isCurrentMonth ? "" : " is-muted"}${isToday ? " is-today" : ""}`;
-        const reservasDia = grouped[key] || [];
+        cell.className = `reserva-garagem-day${isToday ? " is-today" : ""}`;
 
         let createUrl = "{% url 'reserva_garagem:reserva_create' %}?data=" + key;
         if (filtroVaga.value !== "all") {
@@ -154,21 +129,24 @@
               <a class="reserva-garagem-add" href="${createUrl}" aria-label="Criar reserva para ${key}">+</a>
             {% endif %}
           </div>
-          <div class="reserva-garagem-day-events"></div>
+          <div class="reserva-garagem-day-slots" aria-label="Disponibilidade das vagas no dia"></div>
         `;
 
-        const eventsContainer = cell.querySelector(".reserva-garagem-day-events");
-        reservasDia.forEach((item) => {
-          const anchor = document.createElement("a");
-          anchor.href = item.url;
-          anchor.className = "reserva-garagem-event";
-          anchor.style.background = item.cor || "#1f4b99";
-          anchor.innerHTML = `
-            <span class="reserva-garagem-event-title">${escapeHtml(item.vaga_nome)}</span>
-            <small>${escapeHtml(item.placa || "-")} • ${escapeHtml(item.status_label || "-")}</small>
-            <span class="reserva-garagem-tooltip">${buildTooltip(item)}</span>
-          `;
-          eventsContainer.appendChild(anchor);
+        const slotsContainer = cell.querySelector(".reserva-garagem-day-slots");
+        vagasDoDia.forEach((vaga) => {
+          const ocupacao = ocupacoesPorDiaEVaga.get(`${key}:${vaga.id}`);
+          const circulo = document.createElement("button");
+          const statusLabel = ocupacao?.is_mine
+            ? `${usuarioLogadoNome || "Sua reserva"}, ${vaga.nome_exibicao}`
+            : (ocupacao ? "Ocupada" : "Disponível");
+          const tooltipId = `tooltip-${key}-${vaga.id}`;
+
+          circulo.type = "button";
+          circulo.className = `reserva-garagem-slot${ocupacao ? " is-occupied" : " is-available"}${ocupacao?.is_mine ? " is-mine" : ""}`;
+          circulo.setAttribute("aria-label", `${vaga.nome_exibicao}: ${statusLabel}`);
+          circulo.setAttribute("aria-describedby", tooltipId);
+          circulo.innerHTML = `<span class="reserva-garagem-slot-tooltip" id="${tooltipId}" role="tooltip">${statusLabel}</span>`;
+          slotsContainer.appendChild(circulo);
         });
 
         gridEl.appendChild(cell);
@@ -176,15 +154,17 @@
     };
 
     document.getElementById("calendar-prev").addEventListener("click", () => {
-      currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+      currentPeriodStart = cloneDate(currentPeriodStart);
+      currentPeriodStart.setDate(currentPeriodStart.getDate() - FORTNIGHT_DAYS);
       render();
     });
     document.getElementById("calendar-next").addEventListener("click", () => {
-      currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+      currentPeriodStart = cloneDate(currentPeriodStart);
+      currentPeriodStart.setDate(currentPeriodStart.getDate() + FORTNIGHT_DAYS);
       render();
     });
     document.getElementById("calendar-today").addEventListener("click", () => {
-      currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      currentPeriodStart = fortnightStartFor(today);
       render();
     });
     filtroVaga.addEventListener("change", () => {
