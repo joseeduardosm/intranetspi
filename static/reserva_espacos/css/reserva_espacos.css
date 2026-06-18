@@ -130,19 +130,6 @@
   background: #fffefc;
 }
 
-.reserva-espacos-clickable-day {
-  cursor: pointer;
-  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
-}
-
-.reserva-espacos-clickable-day:hover,
-.reserva-espacos-clickable-day:focus-visible {
-  border-color: rgba(31, 75, 153, .45);
-  box-shadow: 0 .45rem 1.1rem rgba(24, 49, 83, .08);
-  transform: translateY(-1px);
-  outline: none;
-}
-
 .reserva-espacos-day-cell.is-muted {
   opacity: .7;
 }
@@ -157,6 +144,41 @@
   color: var(--reserva-espacos-ink);
   font-size: 1rem;
   font-weight: 800;
+}
+
+.reserva-espacos-day-head,
+.reserva-espacos-range-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .55rem;
+}
+
+.reserva-espacos-add {
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: 0 0 1.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(24, 49, 83, .14);
+  background: #e8eef9;
+  color: var(--reserva-espacos-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+}
+
+.reserva-espacos-add:hover,
+.reserva-espacos-add:focus-visible {
+  border-color: rgba(31, 75, 153, .4);
+  box-shadow: 0 .45rem 1.1rem rgba(24, 49, 83, .08);
+  color: var(--reserva-espacos-ink);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .reserva-espacos-marker-row {
@@ -174,6 +196,10 @@
   border-radius: .45rem;
   background: var(--marker-color, var(--reserva-espacos-accent));
   box-shadow: 0 8px 20px color-mix(in srgb, var(--marker-color, #1f4b99) 36%, transparent);
+}
+
+.reserva-espacos-marker-pending {
+  border: 1px solid rgba(0, 0, 0, .08);
 }
 
 .reserva-espacos-empty {
@@ -231,6 +257,38 @@
 .reserva-espacos-range {
   display: grid;
   gap: .7rem;
+}
+
+.reserva-espacos-status {
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+.reserva-espacos-status.status-aguardando_aprovacao {
+  background: #6c757d;
+  color: #fff;
+}
+
+.reserva-espacos-status.status-deferida {
+  background: #198754;
+  color: #fff;
+}
+
+.reserva-espacos-status.status-indeferida {
+  background: #dc3545;
+  color: #fff;
+}
+
+.reserva-espacos-status.status-cancelada {
+  background: #495057;
+  color: #fff;
+}
+
+.reserva-espacos-history-item + .reserva-espacos-history-item {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--reserva-espacos-line);
 }
 
 @media (min-width: 1200px) and (min-height: 860px) {

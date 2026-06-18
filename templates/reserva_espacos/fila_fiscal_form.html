@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Analisar reserva{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Analisar reserva</h1>
+    <p>Decisão fiscal da solicitação #{{ reserva.pk }}.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-detail-card">
+    <p><strong>Status atual:</strong> {{ reserva.get_status_display }}</p>
+    <p><strong>Objeto:</strong> {{ reserva.objeto.nome_exibicao }}</p>
+    <p><strong>Data e horário:</strong> {{ reserva.data|date:"d/m/Y" }} · {{ reserva.hora_inicio|time:"H:i" }} - {{ reserva.hora_fim|time:"H:i" }}</p>
+    <p><strong>Responsável:</strong> {{ reserva.responsavel }}</p>
+    <p><strong>Solicitante:</strong> {{ criador.nome|default:"-" }}</p>
+    {% if reserva_ja_decidida %}
+      <div class="alert alert-secondary mb-0">
+        A reserva já recebeu a decisão fiscal de {{ reserva.get_status_display|lower }} e não aceita novo deferimento ou indeferimento.
+      </div>
+      <div class="mt-3">
+        <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:fila_fiscal' %}">Voltar para a fila</a>
+      </div>
+    {% else %}
+      <form method="post" class="row g-4 mt-1">
+        {% csrf_token %}
+        {% for error in form.non_field_errors %}
+          <div class="col-12"><div class="alert alert-danger mb-0">{{ error }}</div></div>
+        {% endfor %}
+        <div class="col-lg-4">
+          <label class="form-label" for="{{ form.decisao.id_for_label }}">Decisão</label>
+          {{ form.decisao }}
+          {{ form.decisao.errors }}
+        </div>
+        <div class="col-12" id="bloco-indeferimento">
+          <label class="form-label" for="{{ form.justificativa_indeferimento.id_for_label }}">Justificativa do indeferimento</label>
+          {{ form.justificativa_indeferimento }}
+          {{ form.justificativa_indeferimento.errors }}
+        </div>
+        <div class="col-12 d-flex gap-2 flex-wrap">
+          <button class="btn btn-primary" type="submit">Salvar decisão</button>
+          <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:fila_fiscal' %}">Cancelar</a>
+        </div>
+      </form>
+    {% endif %}
+  </section>
+
+  <script>
+    const decisaoSelect = document.getElementById("id_decisao");
+    const blocoIndeferimento = document.getElementById("bloco-indeferimento");
+    const toggleIndeferimento = () => {
+      if (!decisaoSelect || !blocoIndeferimento) return;
+      blocoIndeferimento.style.display = decisaoSelect.value === "INDEFERIR" ? "block" : "none";
+    };
+    if (decisaoSelect) {
+      decisaoSelect.addEventListener("change", toggleIndeferimento);
+      toggleIndeferimento();
+    }
+  </script>
+{% endblock %}

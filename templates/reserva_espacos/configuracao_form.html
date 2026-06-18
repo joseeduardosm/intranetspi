@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Configuração{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Configuração</h1>
+    <p>Defina o grupo responsável pelo deferimento e indeferimento das reservas.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-form-surface">
+    <form method="post" class="row g-4">
+      {% csrf_token %}
+      <div class="col-lg-8">
+        <label class="form-label" for="{{ form.grupo_fiscais.id_for_label }}">Grupo de fiscais</label>
+        {{ form.grupo_fiscais }}
+        {% if form.grupo_fiscais.help_text %}<div class="form-text">{{ form.grupo_fiscais.help_text }}</div>{% endif %}
+        {{ form.grupo_fiscais.errors }}
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" type="submit">Salvar</button>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:agenda' %}">Voltar</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

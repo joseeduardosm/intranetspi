@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Cancelar reserva{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
+{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title">
+    <h1>Cancelar reserva</h1>
+    <p>Confirme o cancelamento da reserva #{{ reserva.pk }}{% if serie_count %} e escolha o escopo da série com {{ serie_count }} ocorrências{% endif %}.</p>
+  </div>
+
+  <section class="reserva-espacos-surface reserva-espacos-confirm-card">
+    <p><strong>Status atual:</strong> {{ reserva.get_status_display }}</p>
+    <p><strong>Objeto:</strong> {{ reserva.objeto.nome_exibicao }}</p>
+    <p><strong>Data e horário:</strong> {{ reserva.data|date:"d/m/Y" }} · {{ reserva.hora_inicio|time:"H:i" }} - {{ reserva.hora_fim|time:"H:i" }}</p>
+
+    <form method="post" class="row g-4">
+      {% csrf_token %}
+      {% if serie_count %}
+        <div class="col-12">
+          <label class="form-label d-block">Escopo do cancelamento</label>
+          <div class="d-flex flex-column gap-2">
+            <label><input type="radio" name="apply_scope" value="single" checked> Cancelar somente esta reserva</label>
+            <label><input type="radio" name="apply_scope" value="all"> Cancelar toda a série</label>
+            <label><input type="radio" name="apply_scope" value="range"> Cancelar período específico</label>
+          </div>
+        </div>
+        <div class="row g-4 d-none" id="cancel-range-fields">
+          <div class="col-lg-6">
+            <label class="form-label" for="cancel-data-inicial">Data inicial do cancelamento</label>
+            <input class="form-control form-control-lg" type="date" id="cancel-data-inicial" name="cancel_data_inicial">
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label" for="cancel-data-final">Data final do cancelamento</label>
+            <input class="form-control form-control-lg" type="date" id="cancel-data-final" name="cancel_data_final">
+          </div>
+        </div>
+      {% endif %}
+      <div class="col-12">
+        <label class="form-label" for="motivo-cancelamento">Motivo do cancelamento</label>
+        <textarea class="form-control" id="motivo-cancelamento" name="motivo_cancelamento" rows="4" required placeholder="Descreva o motivo do cancelamento"></textarea>
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-danger text-white" type="submit">Confirmar cancelamento</button>
+        <a class="btn {% if pode_analisar_reservas %}btn-dark text-white{% else %}btn-light{% endif %}" href="{% url 'reserva_espacos:reserva_detail' reserva.pk %}">Voltar</a>
+      </div>
+    </form>
+  </section>
+
+  <script>
+    const radiosCancelamento = document.querySelectorAll('input[name="apply_scope"]');
+    const rangeFields = document.getElementById("cancel-range-fields");
+    const toggleRangeFields = () => {
+      if (!rangeFields) return;
+      const selected = document.querySelector('input[name="apply_scope"]:checked');
+      rangeFields.classList.toggle("d-none", selected?.value !== "range");
+    };
+    radiosCancelamento.forEach((radio) => radio.addEventListener("change", toggleRangeFields));
+    toggleRangeFields();
+  </script>
+{% endblock %}

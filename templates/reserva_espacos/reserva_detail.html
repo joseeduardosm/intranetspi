@@ -14,6 +14,7 @@
   </div>
 
   <section class="reserva-espacos-surface reserva-espacos-detail-card">
+    <p><strong>Status:</strong> <span class="badge reserva-espacos-status status-{{ reserva.status|lower }}">{{ reserva.get_status_display }}</span></p>
     <p><strong>Data:</strong> {{ reserva.data|date:"d/m/Y" }} · {{ reserva.hora_inicio|time:"H:i" }} - {{ reserva.hora_fim|time:"H:i" }}</p>
     <p><strong>Objeto:</strong> {{ reserva.objeto.nome }}</p>
     <p><strong>Localização:</strong> {{ reserva.objeto.localizacao|default:"-" }}</p>
@@ -68,15 +69,43 @@
     <p><strong>Criada em:</strong> {{ reserva.criado_em|date:"d/m/Y H:i" }}</p>
     <p><strong>Última atualização:</strong> {{ reserva.atualizado_em|date:"d/m/Y H:i" }}</p>
     <p><strong>Série recorrente:</strong> {% if reserva.serie_id %}{{ serie_count }} ocorrência(s){% else %}Reserva avulsa{% endif %}</p>
+    <p><strong>Fiscal responsável:</strong> {{ fiscal_payload.nome|default:"-" }}</p>
+    {% if reserva.justificativa_indeferimento %}
+      <p><strong>Justificativa do indeferimento:</strong> {{ reserva.justificativa_indeferimento|linebreaksbr }}</p>
+    {% endif %}
     <p><strong>Observações:</strong> {{ reserva.observacoes|default:"Sem observações." }}</p>
 
     <div class="d-flex gap-2 flex-wrap mt-4">
       {% if pode_editar %}
         <a class="btn btn-primary" href="{% url 'reserva_espacos:reserva_update' reserva.pk %}">Editar</a>
-        <a class="btn btn-outline-danger" href="{% url 'reserva_espacos:reserva_delete' reserva.pk %}">Excluir</a>
       {% endif %}
-      <a class="btn btn-light" href="{% url 'reserva_espacos:reserva_list' %}">Voltar</a>
+      {% if pode_cancelar %}
+        <a class="btn btn-danger text-white" href="{% url 'reserva_espacos:reserva_cancel' reserva.pk %}">Cancelar</a>
+      {% endif %}
+      {% if pode_analisar %}
+        <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:fila_fiscal_analise' reserva.pk %}">Analisar</a>
+      {% endif %}
+      <a class="btn {% if pode_analisar_reservas %}btn-dark text-white{% else %}btn-light{% endif %}" href="{% if pode_analisar_reservas %}{% url 'reserva_espacos:reserva_list' %}{% else %}{% url 'reserva_espacos:minhas_reservas' %}{% endif %}">Voltar</a>
     </div>
+  </section>
+
+  <section class="reserva-espacos-surface reserva-espacos-detail-card mt-4">
+    <h2>Histórico da reserva</h2>
+    {% for item in eventos_historico %}
+      <article class="reserva-espacos-history-item">
+        <div class="d-flex justify-content-between gap-3 flex-wrap">
+          <strong>{{ item.evento.get_acao_display }}</strong>
+          <span>{{ item.evento.criado_em|date:"d/m/Y H:i" }}</span>
+        </div>
+        <p class="mb-1">{{ item.usuario_nome }}</p>
+        {% if item.origem_label %}<p class="mb-1"><strong>Origem:</strong> {{ item.origem_label }}</p>{% endif %}
+        {% if item.escopo_label %}<p class="mb-1"><strong>Escopo:</strong> {{ item.escopo_label }}</p>{% endif %}
+        {% if item.motivo_cancelamento %}<p class="mb-1"><strong>Motivo do cancelamento:</strong> {{ item.motivo_cancelamento }}</p>{% endif %}
+        {% if item.justificativa %}<p class="mb-0"><strong>Justificativa:</strong> {{ item.justificativa }}</p>{% endif %}
+      </article>
+    {% empty %}
+      <p class="text-muted mb-0">Nenhum evento registrado.</p>
+    {% endfor %}
   </section>
 
   <div class="modal fade" id="ramalContactModal" tabindex="-1" aria-labelledby="ramalContactModalTitle" aria-hidden="true">

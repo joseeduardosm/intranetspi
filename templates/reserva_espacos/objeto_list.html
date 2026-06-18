@@ -14,8 +14,8 @@
       <p>Cadastre os recursos concretos que aparecerão nas reservas e no calendário.</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
-      <a class="btn btn-primary" href="{% url 'reserva_espacos:objeto_create' %}">Novo objeto</a>
-      <a class="btn btn-light" href="{% url 'reserva_espacos:agenda' %}">Voltar ao calendário</a>
+      <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:objeto_create' %}">Novo objeto</a>
+      <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:agenda' %}">Voltar ao calendário</a>
     </div>
   </div>
 
@@ -39,8 +39,8 @@
               <td><span class="reserva-espacos-color-swatch" style="background: {{ objeto.cor }};"></span> {{ objeto.cor }}</td>
               <td>{% if objeto.ativo %}<span class="badge text-bg-success">Ativo</span>{% else %}<span class="badge text-bg-secondary">Inativo</span>{% endif %}</td>
               <td class="text-end">
-                <a class="btn btn-sm btn-outline-secondary" href="{% url 'reserva_espacos:objeto_update' objeto.pk %}">Editar</a>
-                <a class="btn btn-sm btn-outline-danger" href="{% url 'reserva_espacos:objeto_delete' objeto.pk %}">Excluir</a>
+                <a class="btn btn-sm btn-dark text-white" href="{% url 'reserva_espacos:objeto_update' objeto.pk %}">Editar</a>
+                <a class="btn btn-sm btn-danger text-white" href="{% url 'reserva_espacos:objeto_delete' objeto.pk %}">Excluir</a>
               </td>
             </tr>
           {% empty %}

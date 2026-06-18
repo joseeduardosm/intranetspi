@@ -16,8 +16,8 @@
       <p>Painel gerencial do uso de recursos no período.</p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-      <a class="btn btn-light" href="{% url 'reserva_espacos:agenda' %}">Calendário</a>
-      <a class="btn btn-light" href="{% url 'reserva_espacos:reserva_list' %}">Reservas</a>
+      <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:agenda' %}">Calendário</a>
+      <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:reserva_list' %}">Reservas</a>
     </div>
   </div>
 
@@ -28,14 +28,29 @@
       <span>Referência: {{ mes_referencia }}</span>
     </article>
     <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Reservas deferidas no mês</small>
+      <strong>{{ reservas_deferidas_mes }}</strong>
+      <span>Somente reservas aprovadas</span>
+    </article>
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Reservas pendentes no mês</small>
+      <strong>{{ reservas_pendentes_mes }}</strong>
+      <span>Aguardando análise fiscal</span>
+    </article>
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
+      <small>Reservas indeferidas no mês</small>
+      <strong>{{ reservas_indeferidas_mes }}</strong>
+      <span>Negadas pelo fluxo fiscal</span>
+    </article>
+    <article class="reserva-espacos-surface reserva-espacos-kpi">
       <small>Objetos ativos no mês</small>
       <strong>{{ objetos_ativos_mes }}</strong>
-      <span>Com ao menos uma reserva</span>
+      <span>Com ao menos uma reserva deferida</span>
     </article>
     <article class="reserva-espacos-surface reserva-espacos-kpi">
       <small>Média por dia</small>
       <strong>{{ media_reservas_por_dia }}</strong>
-      <span>Dias com reservas no mês</span>
+      <span>Dias com reservas deferidas no mês</span>
     </article>
   </section>
 

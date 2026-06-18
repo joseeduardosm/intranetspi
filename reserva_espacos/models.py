@@ -1,4 +1,4 @@
-"""Modelos do módulo de reserva de espaços sem segmentação por categoria."""
+"""Modelos do módulo de reserva de espaços com fluxo fiscal."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 
 from django.conf import settings
+from django.contrib.auth.models import Group
 from django.db import models
 from django.urls import reverse
 
@@ -73,6 +74,12 @@ class ObjetoReservavel(models.Model):
 class ReservaRecurso(models.Model):
     """Registro transacional de reserva para um objeto específico."""
 
+    class Status(models.TextChoices):
+        AGUARDANDO_APROVACAO = "AGUARDANDO_APROVACAO", "Aguardando aprovação"
+        DEFERIDA = "DEFERIDA", "Deferida"
+        INDEFERIDA = "INDEFERIDA", "Indeferida"
+        CANCELADA = "CANCELADA", "Cancelada"
+
     objeto = models.ForeignKey(
         ObjetoReservavel,
         on_delete=models.CASCADE,
@@ -93,6 +100,21 @@ class ReservaRecurso(models.Model):
         related_name="reserva_espacos_criadas",
         verbose_name="Criado por",
     )
+    status = models.CharField(
+        "Status",
+        max_length=30,
+        choices=Status.choices,
+        default=Status.AGUARDANDO_APROVACAO,
+    )
+    fiscal_responsavel = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="analises_reserva_espacos",
+        verbose_name="Fiscal responsável",
+    )
+    justificativa_indeferimento = models.TextField("Justificativa do indeferimento", blank=True)
     serie_id = models.UUIDField("Identificador da série", null=True, blank=True, db_index=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
@@ -101,6 +123,10 @@ class ReservaRecurso(models.Model):
         ordering = ["-data", "hora_inicio", "id"]
         verbose_name = "Reserva"
         verbose_name_plural = "Reservas"
+        indexes = [
+            models.Index(fields=["status", "data"]),
+            models.Index(fields=["objeto", "data", "status"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.titulo} - {self.objeto.nome}"
@@ -122,6 +148,12 @@ class ReservaRecurso(models.Model):
 
         return bool(self.serie_id)
 
+    @property
+    def pode_editar_solicitante(self) -> bool:
+        """Solicitante só altera a reserva enquanto ela aguarda análise fiscal."""
+
+        return self.status == self.Status.AGUARDANDO_APROVACAO
+
     def gerar_serie_id(self) -> uuid.UUID:
         """Cria e guarda um identificador de série quando ele ainda não existe."""
 
@@ -133,3 +165,71 @@ class ReservaRecurso(models.Model):
         """Retorna a rota canônica do detalhe da reserva."""
 
         return reverse("reserva_espacos:reserva_detail", kwargs={"pk": self.pk})
+
+
+class ConfiguracaoReservaEspacos(models.Model):
+    """Mantém o grupo fiscal responsável pelas decisões do módulo."""
+
+    grupo_fiscais = models.ForeignKey(
+        Group,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="configuracoes_reserva_espacos",
+        verbose_name="Grupo de fiscais",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Configuração da reserva de espaços"
+        verbose_name_plural = "Configurações da reserva de espaços"
+
+    def __str__(self) -> str:
+        if self.grupo_fiscais_id:
+            return f"Configuração - {self.grupo_fiscais.name}"
+        return "Configuração sem grupo de fiscais"
+
+    @classmethod
+    def singleton(cls):
+        """Obtém ou cria a configuração única do módulo."""
+
+        config, _created = cls.objects.get_or_create(pk=1)
+        return config
+
+
+class ReservaRecursoEvento(models.Model):
+    """Registra a trilha de auditoria do ciclo da reserva."""
+
+    class Acao(models.TextChoices):
+        CRIACAO = "CRIACAO", "Criação"
+        EDICAO = "EDICAO", "Edição"
+        CANCELAMENTO = "CANCELAMENTO", "Cancelamento"
+        DEFERIMENTO = "DEFERIMENTO", "Deferimento"
+        INDEFERIMENTO = "INDEFERIMENTO", "Indeferimento"
+
+    reserva = models.ForeignKey(
+        ReservaRecurso,
+        on_delete=models.CASCADE,
+        related_name="eventos",
+        verbose_name="Reserva",
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="eventos_reserva_espacos",
+        verbose_name="Usuário responsável",
+    )
+    acao = models.CharField("Ação", max_length=20, choices=Acao.choices)
+    payload = models.JSONField("Detalhes complementares", default=dict, blank=True)
+    criado_em = models.DateTimeField("Data/hora", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "-id"]
+        verbose_name = "Evento da reserva de espaço"
+        verbose_name_plural = "Eventos da reserva de espaço"
+
+    def __str__(self) -> str:
+        return f"{self.get_acao_display()} - {self.reserva_id}"

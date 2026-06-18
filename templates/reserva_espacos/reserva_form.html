@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{% if object %}Editar reserva{% else %}Nova reserva{% endif %}{% endblock %}
+{% block title %}{{ titulo_pagina|default:object|default:"Reserva" }}{% endblock %}
 
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
@@ -9,8 +9,8 @@
 
 {% block content %}
   <div class="spi-page-title">
-    <h1>{% if object %}Editar reserva{% else %}Nova reserva{% endif %}</h1>
-    <p>Escolha o objeto e o intervalo da reserva.</p>
+    <h1>{{ titulo_pagina|default:object|default:"Reserva" }}</h1>
+    <p>Escolha o objeto, o horário e os dados da reserva.</p>
   </div>
 
   <section class="reserva-espacos-surface reserva-espacos-form-surface">
@@ -67,6 +67,13 @@
         {{ form.responsavel }}
         {% if form.responsavel.help_text %}<div class="form-text">{{ form.responsavel.help_text }}</div>{% endif %}
         {{ form.responsavel.errors }}
+        {% if form.usuarios_responsaveis_sugestoes %}
+          <datalist id="reserva-espacos-responsaveis">
+            {% for item in form.usuarios_responsaveis_sugestoes %}
+              <option value="{{ item.nome }}">{{ item.username }}{% if item.email %} · {{ item.email }}{% endif %}</option>
+            {% endfor %}
+          </datalist>
+        {% endif %}
       </div>
       <div class="col-12">
         <label class="form-label" for="{{ form.observacoes.id_for_label }}">Observações</label>
@@ -86,7 +93,7 @@
 
       <div class="col-12 d-flex gap-2 flex-wrap">
         <button class="btn btn-primary" type="submit">Salvar</button>
-        <a class="btn btn-light" href="{% if object %}{% url 'reserva_espacos:reserva_detail' object.pk %}{% else %}{% url 'reserva_espacos:reserva_list' %}{% endif %}">Cancelar</a>
+        <a class="btn {% if modo_fiscal_predefinido or pode_analisar_reservas %}btn-dark text-white{% else %}btn-light{% endif %}" href="{% if object %}{% url 'reserva_espacos:reserva_detail' object.pk %}{% else %}{% url 'reserva_espacos:agenda' %}{% endif %}">Cancelar</a>
       </div>
     </form>
   </section>

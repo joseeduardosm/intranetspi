@@ -2,6 +2,43 @@
 
 Todas as mudanças importantes deste projeto são documentadas neste arquivo.
 
+## [0.3.8] - 2026-06-18
+- Repaginado o módulo `reserva_espacos` para operar com o mesmo fluxo fiscal da garagem, preservando a lógica existente de recorrência diária, semanal, quinzenal e mensal.
+- Evoluído o domínio da reserva de salas:
+  - adicionados `status` fiscal (`AGUARDANDO_APROVAÇÃO`, `DEFERIDA`, `INDEFERIDA`, `CANCELADA`);
+  - adicionados `fiscal_responsavel` e `justificativa_indeferimento`;
+  - criada a configuração singleton `ConfiguracaoReservaEspacos` com `grupo_fiscais`;
+  - criada a trilha de auditoria `ReservaRecursoEvento`.
+- Ajustadas as regras operacionais do módulo para o modelo da garagem:
+  - solicitações pendentes conflitantes podem coexistir;
+  - reservas deferidas continuam bloqueando horários conflitantes do mesmo objeto;
+  - deferimento e indeferimento passaram a ocorrer na `fila fiscal`, com decisão em bloco da série;
+  - cancelamento com motivo obrigatório e escopo por ocorrência, série inteira ou período específico.
+- Integrada a `mensageria_assincrona` ao fluxo de salas:
+  - aviso ao grupo fiscal no nascimento da solicitação com link direto de análise;
+  - aviso ao solicitante após deferimento, indeferimento e cancelamento;
+  - distinção entre cancelamento pelo próprio usuário e cancelamento administrativo/fiscal.
+- Criadas novas telas e rotas do módulo:
+  - `minhas-reservas/`;
+  - `configuracao/`;
+  - `fila-fiscal/` e `fila-fiscal/<id>/analisar/`;
+  - `reservas/predefinida/nova/`;
+  - `reservas/<id>/cancelar/`.
+- Atualizadas as interfaces do app:
+  - agenda multi-view mantida, agora exibindo pendentes e deferidas com status serializado;
+  - detalhe da reserva com status, fiscal responsável e histórico operacional;
+  - listagem administrativa com filtro por status;
+  - nova tela `Minhas reservas`;
+  - padronização visual dos botões restritos em chumbo com texto branco.
+- Criada a migração `0004_configuracaoreservaespacos_reservarecursoevento_and_more`, promovendo reservas legadas para `DEFERIDA` para preservar o comportamento anterior do módulo.
+- Validação executada localmente:
+  - `./.venv/bin/python -m py_compile reserva_espacos/models.py reserva_espacos/forms.py reserva_espacos/services.py reserva_espacos/views.py reserva_espacos/tests.py`
+  - `./.venv/bin/python manage.py check`
+  - `./.venv/bin/python manage.py makemigrations reservas_recursos`
+- Limitação do ambiente local:
+  - `./.venv/bin/python manage.py test reserva_espacos` não concluiu porque a conexão PostgreSQL de teste falhou com `django.db.utils.OperationalError`;
+  - comandos que dependem da base real, como `showmigrations` e `migrate`, também ficaram bloqueados pela mesma indisponibilidade de banco neste ambiente.
+
 ## [0.3.7] - 2026-06-17
 - Criado e integrado o novo módulo `reserva_garagem` com ACL própria, URL base `/reserva-garagem/`, migração inicial e cadastro automático como recurso protegível.
 - Estruturado o domínio operacional da garagem:

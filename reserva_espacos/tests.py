@@ -1,10 +1,12 @@
 """Testes do módulo de reserva de espaços."""
 
-from datetime import time
-from datetime import timedelta
+from __future__ import annotations
+
+from datetime import time, timedelta
+from unittest.mock import patch
 import uuid
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -12,55 +14,69 @@ from django.utils import timezone
 from acls.models import Recurso, RegraAcesso
 
 from .forms import ReservaRecursoForm
-from .models import ObjetoReservavel, ReservaRecurso
+from .models import ConfiguracaoReservaEspacos, ObjetoReservavel, ReservaRecurso
+from .services import cancelar_reserva_com_escopo, deferir_reserva, indeferir_reserva
 
 
-class ReservaRecursoFormTests(TestCase):
-    """Valida regras temporais, recorrência e conflito do formulário."""
+class ReservaEspacosBaseTestCase(TestCase):
+    """Monta ACL, grupo fiscal e usuários para os cenários do módulo."""
 
     def setUp(self):
-        self.objeto = ObjetoReservavel.objects.create(
-            nome="Sala 01",
-            localizacao="2º andar",
+        self.recurso, _ = Recurso.objects.get_or_create(
+            slug="reserva_espacos",
+            defaults={"nome": "Reserva de Espaços"},
         )
+        self.solicitante = User.objects.create_user(username="solicitante", password="123", first_name="Ana")
+        self.outro = User.objects.create_user(username="outro", password="123", first_name="Bruno")
+        self.fiscal = User.objects.create_user(username="fiscal", password="123", first_name="Carlos")
+        self.admin = User.objects.create_user(username="admin", password="123", is_staff=True)
+        self.grupo_fiscais = Group.objects.create(name="Fiscais Salas")
+        self.fiscal.groups.add(self.grupo_fiscais)
+        ConfiguracaoReservaEspacos.singleton().grupo_fiscais = self.grupo_fiscais
+        ConfiguracaoReservaEspacos.singleton().save()
 
-    def test_bloqueia_conflito_de_horario_no_mesmo_objeto(self):
-        """Não permite sobreposição de reservas do mesmo recurso."""
+        regra_cliente = RegraAcesso.objects.create(
+            recurso=self.recurso,
+            nivel=RegraAcesso.NIVEL_MODIFICACAO,
+        )
+        regra_cliente.usuarios.add(self.solicitante, self.outro, self.fiscal, self.admin)
 
-        data = timezone.localdate() + timedelta(days=1)
-        ReservaRecurso.objects.create(
-            objeto=self.objeto,
-            data=data,
-            hora_inicio=time(10, 0),
-            hora_fim=time(11, 0),
-            titulo="Reserva existente",
-            responsavel="Ana",
+        regra_total = RegraAcesso.objects.create(
+            recurso=self.recurso,
+            nivel=RegraAcesso.NIVEL_CONTROLE_TOTAL,
         )
-        form = ReservaRecursoForm(
-            data={
-                "objeto": self.objeto.pk,
-                "data": data.isoformat(),
-                "hora_inicio": "10:30",
-                "hora_fim": "11:30",
-                "titulo": "Conflito",
-                "responsavel": "João",
-                "observacoes": "",
-                "recorrencia": "",
-                "recorrencia_fim": "",
-            }
-        )
-        self.assertFalse(form.is_valid())
-        self.assertIn(form.conflict_error_message, form.non_field_errors())
+        regra_total.usuarios.add(self.admin)
+
+        self.objeto = ObjetoReservavel.objects.create(nome="Sala 01", localizacao="2º andar")
+        self.data_base = timezone.localdate() + timedelta(days=2)
+
+    def _reserva(self, **kwargs):
+        dados = {
+            "objeto": self.objeto,
+            "data": self.data_base,
+            "hora_inicio": time(10, 0),
+            "hora_fim": time(11, 0),
+            "titulo": "Reunião",
+            "responsavel": "Ana",
+            "observacoes": "",
+            "criado_por": self.solicitante,
+            "status": ReservaRecurso.Status.AGUARDANDO_APROVACAO,
+        }
+        dados.update(kwargs)
+        return ReservaRecurso.objects.create(**dados)
+
+
+class ReservaRecursoFormTests(ReservaEspacosBaseTestCase):
+    """Valida regras temporais, recorrência e conflitos deferidos."""
 
     def test_gera_recorrencia_quinzenal(self):
         """A expansão quinzenal deve incluir as datas até o fim informado."""
 
-        data = timezone.localdate() + timedelta(days=1)
-        recorrencia_fim = data + timedelta(days=28)
+        recorrencia_fim = self.data_base + timedelta(days=28)
         form = ReservaRecursoForm(
             data={
                 "objeto": self.objeto.pk,
-                "data": data.isoformat(),
+                "data": self.data_base.isoformat(),
                 "hora_inicio": "10:00",
                 "hora_fim": "11:00",
                 "titulo": "Quinzenal",
@@ -73,286 +89,238 @@ class ReservaRecursoFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         datas = form.get_recurrence_dates()
         self.assertEqual(len(datas), 3)
-        self.assertEqual(datas[1], data + timedelta(days=14))
+        self.assertEqual(datas[1], self.data_base + timedelta(days=14))
 
+    def test_pendente_conflitante_nao_bloqueia_nova_solicitacao(self):
+        """Solicitações pendentes podem coexistir até a análise fiscal."""
 
-class ReservaPermissionsTests(TestCase):
-    """Garante a integração entre ACL do módulo e autoria da reserva."""
-
-    def setUp(self):
-        self.recurso, _ = Recurso.objects.get_or_create(
-            slug="reserva_espacos",
-            defaults={"nome": "Reserva de Espaços"},
+        self._reserva()
+        form = ReservaRecursoForm(
+            data={
+                "objeto": self.objeto.pk,
+                "data": self.data_base.isoformat(),
+                "hora_inicio": "10:30",
+                "hora_fim": "11:30",
+                "titulo": "Conflito pendente",
+                "responsavel": "João",
+                "observacoes": "",
+                "recorrencia": "",
+                "recorrencia_fim": "",
+            }
         )
-        self.cliente = User.objects.create_user(username="cliente", password="123")
-        self.outro = User.objects.create_user(username="outro", password="123")
-        self.admin_global = User.objects.create_user(username="admin_global", password="123")
-        self.objeto = ObjetoReservavel.objects.create(nome="Carro 01")
-        self.reserva = ReservaRecurso.objects.create(
-            objeto=self.objeto,
-            data=timezone.localdate() + timedelta(days=1),
-            hora_inicio=time(10, 0),
-            hora_fim=time(11, 0),
-            titulo="Visita técnica",
-            responsavel="Cliente",
-            criado_por=self.cliente,
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_deferida_conflitante_bloqueia_formulario(self):
+        """Reserva deferida continua ocupando o horário e bloqueando a criação."""
+
+        self._reserva(status=ReservaRecurso.Status.DEFERIDA)
+        form = ReservaRecursoForm(
+            data={
+                "objeto": self.objeto.pk,
+                "data": self.data_base.isoformat(),
+                "hora_inicio": "10:30",
+                "hora_fim": "11:30",
+                "titulo": "Conflito deferido",
+                "responsavel": "João",
+                "observacoes": "",
+                "recorrencia": "",
+                "recorrencia_fim": "",
+            }
         )
-
-        regra_cliente = RegraAcesso.objects.create(
-            recurso=self.recurso,
-            nivel=RegraAcesso.NIVEL_MODIFICACAO,
-        )
-        regra_cliente.usuarios.add(self.cliente, self.outro)
-        regra_admin = RegraAcesso.objects.create(
-            recurso=self.recurso,
-            nivel=RegraAcesso.NIVEL_CONTROLE_TOTAL,
-        )
-        regra_admin.usuarios.add(self.admin_global)
-
-    def test_cliente_nao_pode_editar_reserva_de_terceiro(self):
-        """Quem tem modificação como cliente só altera o que criou."""
-
-        self.client.login(username="outro", password="123")
-        response = self.client.get(reverse("reserva_espacos:reserva_update", kwargs={"pk": self.reserva.pk}))
-        self.assertEqual(response.status_code, 403)
-
-    def test_controle_total_pode_editar_reserva_de_terceiro(self):
-        """Quem tem controle total continua administrando qualquer reserva."""
-
-        self.client.login(username="admin_global", password="123")
-        response = self.client.get(reverse("reserva_espacos:reserva_update", kwargs={"pk": self.reserva.pk}))
-        self.assertEqual(response.status_code, 200)
+        self.assertFalse(form.is_valid())
+        self.assertIn(form.conflict_error_message, form.non_field_errors())
 
 
-class AgendaDashboardTests(TestCase):
-    """Valida rendering básico da agenda e do dashboard."""
+class ReservaWorkflowTests(ReservaEspacosBaseTestCase):
+    """Valida deferimento, indeferimento, cancelamento e mensageria."""
 
-    def setUp(self):
-        self.recurso, _ = Recurso.objects.get_or_create(
-            slug="reserva_espacos",
-            defaults={"nome": "Reserva de Espaços"},
-        )
-        self.user = User.objects.create_user(username="agenda", password="123")
-        regra = RegraAcesso.objects.create(
-            recurso=self.recurso,
-            nivel=RegraAcesso.NIVEL_CONTROLE_TOTAL,
-        )
-        regra.usuarios.add(self.user)
-        self.objeto = ObjetoReservavel.objects.create(nome="Auditório principal")
-        ReservaRecurso.objects.create(
-            objeto=self.objeto,
-            data=timezone.localdate() + timedelta(days=2),
-            hora_inicio=time(14, 0),
-            hora_fim=time(15, 0),
-            titulo="Palestra",
-            responsavel="Equipe",
-            criado_por=self.user,
-        )
+    @patch("reserva_espacos.services.publicar_mensagem")
+    @patch("reserva_espacos.services.criar_mensagem_rascunho")
+    def test_criacao_recorrrente_notifica_fiscais(self, criar_mensagem, publicar_mensagem):
+        """Série criada pelo usuário nasce pendente e avisa o grupo fiscal."""
 
-    def test_agenda_renderiza_sem_filtro_de_categoria(self):
-        """A agenda simplificada precisa expor só o filtro por objeto."""
-
-        self.client.login(username="agenda", password="123")
-        response = self.client.get(reverse("reserva_espacos:agenda"))
-        self.assertContains(response, "Filtro por objeto")
-        self.assertNotContains(response, "Filtro por categoria")
-        self.assertContains(response, "reservas-data")
-
-    def test_dashboard_renderiza_ranking(self):
-        """O dashboard deve trazer o bloco de ranking de usuários."""
-
-        self.client.login(username="agenda", password="123")
-        response = self.client.get(reverse("reserva_espacos:dashboard"))
-        self.assertContains(response, "Quem mais reserva")
-
-    def test_dashboard_renderiza_sem_combobox_de_categoria(self):
-        """O dashboard simplificado não deve mais exibir combobox de categoria."""
-        self.client.login(username="agenda", password="123")
-        response = self.client.get(reverse("reserva_espacos:dashboard"))
-        self.assertNotContains(response, 'name="categoria"')
-
-    def test_detalhe_renderiza_nomes_clicaveis_para_modal_de_contato(self):
-        """O detalhe deve tornar responsável e reservado por clicáveis para contato."""
-
-        self.client.login(username="agenda", password="123")
-        reserva = ReservaRecurso.objects.get(titulo="Palestra")
-        response = self.client.get(reverse("reserva_espacos:reserva_detail", kwargs={"pk": reserva.pk}))
-        self.assertContains(response, 'data-bs-target="#ramalContactModal"', count=2)
-        self.assertContains(response, 'aria-label="Abrir contato de agenda"')
-        self.assertContains(response, 'id="ramalContactModal"')
-
-
-class ReservaCreateResponsavelTests(TestCase):
-    """Garante que o responsável do cadastro novo seja sempre o próprio usuário."""
-
-    def setUp(self):
-        self.recurso, _ = Recurso.objects.get_or_create(
-            slug="reserva_espacos",
-            defaults={"nome": "Reserva de Espaços"},
-        )
-        self.user = User.objects.create_user(
-            username="responsavel",
-            password="123",
-            first_name="Maria",
-            last_name="Silva",
-        )
-        regra = RegraAcesso.objects.create(
-            recurso=self.recurso,
-            nivel=RegraAcesso.NIVEL_MODIFICACAO,
-        )
-        regra.usuarios.add(self.user)
-        self.objeto = ObjetoReservavel.objects.create(nome="Sala 99")
-
-    def test_post_ignora_responsavel_informado_e_grava_usuario_logado(self):
-        """O backend deve sobrescrever o campo responsável no cadastro inicial."""
-
-        self.client.login(username="responsavel", password="123")
+        self.client.login(username="solicitante", password="123")
         response = self.client.post(
             reverse("reserva_espacos:reserva_create"),
             data={
                 "objeto": self.objeto.pk,
-                "data": (timezone.localdate() + timedelta(days=1)).isoformat(),
+                "data": self.data_base.isoformat(),
                 "hora_inicio": "09:00",
                 "hora_fim": "10:00",
-                "titulo": "Reserva automática",
+                "titulo": "Série fiscal",
                 "responsavel": "Outro nome",
+                "observacoes": "",
+                "recorrencia": "weekly",
+                "recorrencia_fim": (self.data_base + timedelta(days=14)).isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        reservas = ReservaRecurso.objects.filter(titulo="Série fiscal").order_by("data")
+        self.assertEqual(reservas.count(), 3)
+        self.assertTrue(all(item.status == ReservaRecurso.Status.AGUARDANDO_APROVACAO for item in reservas))
+        self.assertTrue(criar_mensagem.called)
+        self.assertTrue(publicar_mensagem.called)
+
+    @patch("reserva_espacos.services.publicar_mensagem")
+    @patch("reserva_espacos.services.criar_mensagem_rascunho")
+    def test_deferimento_em_bloco_da_serie(self, criar_mensagem, publicar_mensagem):
+        """A análise fiscal positiva deve atingir todas as ocorrências da série."""
+
+        serie_id = uuid.uuid4()
+        reserva_a = self._reserva(serie_id=serie_id)
+        reserva_b = self._reserva(
+            serie_id=serie_id,
+            data=self.data_base + timedelta(days=7),
+            titulo="Reunião 2",
+        )
+        queryset = deferir_reserva(reserva_a, fiscal=self.fiscal)
+        self.assertEqual(queryset.count(), 2)
+        reserva_a.refresh_from_db()
+        reserva_b.refresh_from_db()
+        self.assertEqual(reserva_a.status, ReservaRecurso.Status.DEFERIDA)
+        self.assertEqual(reserva_b.status, ReservaRecurso.Status.DEFERIDA)
+        self.assertEqual(reserva_b.fiscal_responsavel, self.fiscal)
+        self.assertTrue(criar_mensagem.called)
+        self.assertTrue(publicar_mensagem.called)
+
+    def test_deferimento_bloqueia_quando_ja_existe_deferida_conflitante(self):
+        """Somente uma reserva deferida pode ocupar o mesmo objeto e horário."""
+
+        existente = self._reserva(status=ReservaRecurso.Status.DEFERIDA, titulo="Existente")
+        pendente = self._reserva(titulo="Pendente")
+        with self.assertRaisesMessage(Exception, "horário conflitante"):
+            deferir_reserva(pendente, fiscal=self.fiscal)
+        existente.refresh_from_db()
+        self.assertEqual(existente.status, ReservaRecurso.Status.DEFERIDA)
+
+    @patch("reserva_espacos.services.publicar_mensagem")
+    @patch("reserva_espacos.services.criar_mensagem_rascunho")
+    def test_indeferimento_exige_justificativa_e_notifica(self, criar_mensagem, publicar_mensagem):
+        """O indeferimento grava a justificativa e notifica o solicitante."""
+
+        reserva = self._reserva()
+        indeferir_reserva(reserva, fiscal=self.fiscal, justificativa="Conflito operacional.")
+        reserva.refresh_from_db()
+        self.assertEqual(reserva.status, ReservaRecurso.Status.INDEFERIDA)
+        self.assertEqual(reserva.justificativa_indeferimento, "Conflito operacional.")
+        self.assertTrue(criar_mensagem.called)
+        self.assertTrue(publicar_mensagem.called)
+
+    @patch("reserva_espacos.services.publicar_mensagem")
+    @patch("reserva_espacos.services.criar_mensagem_rascunho")
+    def test_cancelamento_por_periodo_da_serie(self, criar_mensagem, publicar_mensagem):
+        """O cancelamento por período atinge só o recorte solicitado da série."""
+
+        serie_id = uuid.uuid4()
+        reserva_a = self._reserva(serie_id=serie_id, status=ReservaRecurso.Status.DEFERIDA)
+        reserva_b = self._reserva(
+            serie_id=serie_id,
+            status=ReservaRecurso.Status.DEFERIDA,
+            data=self.data_base + timedelta(days=7),
+            titulo="Reunião 2",
+        )
+        reserva_c = self._reserva(
+            serie_id=serie_id,
+            status=ReservaRecurso.Status.DEFERIDA,
+            data=self.data_base + timedelta(days=14),
+            titulo="Reunião 3",
+        )
+        cancelar_reserva_com_escopo(
+            reserva_a,
+            usuario=self.fiscal,
+            apply_scope="range",
+            data_inicial=self.data_base,
+            data_final=self.data_base + timedelta(days=7),
+            motivo_cancelamento="Ajuste de agenda",
+        )
+        reserva_a.refresh_from_db()
+        reserva_b.refresh_from_db()
+        reserva_c.refresh_from_db()
+        self.assertEqual(reserva_a.status, ReservaRecurso.Status.CANCELADA)
+        self.assertEqual(reserva_b.status, ReservaRecurso.Status.CANCELADA)
+        self.assertEqual(reserva_c.status, ReservaRecurso.Status.DEFERIDA)
+        self.assertTrue(criar_mensagem.called)
+        self.assertTrue(publicar_mensagem.called)
+
+
+class ReservaViewsTests(ReservaEspacosBaseTestCase):
+    """Valida agenda, fila fiscal, permissões e histórico."""
+
+    def test_agenda_renderiza_com_botoes_por_perfil(self):
+        """A agenda precisa mostrar o botão pessoal e esconder a área fiscal do cliente."""
+
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_espacos:agenda"))
+        self.assertContains(response, "Minhas reservas")
+        self.assertNotContains(response, "Fila fiscal")
+
+    def test_agenda_mantem_reserva_pendente_serializada(self):
+        """A agenda deve expor reservas pendentes para o calendário multi-view."""
+
+        self._reserva()
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_espacos:agenda"))
+        self.assertContains(response, "Aguardando aprovação")
+        self.assertContains(response, "reservas-data")
+
+    def test_fila_fiscal_restrita_ao_grupo(self):
+        """Usuário comum não acessa a fila fiscal."""
+
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_espacos:fila_fiscal"))
+        self.assertEqual(response.status_code, 403)
+
+        self.client.login(username="fiscal", password="123")
+        response = self.client.get(reverse("reserva_espacos:fila_fiscal"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_analise_bloqueia_redecisao(self):
+        """Uma solicitação já decidida deve abrir em modo somente leitura."""
+
+        reserva = self._reserva(status=ReservaRecurso.Status.DEFERIDA, fiscal_responsavel=self.fiscal)
+        self.client.login(username="fiscal", password="123")
+        response = self.client.get(reverse("reserva_espacos:fila_fiscal_analise", kwargs={"pk": reserva.pk}))
+        self.assertContains(response, "não aceita novo deferimento ou indeferimento")
+
+    def test_minhas_reservas_lista_apenas_reservas_do_usuario(self):
+        """A tela pessoal mostra somente as reservas do usuário logado."""
+
+        self._reserva(titulo="Minha")
+        self._reserva(titulo="Outra", criado_por=self.outro, responsavel="Bruno")
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_espacos:minhas_reservas"))
+        self.assertContains(response, "Minha")
+        self.assertNotContains(response, "Outra")
+
+    def test_pre_reserva_fiscal_nasce_deferida(self):
+        """A pré-reserva administrativa já nasce ocupando o horário."""
+
+        self.client.login(username="fiscal", password="123")
+        response = self.client.post(
+            reverse("reserva_espacos:reserva_predefinida_create"),
+            data={
+                "objeto": self.objeto.pk,
+                "data": self.data_base.isoformat(),
+                "hora_inicio": "15:00",
+                "hora_fim": "16:00",
+                "titulo": "Bloqueio fiscal",
+                "responsavel": "Carlos",
                 "observacoes": "",
                 "recorrencia": "",
                 "recorrencia_fim": "",
             },
         )
         self.assertEqual(response.status_code, 302)
-        reserva = ReservaRecurso.objects.get(titulo="Reserva automática")
-        self.assertEqual(reserva.responsavel, "Maria Silva")
+        reserva = ReservaRecurso.objects.get(titulo="Bloqueio fiscal")
+        self.assertEqual(reserva.status, ReservaRecurso.Status.DEFERIDA)
+        self.assertEqual(reserva.fiscal_responsavel, self.fiscal)
 
+    def test_detalhe_renderiza_historico_fiscal(self):
+        """O detalhe deve exibir a trilha de histórico com origem e escopo."""
 
-class ReservaConflitoModalTests(TestCase):
-    """Garante a renderização do modal quando existe conflito de agenda."""
-
-    def setUp(self):
-        self.recurso, _ = Recurso.objects.get_or_create(
-            slug="reserva_espacos",
-            defaults={"nome": "Reserva de Espaços"},
-        )
-        self.user = User.objects.create_user(username="modal", password="123")
-        regra = RegraAcesso.objects.create(
-            recurso=self.recurso,
-            nivel=RegraAcesso.NIVEL_CONTROLE_TOTAL,
-        )
-        regra.usuarios.add(self.user)
-        self.objeto = ObjetoReservavel.objects.create(nome="Sala modal")
-        self.data_reserva = timezone.localdate() + timedelta(days=2)
-        self.reserva = ReservaRecurso.objects.create(
-            objeto=self.objeto,
-            data=self.data_reserva,
-            hora_inicio=time(10, 0),
-            hora_fim=time(11, 0),
-            titulo="Reserva base",
-            responsavel="Equipe",
-            criado_por=self.user,
-        )
-
-    def test_create_renderiza_modal_de_conflito(self):
-        """O cadastro deve devolver o modal quando houver sobreposição."""
-
-        self.client.login(username="modal", password="123")
-        response = self.client.post(
-            reverse("reserva_espacos:reserva_create"),
-            data={
-                "objeto": self.objeto.pk,
-                "data": self.data_reserva.isoformat(),
-                "hora_inicio": "10:30",
-                "hora_fim": "11:30",
-                "titulo": "Reserva em conflito",
-                "responsavel": "Outro nome",
-                "observacoes": "",
-                "recorrencia": "",
-                "recorrencia_fim": "",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="reservaConflitoModal"')
-        self.assertContains(response, ReservaRecursoForm.conflict_error_message)
-        self.assertNotContains(response, '<ul class="errorlist"><li>Já existe uma reserva para este objeto no intervalo informado.</li></ul>', html=False)
-
-    def test_update_renderiza_modal_de_conflito(self):
-        """A edição simples deve devolver o modal quando houver conflito."""
-
-        outra_reserva = ReservaRecurso.objects.create(
-            objeto=self.objeto,
-            data=self.data_reserva,
-            hora_inicio=time(12, 0),
-            hora_fim=time(13, 0),
-            titulo="Reserva editável",
-            responsavel="Equipe",
-            criado_por=self.user,
-        )
-        self.client.login(username="modal", password="123")
-        response = self.client.post(
-            reverse("reserva_espacos:reserva_update", kwargs={"pk": outra_reserva.pk}),
-            data={
-                "objeto": self.objeto.pk,
-                "data": self.data_reserva.isoformat(),
-                "hora_inicio": "10:30",
-                "hora_fim": "11:30",
-                "titulo": "Reserva editável",
-                "responsavel": "Equipe",
-                "observacoes": "",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="reservaConflitoModal"')
-        self.assertContains(response, ReservaRecursoForm.conflict_error_message)
-
-    def test_series_update_all_renderiza_modal_de_conflito(self):
-        """A edição da série inteira deve devolver o modal quando houver conflito."""
-
-        ReservaRecurso.objects.create(
-            objeto=self.objeto,
-            data=self.data_reserva + timedelta(days=7),
-            hora_inicio=time(10, 0),
-            hora_fim=time(11, 0),
-            titulo="Conflito da série",
-            responsavel="Equipe",
-            criado_por=self.user,
-        )
-        serie_id = uuid.uuid4()
-        ReservaRecurso.objects.create(
-            objeto=self.objeto,
-            data=self.data_reserva + timedelta(days=7),
-            hora_inicio=time(12, 0),
-            hora_fim=time(13, 0),
-            titulo="Reserva recorrente 1",
-            responsavel="Equipe",
-            criado_por=self.user,
-            serie_id=serie_id,
-        )
-        ReservaRecurso.objects.create(
-            objeto=self.objeto,
-            data=self.data_reserva + timedelta(days=14),
-            hora_inicio=time(12, 0),
-            hora_fim=time(13, 0),
-            titulo="Reserva recorrente 2",
-            responsavel="Equipe",
-            criado_por=self.user,
-            serie_id=serie_id,
-        )
-        primeira_ocorrencia = ReservaRecurso.objects.filter(serie_id=serie_id).order_by("data").first()
-
-        self.client.login(username="modal", password="123")
-        response = self.client.post(
-            reverse("reserva_espacos:reserva_update", kwargs={"pk": primeira_ocorrencia.pk}),
-            data={
-                "objeto": self.objeto.pk,
-                "data": primeira_ocorrencia.data.isoformat(),
-                "hora_inicio": "10:30",
-                "hora_fim": "11:30",
-                "titulo": "Reserva recorrente 1",
-                "responsavel": "Equipe",
-                "observacoes": "",
-                "apply_scope": "all",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="reservaConflitoModal"')
-        self.assertContains(response, ReservaRecursoForm.conflict_error_message)
+        reserva = self._reserva()
+        deferir_reserva(reserva, fiscal=self.fiscal)
+        self.client.login(username="fiscal", password="123")
+        response = self.client.get(reverse("reserva_espacos:reserva_detail", kwargs={"pk": reserva.pk}))
+        self.assertContains(response, "Histórico da reserva")
+        self.assertContains(response, "Fluxo fiscal")

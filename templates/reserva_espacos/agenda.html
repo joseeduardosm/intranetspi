@@ -16,12 +16,16 @@
     <div class="d-flex flex-wrap gap-2">
       {% if pode_criar_reserva %}
         <a class="btn btn-primary" href="{% url 'reserva_espacos:reserva_create' %}">Nova reserva</a>
+        <a class="btn btn-light" href="{% url 'reserva_espacos:minhas_reservas' %}">Minhas reservas</a>
       {% endif %}
-      {% if pode_gerenciar_objetos %}
-        <a class="btn btn-outline-secondary" href="{% url 'reserva_espacos:objeto_list' %}">Objetos</a>
+      {% if pode_analisar_reservas %}
+        <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:reserva_predefinida_create' %}">Pré-reserva</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:reserva_list' %}">Reservas</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:dashboard' %}">Dashboard</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:fila_fiscal' %}">Fila fiscal</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:objeto_list' %}">Objetos</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_espacos:configuracao' %}">Configuração</a>
       {% endif %}
-      <a class="btn btn-light" href="{% url 'reserva_espacos:dashboard' %}">Dashboard</a>
-      <a class="btn btn-light" href="{% url 'reserva_espacos:reserva_list' %}">Ver reservas</a>
     </div>
   </div>
 
@@ -144,42 +148,43 @@
       <span>${reserva.date.toLocaleDateString(locale)} · ${formatHour(reserva.date)} - ${reserva.end ? formatHour(reserva.end) : ""}</span>
       <span>${escapeHtml(reserva.objeto_nome)}</span>
       <span>${escapeHtml(reserva.objeto_localizacao || "-")}</span>
+      <span>Status: ${escapeHtml(reserva.status_label || "-")}</span>
       <span>Reservado por ${escapeHtml(reserva.criado_por_nome || "-")}</span>
       <span>${escapeHtml(reserva.criado_por_ramal || "-")} · ${escapeHtml(reserva.criado_por_email || "-")}</span>
     `;
 
     const buildMarker = (reserva) => {
-      const anchor = document.createElement("a");
-      anchor.href = reserva.url;
-      anchor.className = "reserva-espacos-marker";
-      anchor.style.setProperty("--marker-color", reserva.cor || "#1f4b99");
-      anchor.setAttribute("aria-label", reserva.titulo);
+      const element = document.createElement(reserva.url ? "a" : "div");
+      if (reserva.url) element.href = reserva.url;
+      element.className = `reserva-espacos-marker reserva-espacos-marker-${reserva.status_css || "approved"}`;
+      element.style.setProperty("--marker-color", reserva.cor || "#1f4b99");
+      element.setAttribute("aria-label", reserva.titulo);
 
       const tooltip = document.createElement("span");
       tooltip.className = "reserva-espacos-tooltip";
       tooltip.innerHTML = buildTooltipHtml(reserva);
-      anchor.appendChild(tooltip);
-      return anchor;
+      element.appendChild(tooltip);
+      return element;
     };
 
     const buildListEvent = (reserva) => {
-      const anchor = document.createElement("a");
-      anchor.href = reserva.url;
-      anchor.className = "reserva-espacos-event";
-      anchor.style.setProperty("--event-color", reserva.cor || "#1f4b99");
-      anchor.innerHTML = `
+      const element = document.createElement(reserva.url ? "a" : "div");
+      if (reserva.url) element.href = reserva.url;
+      element.className = "reserva-espacos-event";
+      element.style.setProperty("--event-color", reserva.cor || "#1f4b99");
+      element.innerHTML = `
         <div class="reserva-espacos-event-head">
           <span class="reserva-espacos-event-time">${formatHour(reserva.date)}${reserva.end ? ` - ${formatHour(reserva.end)}` : ""}</span>
           <span class="reserva-espacos-event-object">${escapeHtml(reserva.objeto_nome)}</span>
         </div>
         <strong>${escapeHtml(reserva.titulo)}</strong>
-        <small>${escapeHtml(reserva.objeto_localizacao || "Sem localização")}</small>
+        <small>${escapeHtml(reserva.objeto_localizacao || "Sem localização")} · ${escapeHtml(reserva.status_label || "-")}</small>
       `;
       const tooltip = document.createElement("span");
       tooltip.className = "reserva-espacos-tooltip reserva-espacos-tooltip-inline";
       tooltip.innerHTML = buildTooltipHtml(reserva);
-      anchor.appendChild(tooltip);
-      return anchor;
+      element.appendChild(tooltip);
+      return element;
     };
 
     const setActiveViewTab = () => {
