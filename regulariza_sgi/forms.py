@@ -103,6 +103,7 @@ class ImovelForm(BootstrapModelForm):
             'bairro',
             'area',
             'processo_judicial',
+            'motivo_desapropriacao',
             'imissao_posse',
             'imunidade',
             'tempo_imunidade',
@@ -115,6 +116,12 @@ class ImovelForm(BootstrapModelForm):
         ]
         widgets = {
             'area': forms.NumberInput(attrs={'step': '0.01'}),
+            'motivo_desapropriacao': forms.Textarea(
+                attrs={
+                    'rows': 4,
+                    'placeholder': 'Descreva livremente o motivo da desapropriação deste imóvel.',
+                }
+            ),
             'imissao_posse': forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}),
             'tempo_imunidade': forms.NumberInput(attrs={'min': 1}),
         }
@@ -139,6 +146,7 @@ class ImovelForm(BootstrapModelForm):
         self.fields['sei'].required = False
         self.fields['link_sei'].required = False
         self.fields['imissao_posse'].required = False
+        self.fields['motivo_desapropriacao'].required = False
         self.fields['tempo_imunidade'].required = False
         self.fields['exercicio_cobranca'].required = False
         self.fields['divida_ativa'].required = False

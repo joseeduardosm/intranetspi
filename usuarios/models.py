@@ -48,6 +48,14 @@ class UsuarioPerfil(models.Model):
     """Dados cadastrais e de contato associados a um usuário do Django."""
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="perfil")
+    superior_imediato = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="liderados_imediatos",
+        verbose_name="Superior imediato",
+    )
     nome_completo = models.CharField("Nome completo", max_length=220, blank=True)
     foto = models.ImageField("Foto", upload_to="usuarios/fotos/", blank=True, null=True)
     ramal = models.CharField("Ramal", max_length=40, blank=True)

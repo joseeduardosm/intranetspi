@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 23/06/2026 -->
+<!-- Objetivo: Permitir alteração de prazo com justificativa obrigatória. -->
+
+{% block title %}Alterar prazo{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'tarefas/css/tarefas.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{{ page_title }}</h1>
+      <p>{{ page_description }}</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'tarefas:detail' object.pk %}">Voltar</a>
+  </div>
+
+  <section class="card border-0 shadow-sm tarefas-form-card">
+    <div class="card-body p-4">
+      <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+        {% for error in form.non_field_errors %}<div class="text-danger small mb-3">{{ error }}</div>{% endfor %}
+        <button class="btn btn-primary" type="submit">{{ submit_label }}</button>
+      </form>
+    </div>
+  </section>
+{% endblock %}

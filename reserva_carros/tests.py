@@ -283,6 +283,36 @@ class ReservaCarrosServiceTests(ReservaCarrosBaseTest):
 class ReservaCarrosViewTests(ReservaCarrosBaseTest):
     """Cobre acesso às telas principais e o fluxo básico do fiscal."""
 
+    def test_criacao_dispara_mensagem_para_grupo_fiscal(self):
+        """A abertura da solicitação precisa alimentar a fila fiscal via mensageria."""
+
+        self.client.login(username="solicitante", password="123")
+        saida = self._saida_base(days=4)
+        retorno = saida + timedelta(hours=4)
+
+        response = self.client.post(
+            reverse("reserva_carros:solicitacao_create"),
+            data={
+                "saida_planejada_em": saida.strftime("%Y-%m-%dT%H:%M"),
+                "retorno_planejado_em": retorno.strftime("%Y-%m-%dT%H:%M"),
+                "destino_endereco": "Rua da Consolação, 123, São Paulo/SP",
+                "modo_destino": ReservaCarro.ModoDestino.AGUARDAR_NO_LOCAL,
+                "motivo_viagem": "Fiscalização externa",
+                "observacoes_solicitante": "Levar documentos do processo.",
+                "passageiros": [self.outro.pk],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        reserva = ReservaCarro.objects.latest("id")
+        destino = MensagemDestino.objects.filter(usuario=self.fiscal).latest("id")
+
+        self.assertEqual(destino.mensagem.payload_email["tipo"], "nova_solicitacao_reserva_carro")
+        self.assertEqual(destino.mensagem.payload_email["reserva_id"], reserva.pk)
+        self.assertIn("link_analise", destino.mensagem.payload_email)
+        self.assertNotIn("Analisar solicitação:", destino.corpo_snapshot)
+        self.assertIn(str(reserva.pk), destino.assunto_snapshot)
+
     def test_solicitante_acessa_apenas_suas_solicitacoes(self):
         reserva_1 = self._reserva()
         self._reserva(solicitante=self.outro)

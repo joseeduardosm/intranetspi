@@ -18,7 +18,7 @@ from usuarios.models import UsuarioPerfil
 
 from .forms import ReservaGaragemAnaliseForm, ReservaGaragemSolicitacaoForm
 from .models import ConfiguracaoReservaGaragem, ReservaGaragem, ReservaGaragemEvento, VagaGaragem
-from .services import cancelar_reserva, deferir_reserva, indeferir_reserva
+from .services import cancelar_reserva, cancelar_reserva_com_escopo, deferir_reserva, indeferir_reserva
 
 
 class ReservaGaragemBaseTest(TestCase):
@@ -237,6 +237,25 @@ class ReservaGaragemServiceTests(ReservaGaragemBaseTest):
 
     @patch("reserva_garagem.services.publicar_mensagem")
     @patch("reserva_garagem.services.criar_mensagem_rascunho")
+    def test_criacao_notifica_fiscal_sem_exibir_link_no_corpo(self, criar_mensagem, publicar_mensagem):
+        """A mensagem fiscal deve usar o payload para redirecionar o modal, sem poluir o corpo."""
+
+        self.client.login(username="solicitante", password="123")
+        data = self._data_base(days=4)
+
+        response = self.client.post(
+            reverse("reserva_garagem:reserva_create"),
+            data=self._form_data(data_inicial=data, data_final=data),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(criar_mensagem.called)
+        self.assertTrue(publicar_mensagem.called)
+        self.assertNotIn("Analisar solicitação:", criar_mensagem.call_args.kwargs["corpo"])
+        self.assertIn("link_analise", criar_mensagem.call_args.kwargs["payload_email"])
+
+    @patch("reserva_garagem.services.publicar_mensagem")
+    @patch("reserva_garagem.services.criar_mensagem_rascunho")
     def test_deferimento_em_bloco_da_serie(self, criar_mensagem, publicar_mensagem):
         """A análise fiscal positiva deve atingir todas as ocorrências da série."""
 
@@ -295,13 +314,103 @@ class ReservaGaragemServiceTests(ReservaGaragemBaseTest):
         self.assertTrue(publicar_mensagem.called)
 
     def test_cancelamento_apenas_enquanto_pendente(self):
-        """O solicitante só cancela uma série antes da análise fiscal."""
+        """O solicitante pode cancelar uma série pendente."""
 
         reserva = self._reserva()
         cancelar_reserva(reserva, usuario=self.solicitante)
         reserva.refresh_from_db()
 
         self.assertEqual(reserva.status, ReservaGaragem.Status.CANCELADA)
+
+    def test_cancelamento_deferido_tambem_notifica_solicitante(self):
+        """Reservas deferidas também podem ser canceladas, liberando a vaga e avisando o solicitante."""
+
+        reserva = self._reserva(status=ReservaGaragem.Status.DEFERIDA, fiscal_responsavel=self.fiscal)
+        cancelar_reserva(reserva, usuario=self.admin)
+        reserva.refresh_from_db()
+
+        self.assertEqual(reserva.status, ReservaGaragem.Status.CANCELADA)
+        mensagem = Mensagem.objects.exclude(destinos__usuario=self.admin).latest("id")
+        self.assertIn("Reserva de vaga cancelada", mensagem.assunto)
+        self.assertEqual(
+            list(mensagem.destinos.order_by("usuario_id").values_list("usuario_id", flat=True)),
+            [self.solicitante.id],
+        )
+
+    def test_cancelamento_com_escopo_total_cancela_toda_a_serie(self):
+        """O escopo total deve cancelar todas as ocorrências da série."""
+
+        serie_id = uuid.uuid4()
+        data_base = self._data_base()
+        reserva_a = self._reserva(data=data_base, serie_id=serie_id)
+        reserva_b = self._reserva(data=data_base + timedelta(days=1), serie_id=serie_id, placa_veiculo="AAA1A12")
+        self._reserva(data=data_base + timedelta(days=2), serie_id=serie_id, placa_veiculo="AAA1A13")
+
+        cancelar_reserva_com_escopo(reserva_a, usuario=self.solicitante, apply_scope="all")
+
+        self.assertEqual(
+            ReservaGaragem.objects.filter(serie_id=serie_id, status=ReservaGaragem.Status.CANCELADA).count(),
+            3,
+        )
+        reserva_b.refresh_from_db()
+        self.assertEqual(reserva_b.status, ReservaGaragem.Status.CANCELADA)
+
+    def test_cancelamento_com_escopo_total_ignora_ocorrencias_ja_quebradas(self):
+        """Ao cancelar toda a série, ocorrências já canceladas antes não devem bloquear o restante ativo."""
+
+        serie_id = uuid.uuid4()
+        data_base = self._data_base()
+        reserva_a = self._reserva(data=data_base, serie_id=serie_id)
+        reserva_b = self._reserva(
+            data=data_base + timedelta(days=1),
+            serie_id=serie_id,
+            placa_veiculo="AAA1A12",
+            status=ReservaGaragem.Status.CANCELADA,
+        )
+        reserva_c = self._reserva(
+            data=data_base + timedelta(days=2),
+            serie_id=serie_id,
+            placa_veiculo="AAA1A13",
+            status=ReservaGaragem.Status.DEFERIDA,
+        )
+
+        cancelar_reserva_com_escopo(
+            reserva_a,
+            usuario=self.solicitante,
+            apply_scope="all",
+            motivo_cancelamento="Cancelamento do período remanescente.",
+        )
+
+        reserva_a.refresh_from_db()
+        reserva_b.refresh_from_db()
+        reserva_c.refresh_from_db()
+        self.assertEqual(reserva_a.status, ReservaGaragem.Status.CANCELADA)
+        self.assertEqual(reserva_b.status, ReservaGaragem.Status.CANCELADA)
+        self.assertEqual(reserva_c.status, ReservaGaragem.Status.CANCELADA)
+
+    def test_cancelamento_com_periodo_especifico_cancela_so_faixa_informada(self):
+        """O escopo por período deve cancelar apenas as datas contidas no intervalo informado."""
+
+        serie_id = uuid.uuid4()
+        data_base = self._data_base()
+        primeira = self._reserva(data=data_base, serie_id=serie_id)
+        meio = self._reserva(data=data_base + timedelta(days=1), serie_id=serie_id, placa_veiculo="AAA1A12")
+        ultima = self._reserva(data=data_base + timedelta(days=2), serie_id=serie_id, placa_veiculo="AAA1A13")
+
+        cancelar_reserva_com_escopo(
+            primeira,
+            usuario=self.solicitante,
+            apply_scope="range",
+            data_inicial=meio.data,
+            data_final=ultima.data,
+        )
+
+        primeira.refresh_from_db()
+        meio.refresh_from_db()
+        ultima.refresh_from_db()
+        self.assertEqual(primeira.status, ReservaGaragem.Status.AGUARDANDO_APROVACAO)
+        self.assertEqual(meio.status, ReservaGaragem.Status.CANCELADA)
+        self.assertEqual(ultima.status, ReservaGaragem.Status.CANCELADA)
 
     def test_conflito_de_vaga_apenas_no_deferimento(self):
         """Pendências paralelas são permitidas até o momento da decisão fiscal."""
@@ -393,6 +502,50 @@ class ReservaGaragemViewsTests(ReservaGaragemBaseTest):
         self.assertTrue(ocupacoes[(data.isoformat(), self.vaga_a.id)]["is_mine"])
         self.assertFalse(ocupacoes[(data.isoformat(), self.vaga_b.id)]["is_mine"])
 
+    def test_agenda_exibe_todas_as_reservas_nominalmente_para_fiscal(self):
+        """Fiscais devem enxergar o nome responsável em qualquer vaga ocupada no tooltip."""
+
+        data = self._data_base()
+        self._reserva(data=data, vaga=self.vaga_a, solicitante=self.solicitante, status=ReservaGaragem.Status.DEFERIDA, responsavel="Ana")
+        self._reserva(
+            data=data,
+            vaga=self.vaga_b,
+            solicitante=self.outro,
+            status=ReservaGaragem.Status.DEFERIDA,
+            placa_veiculo="NOM1N11",
+            responsavel="Bianca",
+        )
+        self.client.login(username="fiscal", password="123")
+        response = self.client.get(reverse("reserva_garagem:agenda"))
+        ocupacoes = self._ocupar_agenda(response)
+
+        self.assertEqual(ocupacoes[(data.isoformat(), self.vaga_a.id)]["tooltip_label"], f"Ana, {self.vaga_a.nome_exibicao}")
+        self.assertEqual(ocupacoes[(data.isoformat(), self.vaga_b.id)]["tooltip_label"], f"Bianca, {self.vaga_b.nome_exibicao}")
+        self.assertTrue(ocupacoes[(data.isoformat(), self.vaga_a.id)]["detail_url"])
+        self.assertTrue(ocupacoes[(data.isoformat(), self.vaga_b.id)]["detail_url"])
+
+    def test_agenda_exibe_nome_apenas_na_propria_reserva_para_usuario_comum(self):
+        """Cliente comum deve ver outras vagas só como ocupadas e a própria nominalmente."""
+
+        data = self._data_base()
+        self._reserva(data=data, vaga=self.vaga_a, solicitante=self.solicitante, status=ReservaGaragem.Status.DEFERIDA, responsavel="Ana")
+        self._reserva(
+            data=data,
+            vaga=self.vaga_b,
+            solicitante=self.outro,
+            status=ReservaGaragem.Status.DEFERIDA,
+            placa_veiculo="CLI2C22",
+            responsavel="Bianca",
+        )
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_garagem:agenda"))
+        ocupacoes = self._ocupar_agenda(response)
+
+        self.assertEqual(ocupacoes[(data.isoformat(), self.vaga_a.id)]["tooltip_label"], f"Ana, {self.vaga_a.nome_exibicao}")
+        self.assertEqual(ocupacoes[(data.isoformat(), self.vaga_b.id)]["tooltip_label"], "Ocupada")
+        self.assertTrue(ocupacoes[(data.isoformat(), self.vaga_a.id)]["detail_url"])
+        self.assertEqual(ocupacoes[(data.isoformat(), self.vaga_b.id)]["detail_url"], "")
+
     def test_agenda_filtra_para_uma_unica_vaga(self):
         """Ao filtrar por vaga, o contexto mantém a vaga atual e a interface renderiza só aquele círculo."""
 
@@ -401,6 +554,30 @@ class ReservaGaragemViewsTests(ReservaGaragemBaseTest):
 
         self.assertEqual(response.context["vaga_atual"], str(self.vaga_b.id))
         self.assertContains(response, f'value="{self.vaga_b.id}" selected')
+
+    def test_agenda_exibe_botao_de_vaga_pre_reservada_para_fiscal(self):
+        """O atalho da reserva pré-definida deve aparecer somente para quem atua no fluxo fiscal."""
+
+        self.client.login(username="fiscal", password="123")
+        response = self.client.get(reverse("reserva_garagem:agenda"))
+
+        self.assertContains(response, reverse("reserva_garagem:reserva_predefinida_create"))
+
+    def test_agenda_omite_botao_de_vaga_pre_reservada_para_solicitante_comum(self):
+        """Usuário sem papel fiscal não deve visualizar o atalho operacional."""
+
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_garagem:agenda"))
+
+        self.assertNotContains(response, reverse("reserva_garagem:reserva_predefinida_create"))
+
+    def test_agenda_exibe_botao_minhas_reservas_para_usuario_solicitante(self):
+        """O calendário deve oferecer acesso rápido à listagem pessoal de reservas."""
+
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_garagem:agenda"))
+
+        self.assertContains(response, reverse("reserva_garagem:minhas_reservas"))
 
     def test_agenda_omite_indeferidas_e_canceladas(self):
         """Somente pendentes e deferidas ficam visíveis no calendário."""
@@ -415,7 +592,7 @@ class ReservaGaragemViewsTests(ReservaGaragemBaseTest):
         self.assertNotIn((data.isoformat(), self.vaga_a.id), ocupacoes)
         self.assertNotIn((data.isoformat(), self.vaga_b.id), ocupacoes)
 
-    def test_fila_fiscal_restrita_a_fiscais_e_controle_total(self):
+    def test_fila_fiscal_restrita_a_fiscais_e_admins_do_sistema(self):
         """Usuário comum não deve acessar a fila de deferimento."""
 
         self.client.login(username="solicitante", password="123")
@@ -423,15 +600,34 @@ class ReservaGaragemViewsTests(ReservaGaragemBaseTest):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_crud_de_vagas_restrito_ao_controle_total(self):
-        """O cadastro da garagem fica reservado ao perfil administrativo."""
+    def test_crud_de_vagas_restrito_a_fiscais_e_admins(self):
+        """O cadastro da garagem fica restrito ao grupo fiscal e ao perfil administrativo."""
 
         self.client.login(username="solicitante", password="123")
         response = self.client.get(reverse("reserva_garagem:vaga_list"))
         self.assertEqual(response.status_code, 403)
 
+        self.client.login(username="fiscal", password="123")
+        response = self.client.get(reverse("reserva_garagem:vaga_list"))
+        self.assertEqual(response.status_code, 200)
+
         self.client.login(username="admin-garagem", password="123")
         response = self.client.get(reverse("reserva_garagem:vaga_list"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_configuracao_restrita_a_fiscais_e_admins(self):
+        """A configuração do grupo fiscal também deve abrir para fiscal e admin, mas não para cliente comum."""
+
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_garagem:configuracao"))
+        self.assertEqual(response.status_code, 403)
+
+        self.client.login(username="fiscal", password="123")
+        response = self.client.get(reverse("reserva_garagem:configuracao"))
+        self.assertEqual(response.status_code, 200)
+
+        self.client.login(username="admin-garagem", password="123")
+        response = self.client.get(reverse("reserva_garagem:configuracao"))
         self.assertEqual(response.status_code, 200)
 
     def test_dashboard_renderiza_ocupacao_media_e_ranking(self):
@@ -443,6 +639,92 @@ class ReservaGaragemViewsTests(ReservaGaragemBaseTest):
 
         self.assertContains(response, "Taxa média diária de ocupação")
         self.assertContains(response, "Ranking das vagas mais usadas")
+
+    def test_dashboard_fica_restrito_a_fiscais_e_admins_do_sistema(self):
+        """Usuário comum não deve abrir o dashboard restrito da garagem."""
+
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_garagem:dashboard"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_lista_ordena_por_solicitante(self):
+        """A lista deve aceitar ordenação automática pelo nome do solicitante."""
+
+        data = self._data_base()
+        self._reserva(data=data, responsavel="Carlos", placa_veiculo="ORD1A11")
+        self._reserva(
+            data=data,
+            responsavel="Ana",
+            placa_veiculo="ORD1A12",
+            solicitante=self.outro,
+            vaga=self.vaga_b,
+        )
+        self.client.login(username="admin-garagem", password="123")
+        response = self.client.get(reverse("reserva_garagem:reserva_list"), data={"ordenar_por": "solicitante"})
+
+        reservas = list(response.context["reservas"])
+        self.assertEqual([reserva.responsavel for reserva in reservas], ["Ana", "Carlos"])
+
+    def test_lista_restrita_a_fiscais_e_admins_do_sistema(self):
+        """A listagem tabular de reservas deve ficar restrita ao grupo fiscal e aos admins do sistema."""
+
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_garagem:reserva_list"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_minhas_reservas_lista_apenas_reservas_do_usuario_logado(self):
+        """A tela Minhas reservas deve isolar apenas as reservas do próprio solicitante."""
+
+        data = self._data_base()
+        minha = self._reserva(data=data, solicitante=self.solicitante, placa_veiculo="MIN1A11")
+        self._reserva(data=data, solicitante=self.outro, placa_veiculo="OUT2B22", vaga=self.vaga_b)
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_garagem:minhas_reservas"))
+
+        reservas = list(response.context["reservas"])
+        self.assertEqual([reserva.pk for reserva in reservas], [minha.pk])
+        self.assertContains(response, "Minhas reservas")
+
+    def test_minhas_reservas_filtra_por_status(self):
+        """Os botões de status devem filtrar a listagem pessoal conforme a situação da reserva."""
+
+        data = self._data_base()
+        self._reserva(data=data, solicitante=self.solicitante, status=ReservaGaragem.Status.DEFERIDA, placa_veiculo="DEF1E11")
+        self._reserva(
+            data=data + timedelta(days=1),
+            solicitante=self.solicitante,
+            status=ReservaGaragem.Status.INDEFERIDA,
+            placa_veiculo="IND2F22",
+            vaga=self.vaga_b,
+        )
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(
+            reverse("reserva_garagem:minhas_reservas"),
+            data={"status": ReservaGaragem.Status.INDEFERIDA},
+        )
+
+        reservas = list(response.context["reservas"])
+        self.assertEqual(len(reservas), 1)
+        self.assertEqual(reservas[0].status, ReservaGaragem.Status.INDEFERIDA)
+
+    def test_lista_ordena_por_vaga(self):
+        """A lista deve aceitar ordenação automática pelo nome da vaga."""
+
+        data = self._data_base()
+        self._reserva(data=data, vaga=self.vaga_b, placa_veiculo="ORD2B21")
+        self._reserva(
+            data=data,
+            vaga=self.vaga_a,
+            placa_veiculo="ORD2B22",
+            solicitante=self.outro,
+        )
+        self.client.login(username="admin-garagem", password="123")
+        response = self.client.get(reverse("reserva_garagem:reserva_list"), data={"ordenar_por": "vaga"})
+
+        reservas = list(response.context["reservas"])
+        self.assertEqual([reserva.vaga.nome for reserva in reservas], ["Vaga A", "Vaga B"])
 
     def test_reserva_create_materializa_serie(self):
         """A view de criação deve gerar uma ocorrência por dia do intervalo."""
@@ -506,12 +788,91 @@ class ReservaGaragemViewsTests(ReservaGaragemBaseTest):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f'value="{inicio.isoformat()}"', count=2)
 
+    def test_reserva_predefinida_exige_perfil_fiscal(self):
+        """Somente o grupo fiscal e o controle total podem abrir o cadastro pré-definido."""
+
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_garagem:reserva_predefinida_create"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_reserva_predefinida_renderiza_campo_responsavel_com_sugestoes(self):
+        """O formulário fiscal deve permitir escolher ou digitar manualmente o responsável no mesmo campo."""
+
+        self.client.login(username="fiscal", password="123")
+        response = self.client.get(reverse("reserva_garagem:reserva_predefinida_create"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'list="reserva-garagem-responsaveis"', html=False)
+        self.assertContains(response, "<datalist", html=False)
+        self.assertContains(response, "Ana")
+
+    def test_reserva_predefinida_cria_reserva_deferida_com_nome_manual(self):
+        """Quando o fiscal digita um nome manual, a vaga nasce deferida e vinculada ao próprio fiscal."""
+
+        self.client.login(username="fiscal", password="123")
+        inicio = self._data_base()
+        response = self.client.post(
+            reverse("reserva_garagem:reserva_predefinida_create"),
+            data=self._form_data(
+                data_inicial=inicio,
+                data_final=inicio,
+                placa_veiculo="MAN4U44",
+                responsavel="Visitante externo",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        reserva = ReservaGaragem.objects.get(placa_veiculo="MAN4U44")
+        self.assertEqual(reserva.status, ReservaGaragem.Status.DEFERIDA)
+        self.assertEqual(reserva.fiscal_responsavel, self.fiscal)
+        self.assertEqual(reserva.responsavel, "Visitante externo")
+        self.assertEqual(reserva.solicitante, self.fiscal)
+
+    def test_reserva_predefinida_resolve_usuario_cadastrado_pelo_nome(self):
+        """Quando o nome informado coincidir com um usuário existente, ele vira o solicitante da reserva."""
+
+        self.client.login(username="fiscal", password="123")
+        inicio = self._data_base()
+        response = self.client.post(
+            reverse("reserva_garagem:reserva_predefinida_create"),
+            data=self._form_data(
+                data_inicial=inicio,
+                data_final=inicio,
+                placa_veiculo="USR5A55",
+                responsavel="Ana",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        reserva = ReservaGaragem.objects.get(placa_veiculo="USR5A55")
+        self.assertEqual(reserva.status, ReservaGaragem.Status.DEFERIDA)
+        self.assertEqual(reserva.solicitante, self.solicitante)
+        self.assertEqual(reserva.responsavel, "Ana")
+
     def test_api_vagas_disponiveis_retorna_somente_livres(self):
         """O endpoint auxiliar deve listar apenas as vagas sem conflito deferido."""
 
         self.client.login(username="solicitante", password="123")
         inicio = self._data_base()
         self._reserva(data=inicio, status=ReservaGaragem.Status.DEFERIDA, vaga=self.vaga_a, placa_veiculo="GGG7G77")
+
+        response = self.client.get(
+            reverse("reserva_garagem:vagas_disponiveis"),
+            data={"data_inicial": inicio.isoformat(), "data_final": inicio.isoformat(), "recorrencia": ""},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["tem_vagas"])
+        self.assertEqual(payload["vagas"], [{"id": self.vaga_b.id, "nome_exibicao": self.vaga_b.nome_exibicao}])
+
+    def test_api_vagas_disponiveis_tambem_libera_fluxo_fiscal_predefinido(self):
+        """O fiscal precisa usar o mesmo endpoint para escolher a vaga livre da reserva pré-definida."""
+
+        self.client.login(username="fiscal", password="123")
+        inicio = self._data_base()
+        self._reserva(data=inicio, status=ReservaGaragem.Status.DEFERIDA, vaga=self.vaga_a, placa_veiculo="FSC1A11")
 
         response = self.client.get(
             reverse("reserva_garagem:vagas_disponiveis"),
@@ -560,6 +921,84 @@ class ReservaGaragemViewsTests(ReservaGaragemBaseTest):
         self.assertContains(response, "Ana")
         self.assertNotContains(response, "<p>solicitante</p>", html=False)
 
+    def test_detalhe_exibe_cancelar_na_propria_reserva_para_usuario_comum(self):
+        """O solicitante deve ver o botão de cancelar na própria reserva ativa."""
+
+        reserva = self._reserva(status=ReservaGaragem.Status.DEFERIDA)
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_garagem:reserva_detail", args=[reserva.pk]))
+
+        self.assertContains(response, reverse("reserva_garagem:reserva_cancel", args=[reserva.pk]))
+
+    def test_detalhe_exibe_cancelar_em_qualquer_reserva_para_fiscal(self):
+        """Fiscal deve poder cancelar qualquer reserva ativa a partir do detalhe."""
+
+        reserva = self._reserva(status=ReservaGaragem.Status.DEFERIDA, solicitante=self.outro, placa_veiculo="FIS9C99")
+        self.client.login(username="fiscal", password="123")
+        response = self.client.get(reverse("reserva_garagem:reserva_detail", args=[reserva.pk]))
+
+        self.assertContains(response, reverse("reserva_garagem:reserva_cancel", args=[reserva.pk]))
+
+    def test_cancelamento_view_libera_fiscal_para_reserva_de_terceiro(self):
+        """Fiscal pode cancelar reserva ativa de outro usuário e a reserva deixa de ocupar a vaga."""
+
+        data = self._data_base()
+        reserva = self._reserva(
+            data=data,
+            status=ReservaGaragem.Status.DEFERIDA,
+            solicitante=self.outro,
+            placa_veiculo="LIV3R33",
+        )
+        self.client.login(username="fiscal", password="123")
+        response = self.client.post(reverse("reserva_garagem:reserva_cancel", args=[reserva.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        reserva.refresh_from_db()
+        self.assertEqual(reserva.status, ReservaGaragem.Status.CANCELADA)
+
+        agenda = self.client.get(reverse("reserva_garagem:agenda"))
+        ocupacoes = self._ocupar_agenda(agenda)
+        self.assertNotIn((data.isoformat(), reserva.vaga_id), ocupacoes)
+
+    def test_cancelamento_view_exibe_opcoes_de_serie(self):
+        """A tela de cancelamento deve permitir escolher ocorrência única, série toda ou período específico."""
+
+        serie_id = uuid.uuid4()
+        reserva = self._reserva(serie_id=serie_id)
+        self._reserva(data=self._data_base() + timedelta(days=1), serie_id=serie_id, placa_veiculo="SER1E11")
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_garagem:reserva_cancel", args=[reserva.pk]))
+
+        self.assertContains(response, "Cancelar todo o período")
+        self.assertContains(response, "Cancelar período específico")
+        self.assertContains(response, 'name="cancel_data_inicial"', html=False)
+
+    def test_cancelamento_view_aceita_periodo_especifico(self):
+        """O POST da tela deve cancelar apenas o intervalo selecionado dentro da série."""
+
+        serie_id = uuid.uuid4()
+        data_base = self._data_base()
+        primeira = self._reserva(data=data_base, serie_id=serie_id)
+        meio = self._reserva(data=data_base + timedelta(days=1), serie_id=serie_id, placa_veiculo="SER2E12")
+        ultima = self._reserva(data=data_base + timedelta(days=2), serie_id=serie_id, placa_veiculo="SER2E13")
+        self.client.login(username="solicitante", password="123")
+        response = self.client.post(
+            reverse("reserva_garagem:reserva_cancel", args=[primeira.pk]),
+            data={
+                "apply_scope": "range",
+                "cancel_data_inicial": meio.data.isoformat(),
+                "cancel_data_final": ultima.data.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        primeira.refresh_from_db()
+        meio.refresh_from_db()
+        ultima.refresh_from_db()
+        self.assertEqual(primeira.status, ReservaGaragem.Status.AGUARDANDO_APROVACAO)
+        self.assertEqual(meio.status, ReservaGaragem.Status.CANCELADA)
+        self.assertEqual(ultima.status, ReservaGaragem.Status.CANCELADA)
+
     def test_analise_indeferimento_exige_fiscal(self):
         """A tela de análise deve bloquear quem não pertence ao fluxo fiscal."""
 
@@ -568,6 +1007,33 @@ class ReservaGaragemViewsTests(ReservaGaragemBaseTest):
         response = self.client.get(reverse("reserva_garagem:fila_fiscal_analise", args=[reserva.pk]))
 
         self.assertEqual(response.status_code, 403)
+
+    def test_analise_exibe_reserva_ja_deferida_como_somente_leitura(self):
+        """Reserva já decidida deve abrir em modo bloqueado, sem nova ação fiscal."""
+
+        reserva = self._reserva(status=ReservaGaragem.Status.DEFERIDA, fiscal_responsavel=self.admin)
+        self.client.login(username="fiscal", password="123")
+        response = self.client.get(reverse("reserva_garagem:fila_fiscal_analise", args=[reserva.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Status atual:</strong> Deferida", html=False)
+        self.assertContains(response, "bloqueada para nova análise")
+        self.assertNotContains(response, "Salvar decisão")
+
+    def test_analise_bloqueia_post_quando_reserva_ja_foi_decidida(self):
+        """Mesmo com POST manual, a view não deve permitir nova decisão sobre reserva já deferida."""
+
+        reserva = self._reserva(status=ReservaGaragem.Status.DEFERIDA, fiscal_responsavel=self.admin)
+        self.client.login(username="fiscal", password="123")
+        response = self.client.post(
+            reverse("reserva_garagem:fila_fiscal_analise", args=[reserva.pk]),
+            data={"decisao": "INDEFERIR", "justificativa_indeferimento": "Nova tentativa"},
+            follow=True,
+        )
+
+        reserva.refresh_from_db()
+        self.assertEqual(reserva.status, ReservaGaragem.Status.DEFERIDA)
+        self.assertContains(response, "já foi deferida e não pode ser analisada novamente")
 
     @patch("reserva_garagem.services.publicar_mensagem")
     @patch("reserva_garagem.services.criar_mensagem_rascunho")

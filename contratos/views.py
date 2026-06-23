@@ -94,10 +94,15 @@ from .forms import (
     ContratoForm,
     DocumentoImportanteContratoForm,
     EscalaNotaAvaliacaoForm,
+    EscalaNotaAvaliacaoPadraoGlobalForm,
     FaixaLiberacaoAvaliacaoForm,
+    FaixaLiberacaoAvaliacaoPadraoGlobalForm,
     FormularioAvaliacaoForm,
+    FormularioAvaliacaoPadraoGlobalForm,
     GrupoAvaliacaoForm,
+    GrupoAvaliacaoPadraoGlobalForm,
     ItemAvaliacaoForm,
+    ItemAvaliacaoPadraoGlobalForm,
     EmpresaContratadaForm,
     ResponsavelEmpresaForm,
     PrazoMonitoramentoForm,
@@ -110,15 +115,22 @@ from .models import (
     ChecklistModelo,
     ChecklistPadraoGlobal,
     ChecklistPadraoGlobalItem,
+    CompetenciaAuditoriaEvento,
     CompetenciaPagamento,
+    ContratoAuditoriaEvento,
     ContratoItem,
     Contrato,
     DocumentoImportanteContrato,
     EscalaNotaAvaliacao,
+    EscalaNotaAvaliacaoPadraoGlobal,
     FaixaLiberacaoAvaliacao,
+    FaixaLiberacaoAvaliacaoPadraoGlobal,
     FormularioAvaliacao,
+    FormularioAvaliacaoPadraoGlobal,
     GrupoAvaliacao,
+    GrupoAvaliacaoPadraoGlobal,
     ItemAvaliacao,
+    ItemAvaliacaoPadraoGlobal,
     MedicaoItemCompetencia,
     EmpresaContratada,
     ExportacaoDocumentosCompetencia,
@@ -127,18 +139,29 @@ from .models import (
 )
 from .services import (
     avaliacao_v2_esta_concluida,
+    build_changes_payload,
+    capture_instance_audit_state,
     competencia_checklist_v2_esta_concluido,
     competencia_medicao_v2_esta_concluida,
+    get_usuario_auditoria_display,
     criar_avaliacao_shell_competencia_v2,
     inclusive_end_date,
     recalcular_avaliacao_v2,
     recalcular_competencia_v2,
+    registrar_evento_competencia,
+    registrar_evento_contrato,
+    resetar_competencia_v2,
+    reset_current_audit_user,
+    set_current_audit_user,
+    suspend_audit_logging,
     usuario_eh_admin_sistema,
     usuario_pode_gerir_documento_importante,
     usuario_pode_gerir_documento_importante_contrato,
     usuario_pode_preencher_avaliacao_fiscal_v2,
     usuario_pode_preencher_avaliacao_gestor_v2,
     usuario_pode_gerir_contrato_v2,
+    CONTRATO_AUDITORIA_FIELD_LABELS,
+    PRAZO_MONITORAMENTO_AUDITORIA_FIELD_LABELS,
 )
 
 
@@ -153,6 +176,15 @@ class ContratosWriteMixin(ContratosAccessMixin):
 
     acl_nivel_minimo = 'MODIFICACAO'
 
+    def dispatch(self, request, *args, **kwargs):
+        """Compartilha o ator atual com os sinais de auditoria durante a requisição."""
+
+        token = set_current_audit_user(request.user)
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        finally:
+            reset_current_audit_user(token)
+
 
 def assign_owner(instance, request):
     """Mantém autoria e atualização alinhadas às operações do CRUD."""
@@ -162,6 +194,12 @@ def assign_owner(instance, request):
     if hasattr(instance, 'atualizado_por_id'):
         instance.atualizado_por = request.user
     return instance
+
+
+def build_competencia_extra_payload(extra):
+    """Normaliza os metadados operacionais exibidos no detalhe expandido da auditoria."""
+
+    return {'extra': extra}
 
 
 def serializar_responsavel_v2(label, usuario):
@@ -228,10 +266,10 @@ def formatar_moeda_brl(valor):
     return f'R$ {Decimal(valor or 0):,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
 
 
-def montar_assinatura_pagamento(competencia, usuario, cargo_padrao, em_exercicio=False):
+def montar_assinatura_pagamento(competencia, usuario, cargo_padrao, em_exercicio=False, nome_manual=''):
     """Centraliza a regra institucional: nome + cargo ou cargo em exercício."""
 
-    assinatura = competencia.obter_assinatura_pagamento(usuario, cargo_padrao, em_exercicio)
+    assinatura = competencia.obter_assinatura_pagamento(usuario, cargo_padrao, em_exercicio, nome_manual=nome_manual)
     return {
         'nome': assinatura['nome'],
         'cargo': assinatura['cargo'],
@@ -293,21 +331,53 @@ class GlobalChecklistManagePermissionMixin:
         return redirect_contract_detail(contrato)
 
 
+class GlobalEvaluationManagePermissionMixin:
+    """Restringe os formulários padrão globais aos mesmos perfis institucionais do módulo."""
+
+    def dispatch(self, request, *args, **kwargs):
+        if not usuario_eh_admin_sistema(request.user):
+            messages.error(
+                request,
+                'Somente gestores e administradores do sistema podem manter formulários de avaliação padrão globais.',
+            )
+            return redirect('contratos:contrato_list')
+        return super().dispatch(request, *args, **kwargs)
+
+
 class ContratoListView(ContratosAccessMixin, ListView):
     model = Contrato
     template_name = 'contratos/contrato_list.html'
     context_object_name = 'contratos'
     paginate_by = 20
 
-    def get_queryset(self):
-        queryset = (
-            Contrato.objects.select_related(
-                'empresa_contratada',
-                'fiscal_administrativo__perfil',
-                'fiscal_tecnico__perfil',
-                'gestor_contrato__perfil',
-            )
+    def _dashboard_queryset(self):
+        """Entrega a base da carteira com os relacionamentos mínimos para o dashboard operacional."""
+
+        return Contrato.objects.select_related(
+            'empresa_contratada',
+            'fiscal_administrativo__perfil',
+            'fiscal_tecnico__perfil',
+            'gestor_contrato__perfil',
+        ).prefetch_related(
+            Prefetch(
+                'competencias',
+                queryset=CompetenciaPagamento.objects.only(
+                    'id',
+                    'contrato_id',
+                    'status',
+                    'monitoramento_etapa',
+                    'monitoramento_limite',
+                ).order_by('periodo_inicio', 'id'),
+            ),
+            Prefetch(
+                'prazos',
+                queryset=PrazoMonitoramento.objects.filter(concluido=False).order_by('data_limite', 'id'),
+                to_attr='prazos_dashboard_ativos',
+            ),
         )
+
+    def get_queryset(self):
+        queryset = self._dashboard_queryset()
         term = self.request.GET.get('q', '').strip()
         if term:
             queryset = queryset.filter(
@@ -325,10 +395,88 @@ class ContratoListView(ContratosAccessMixin, ListView):
             ).distinct()
         return queryset
 
+    def _build_dashboard_context(self, contratos):
+        """Consolida KPIs e a grade de contratos críticos sem empurrar regras para a template."""
+
+        hoje = timezone.localdate()
+        resumo = {
+            'vigentes': 0,
+            'vence_ate_30_dias': 0,
+            'vence_31_60_dias': 0,
+            'vence_61_90_dias': 0,
+            'competencias_atrasadas': 0,
+            'pagamentos_pendentes': 0,
+            'prazos_criticos': 0,
+        }
+        contratos_operacionais = []
+
+        for contrato in contratos:
+            competencias = list(contrato.competencias.all())
+            prazos_ativos = list(getattr(contrato, 'prazos_dashboard_ativos', []))
+            valor_executado = sum((competencia.valor_medido for competencia in competencias), Decimal('0.00'))
+            valor_saldo = max(Decimal('0.00'), contrato.valor_global - valor_executado)
+            competencias_atrasadas = sum(1 for competencia in competencias if competencia.esta_atrasada_em(referencia=hoje))
+            pagamentos_pendentes = sum(
+                1
+                for competencia in competencias
+                if competencia.status in {
+                    CompetenciaPagamento.Status.DOWNLOAD_PENDENTE,
+                    CompetenciaPagamento.Status.OB_PENDENTE,
+                }
+            )
+            prazos_criticos = sum(1 for prazo in prazos_ativos if prazo.esta_critico_em(referencia=hoje))
+            contrato.dashboard_competencias_atrasadas = competencias_atrasadas
+            contrato.dashboard_pagamentos_pendentes = pagamentos_pendentes
+            contrato.dashboard_prazos_criticos = prazos_criticos
+            contrato.dashboard_total_pendencias = pagamentos_pendentes + competencias_atrasadas
+            contrato.dashboard_valor_executado = valor_executado
+            contrato.dashboard_valor_saldo = valor_saldo
+
+            # A prioridade pondera atrasos, pagamentos travados e prazos críticos antes
+            # de critérios mais brandos como vigência a vencer.
+            contrato.dashboard_prioridade = (
+                (competencias_atrasadas * 100)
+                + (pagamentos_pendentes * 50)
+                + (prazos_criticos * 25)
+                + (5 if contrato.vence_em_intervalo(dias_minimos=0, dias_maximos=30, referencia=hoje) else 0)
+            )
+
+            if contrato.esta_vigente_em(referencia=hoje):
+                resumo['vigentes'] += 1
+            if contrato.vence_em_intervalo(dias_minimos=0, dias_maximos=30, referencia=hoje):
+                resumo['vence_ate_30_dias'] += 1
+            if contrato.vence_em_intervalo(dias_minimos=31, dias_maximos=60, referencia=hoje):
+                resumo['vence_31_60_dias'] += 1
+            if contrato.vence_em_intervalo(dias_minimos=61, dias_maximos=90, referencia=hoje):
+                resumo['vence_61_90_dias'] += 1
+
+            resumo['competencias_atrasadas'] += competencias_atrasadas
+            resumo['pagamentos_pendentes'] += pagamentos_pendentes
+            resumo['prazos_criticos'] += prazos_criticos
+            if contrato.dashboard_prioridade > 0:
+                contratos_operacionais.append(contrato)
+
+        contratos_operacionais.sort(
+            key=lambda contrato: (
+                -contrato.dashboard_prioridade,
+                contrato.dias_restantes_vigencia(referencia=hoje)
+                if contrato.dias_restantes_vigencia(referencia=hoje) is not None
+                else 999999,
+                contrato.numero_contrato,
+            )
+        )
+        return {
+            'dashboard_resumo': resumo,
+            'dashboard_contratos_operacionais': contratos_operacionais[:10],
+        }
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['q'] = self.request.GET.get('q', '').strip()
         context['usuario_pode_gerir_checklists_padrao_globais'] = usuario_eh_admin_sistema(self.request.user)
+        context['usuario_pode_gerir_formularios_padrao_globais'] = usuario_eh_admin_sistema(self.request.user)
+        dashboard_contratos = list(self.get_queryset())
+        context.update(self._build_dashboard_context(dashboard_contratos))
         return context
 
 
@@ -362,6 +510,43 @@ class ChecklistPadraoGlobalDetailView(GlobalChecklistManagePermissionMixin, Cont
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['usuario_pode_gerir_checklists_padrao_globais'] = usuario_eh_admin_sistema(self.request.user)
+        return context
+
+
+class FormularioAvaliacaoPadraoGlobalListView(GlobalEvaluationManagePermissionMixin, ContratosAccessMixin, ListView):
+    """Entrega uma tela própria para a manutenção resumida dos formulários padrão globais."""
+
+    model = FormularioAvaliacaoPadraoGlobal
+    template_name = 'contratos/avaliacao_padrao_list.html'
+    context_object_name = 'formularios_padrao'
+    paginate_by = 20
+
+    def get_queryset(self):
+        return FormularioAvaliacaoPadraoGlobal.objects.select_related('atualizado_por__perfil').order_by('id')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['usuario_pode_gerir_formularios_padrao_globais'] = usuario_eh_admin_sistema(self.request.user)
+        return context
+
+
+class FormularioAvaliacaoPadraoGlobalDetailView(GlobalEvaluationManagePermissionMixin, ContratosAccessMixin, DetailView):
+    """Mostra um formulário padrão global isoladamente para manter seus blocos estruturais."""
+
+    model = FormularioAvaliacaoPadraoGlobal
+    template_name = 'contratos/avaliacao_padrao_detail.html'
+    context_object_name = 'formulario_padrao'
+
+    def get_queryset(self):
+        return FormularioAvaliacaoPadraoGlobal.objects.prefetch_related(
+            'escalas',
+            'faixas_liberacao',
+            'grupos__itens',
+        ).select_related('criado_por__perfil', 'atualizado_por__perfil')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['usuario_pode_gerir_formularios_padrao_globais'] = usuario_eh_admin_sistema(self.request.user)
         return context
 
 
@@ -409,16 +594,32 @@ class ContratoDetailView(ContratosAccessMixin, DetailView):
             Prefetch(
                 'competencias',
                 queryset=CompetenciaPagamento.objects.prefetch_related(
+                    Prefetch(
+                        'auditoria_eventos',
+                        queryset=CompetenciaAuditoriaEvento.objects.select_related('usuario__perfil'),
+                    ),
+                    Prefetch(
+                        'exportacoes_documentos',
+                        queryset=ExportacaoDocumentosCompetencia.objects.select_related('solicitado_por').order_by('-criado_em', '-id'),
+                        to_attr='exportacoes_documentos_prefetch',
+                    ),
                     'checklist_itens__anexo',
                     'medicoes__item_contrato',
                     'avaliacao_qualidade__itens',
                 ).annotate(
                     ordem_status=Case(
+                        # Competências concluídas descem para o final da lista, preservando
+                        # a leitura cronológica crescente das competências ainda em andamento.
                         When(status='PAGA', then=Value(1)),
+                        When(status='CANCELADA', then=Value(1)),
                         default=Value(0),
                         output_field=IntegerField(),
                     )
-                ).order_by('ordem_status', '-periodo_inicio', '-id'),
+                ).order_by('ordem_status', 'periodo_inicio', 'id'),
+            ),
+            Prefetch(
+                'auditoria_eventos',
+                queryset=ContratoAuditoriaEvento.objects.select_related('usuario__perfil'),
             ),
             Prefetch('prazos', queryset=PrazoMonitoramento.objects.filter(concluido=False), to_attr='prazos_ativos'),
         )
@@ -465,10 +666,31 @@ class ContratoDetailView(ContratosAccessMixin, DetailView):
         context['usuario_pode_medicao'] = contrato.usuario_pode_preencher_medicao(self.request.user)
         context['usuario_pode_avaliacao'] = contrato.usuario_pode_preencher_avaliacao(self.request.user)
         context['checklists_padrao_ativos'] = ChecklistPadraoGlobal.objects.filter(ativo=True).prefetch_related('itens')
+        context['formularios_avaliacao_padrao_ativos'] = FormularioAvaliacaoPadraoGlobal.objects.filter(
+            ativo=True
+        ).prefetch_related('escalas', 'faixas_liberacao', 'grupos__itens')
         context['usuario_pode_carregar_checklist_padrao'] = (
             contrato.usuario_pode_gerir(self.request.user)
             and not contrato.competencias.exists()
         )
+        context['usuario_pode_carregar_formulario_padrao'] = (
+            contrato.usuario_pode_gerir(self.request.user)
+            and not contrato.competencias.exists()
+        )
+        # A tela consome uma lista ordenada explicitamente para evitar qualquer ambiguidade
+        # sobre a posição das competências concluídas ao fim da renderização.
+        context['competencias_ordenadas'] = list(contrato.competencias.all())
+        context['historico_contrato'] = list(contrato.auditoria_eventos.all())
+        context['historico_contrato_inicial_limite'] = 20
+        for competencia in context['competencias_ordenadas']:
+            competencia.historico_completo = list(competencia.auditoria_eventos.all())
+            competencia.historico_inicial_limite = 5
+            exportacoes_usuario = [
+                exportacao
+                for exportacao in getattr(competencia, 'exportacoes_documentos_prefetch', [])
+                if exportacao.solicitado_por_id == self.request.user.id
+            ]
+            competencia.exportacao_documento_recente = exportacoes_usuario[0] if exportacoes_usuario else None
 
         # Cálculos da timeline de vigência
         hoje = timezone.now().date()
@@ -552,7 +774,8 @@ class ContratoDeleteView(ContratosWriteMixin, DeleteView):
     def form_valid(self, form):
         # A exclusão do contrato precisa derrubar primeiro as estruturas mensais derivadas
         # para evitar o bloqueio por chaves protegidas das avaliações já geradas.
-        self.object.excluir_com_dependencias()
+        with suspend_audit_logging():
+            self.object.excluir_com_dependencias()
         messages.success(self.request, 'Contrato V2 excluído com sucesso.')
         return redirect(self.get_success_url())
 
@@ -1024,7 +1247,7 @@ class ChecklistPadraoGlobalItemDeleteView(GlobalChecklistManagePermissionMixin, 
         return context
 
 
-class ChecklistPadraoCarregarView(BlockIfCompetenciasGeradasMixin, ContratosAccessMixin, ContractManagePermissionMixin, View):
+class ChecklistPadraoCarregarView(BlockIfCompetenciasGeradasMixin, ContratosWriteMixin, ContractManagePermissionMixin, View):
     """Clona um checklist padrão ativo para dentro do contrato como nova versão ativa."""
 
     def post(self, request, *args, **kwargs):
@@ -1042,22 +1265,427 @@ class ChecklistPadraoCarregarView(BlockIfCompetenciasGeradasMixin, ContratosAcce
             pk=checklist_padrao_id,
             ativo=True,
         )
-        nova_versao = ChecklistModelo.objects.create(
+        with suspend_audit_logging():
+            nova_versao = ChecklistModelo.objects.create(
+                contrato=contrato,
+                nome=f'{checklist_padrao.nome} (Padrão)',
+                descricao=checklist_padrao.descricao,
+                observacoes=checklist_padrao.observacoes,
+                ativo=True,
+            )
+            for item in checklist_padrao.itens.order_by('ordem', 'id'):
+                ChecklistModeloItem.objects.create(
+                    modelo=nova_versao,
+                    ordem=item.ordem,
+                    titulo=item.titulo,
+                    descricao=item.descricao,
+                    obrigatorio=item.obrigatorio,
+                )
+        registrar_evento_contrato(
             contrato=contrato,
-            nome=f'{checklist_padrao.nome} (Padrão)',
-            descricao=checklist_padrao.descricao,
-            observacoes=checklist_padrao.observacoes,
+            tipo_evento=ContratoAuditoriaEvento.TipoEvento.CHECKLIST_PADRAO_CARREGADO,
+            resumo='carregou um checklist padrão no contrato',
+            payload=build_competencia_extra_payload(
+                {
+                    'checklist_padrao': checklist_padrao.nome,
+                    'nova_versao': nova_versao.nome,
+                    'itens_copiados': checklist_padrao.itens.count(),
+                }
+            ),
+        )
+        messages.success(self.request, f'Checklist padrão "{checklist_padrao.nome}" carregado com sucesso no contrato.')
+        return redirect_contract_detail(contrato)
+
+
+class FormularioAvaliacaoPadraoGlobalCreateView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, CreateView):
+    """Cadastra um formulário de avaliação padrão global reutilizável entre contratos."""
+
+    model = FormularioAvaliacaoPadraoGlobal
+    form_class = FormularioAvaliacaoPadraoGlobalForm
+    template_name = 'contratos/entity_form.html'
+
+    def form_valid(self, form):
+        assign_owner(form.instance, self.request)
+        messages.success(self.request, 'Formulário de avaliação padrão global cadastrado com sucesso.')
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('contratos:avaliacao_padrao_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Novo formulário de avaliação padrão'
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_list')
+        return context
+
+
+class FormularioAvaliacaoPadraoGlobalUpdateView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, UpdateView):
+    """Edita os dados estruturais do formulário de avaliação padrão global."""
+
+    model = FormularioAvaliacaoPadraoGlobal
+    form_class = FormularioAvaliacaoPadraoGlobalForm
+    template_name = 'contratos/entity_form.html'
+
+    def form_valid(self, form):
+        assign_owner(form.instance, self.request)
+        messages.success(self.request, 'Formulário de avaliação padrão global atualizado com sucesso.')
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.object.pk])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Editar formulário de avaliação padrão'
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.object.pk])
+        return context
+
+
+class FormularioAvaliacaoPadraoGlobalDeleteView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, DeleteView):
+    """Exclui um formulário de avaliação padrão global e retorna à lista principal do módulo."""
+
+    model = FormularioAvaliacaoPadraoGlobal
+    template_name = 'contratos/entity_confirm_delete.html'
+
+    def get_success_url(self):
+        messages.success(self.request, 'Formulário de avaliação padrão global excluído com sucesso.')
+        return reverse('contratos:avaliacao_padrao_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Excluir formulário de avaliação padrão'
+        context['descricao_objeto'] = self.object.nome
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_list')
+        return context
+
+
+class EscalaNotaAvaliacaoPadraoGlobalCreateView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, CreateView):
+    """Adiciona uma nota de escala ao formulário padrão global escolhido."""
+
+    model = EscalaNotaAvaliacaoPadraoGlobal
+    form_class = EscalaNotaAvaliacaoPadraoGlobalForm
+    template_name = 'contratos/entity_form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.formulario_padrao = get_object_or_404(FormularioAvaliacaoPadraoGlobal, pk=kwargs['formulario_padrao_pk'])
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        form.instance.formulario_padrao = self.formulario_padrao
+        form.instance.ordem = (self.formulario_padrao.escalas.aggregate(max_ordem=Max('ordem'))['max_ordem'] or 0) + 1
+        messages.success(self.request, 'Nota da escala padrão cadastrada com sucesso.')
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.formulario_padrao.pk])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = f'Nova nota da escala - {self.formulario_padrao.nome}'
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.formulario_padrao.pk])
+        return context
+
+
+class EscalaNotaAvaliacaoPadraoGlobalUpdateView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, UpdateView):
+    """Edita uma nota de escala do formulário padrão global."""
+
+    model = EscalaNotaAvaliacaoPadraoGlobal
+    form_class = EscalaNotaAvaliacaoPadraoGlobalForm
+    template_name = 'contratos/entity_form.html'
+
+    def get_success_url(self):
+        messages.success(self.request, 'Nota da escala padrão atualizada com sucesso.')
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Editar nota da escala padrão'
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+        return context
+
+
+class EscalaNotaAvaliacaoPadraoGlobalDeleteView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, DeleteView):
+    """Exclui uma nota de escala do formulário padrão global."""
+
+    model = EscalaNotaAvaliacaoPadraoGlobal
+    template_name = 'contratos/entity_confirm_delete.html'
+
+    def get_success_url(self):
+        messages.success(self.request, 'Nota da escala padrão excluída com sucesso.')
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Excluir nota da escala padrão'
+        context['descricao_objeto'] = str(self.object)
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+        return context
+
+
+class FaixaLiberacaoAvaliacaoPadraoGlobalCreateView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, CreateView):
+    """Adiciona uma faixa de liberação ao formulário padrão global escolhido."""
+
+    model = FaixaLiberacaoAvaliacaoPadraoGlobal
+    form_class = FaixaLiberacaoAvaliacaoPadraoGlobalForm
+    template_name = 'contratos/entity_form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.formulario_padrao = get_object_or_404(FormularioAvaliacaoPadraoGlobal, pk=kwargs['formulario_padrao_pk'])
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        form.instance.formulario_padrao = self.formulario_padrao
+        form.instance.ordem = (self.formulario_padrao.faixas_liberacao.aggregate(max_ordem=Max('ordem'))['max_ordem'] or 0) + 1
+        messages.success(self.request, 'Faixa de liberação padrão cadastrada com sucesso.')
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.formulario_padrao.pk])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = f'Nova faixa de liberação - {self.formulario_padrao.nome}'
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.formulario_padrao.pk])
+        return context
+
+
+class FaixaLiberacaoAvaliacaoPadraoGlobalUpdateView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, UpdateView):
+    """Edita uma faixa de liberação do formulário padrão global."""
+
+    model = FaixaLiberacaoAvaliacaoPadraoGlobal
+    form_class = FaixaLiberacaoAvaliacaoPadraoGlobalForm
+    template_name = 'contratos/entity_form.html'
+
+    def get_success_url(self):
+        messages.success(self.request, 'Faixa de liberação padrão atualizada com sucesso.')
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Editar faixa de liberação padrão'
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+        return context
+
+
+class FaixaLiberacaoAvaliacaoPadraoGlobalDeleteView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, DeleteView):
+    """Exclui uma faixa de liberação do formulário padrão global."""
+
+    model = FaixaLiberacaoAvaliacaoPadraoGlobal
+    template_name = 'contratos/entity_confirm_delete.html'
+
+    def get_success_url(self):
+        messages.success(self.request, 'Faixa de liberação padrão excluída com sucesso.')
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Excluir faixa de liberação padrão'
+        context['descricao_objeto'] = str(self.object)
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+        return context
+
+
+class GrupoAvaliacaoPadraoGlobalCreateView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, CreateView):
+    """Adiciona um grupo ao formulário padrão global escolhido."""
+
+    model = GrupoAvaliacaoPadraoGlobal
+    form_class = GrupoAvaliacaoPadraoGlobalForm
+    template_name = 'contratos/entity_form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.formulario_padrao = get_object_or_404(FormularioAvaliacaoPadraoGlobal, pk=kwargs['formulario_padrao_pk'])
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        form.instance.formulario_padrao = self.formulario_padrao
+        form.instance.ordem = (self.formulario_padrao.grupos.aggregate(max_ordem=Max('ordem'))['max_ordem'] or 0) + 1
+        messages.success(self.request, 'Grupo padrão cadastrado com sucesso.')
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.formulario_padrao.pk])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = f'Novo grupo - {self.formulario_padrao.nome}'
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.formulario_padrao.pk])
+        return context
+
+
+class GrupoAvaliacaoPadraoGlobalUpdateView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, UpdateView):
+    """Edita um grupo do formulário padrão global."""
+
+    model = GrupoAvaliacaoPadraoGlobal
+    form_class = GrupoAvaliacaoPadraoGlobalForm
+    template_name = 'contratos/entity_form.html'
+
+    def get_success_url(self):
+        messages.success(self.request, 'Grupo padrão atualizado com sucesso.')
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Editar grupo padrão'
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+        return context
+
+
+class GrupoAvaliacaoPadraoGlobalDeleteView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, DeleteView):
+    """Exclui um grupo do formulário padrão global."""
+
+    model = GrupoAvaliacaoPadraoGlobal
+    template_name = 'contratos/entity_confirm_delete.html'
+
+    def get_success_url(self):
+        messages.success(self.request, 'Grupo padrão excluído com sucesso.')
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Excluir grupo padrão'
+        context['descricao_objeto'] = self.object.nome
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.object.formulario_padrao_id])
+        return context
+
+
+class ItemAvaliacaoPadraoGlobalCreateView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, CreateView):
+    """Adiciona um item ao grupo padrão global escolhido."""
+
+    model = ItemAvaliacaoPadraoGlobal
+    form_class = ItemAvaliacaoPadraoGlobalForm
+    template_name = 'contratos/entity_form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.grupo_padrao = get_object_or_404(GrupoAvaliacaoPadraoGlobal, pk=kwargs['grupo_padrao_pk'])
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        form.instance.grupo_padrao = self.grupo_padrao
+        form.instance.ordem = (self.grupo_padrao.itens.aggregate(max_ordem=Max('ordem'))['max_ordem'] or 0) + 1
+        messages.success(self.request, 'Item padrão cadastrado com sucesso.')
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.grupo_padrao.formulario_padrao_id])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = f'Novo item - {self.grupo_padrao.nome}'
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.grupo_padrao.formulario_padrao_id])
+        return context
+
+
+class ItemAvaliacaoPadraoGlobalUpdateView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, UpdateView):
+    """Edita um item do grupo padrão global."""
+
+    model = ItemAvaliacaoPadraoGlobal
+    form_class = ItemAvaliacaoPadraoGlobalForm
+    template_name = 'contratos/entity_form.html'
+
+    def get_success_url(self):
+        messages.success(self.request, 'Item padrão atualizado com sucesso.')
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.object.grupo_padrao.formulario_padrao_id])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Editar item padrão'
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.object.grupo_padrao.formulario_padrao_id])
+        return context
+
+
+class ItemAvaliacaoPadraoGlobalDeleteView(GlobalEvaluationManagePermissionMixin, ContratosWriteMixin, DeleteView):
+    """Exclui um item do grupo padrão global."""
+
+    model = ItemAvaliacaoPadraoGlobal
+    template_name = 'contratos/entity_confirm_delete.html'
+
+    def get_success_url(self):
+        messages.success(self.request, 'Item padrão excluído com sucesso.')
+        return reverse('contratos:avaliacao_padrao_detail', args=[self.object.grupo_padrao.formulario_padrao_id])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['titulo'] = 'Excluir item padrão'
+        context['descricao_objeto'] = str(self.object)
+        context['cancel_url'] = reverse('contratos:avaliacao_padrao_detail', args=[self.object.grupo_padrao.formulario_padrao_id])
+        return context
+
+
+class FormularioAvaliacaoPadraoCarregarView(BlockIfCompetenciasGeradasMixin, ContratosWriteMixin, ContractManagePermissionMixin, View):
+    """Clona um formulário de avaliação padrão ativo para dentro do contrato como nova versão ativa."""
+
+    def post(self, request, *args, **kwargs):
+        contrato = get_object_or_404(Contrato, pk=kwargs['contrato_pk'])
+        response = self.ensure_manage_permission(request, contrato)
+        if response:
+            return response
+        formulario_padrao_id = request.POST.get('formulario_padrao_id')
+        if not formulario_padrao_id:
+            messages.error(request, 'Selecione um formulário de avaliação padrão antes de carregar.')
+            return redirect_contract_detail(contrato)
+
+        formulario_padrao = get_object_or_404(
+            FormularioAvaliacaoPadraoGlobal.objects.prefetch_related('escalas', 'faixas_liberacao', 'grupos__itens'),
+            pk=formulario_padrao_id,
             ativo=True,
         )
-        for item in checklist_padrao.itens.order_by('ordem', 'id'):
-            ChecklistModeloItem.objects.create(
-                modelo=nova_versao,
-                ordem=item.ordem,
-                titulo=item.titulo,
-                descricao=item.descricao,
-                obrigatorio=item.obrigatorio,
+        with suspend_audit_logging():
+            nova_versao = FormularioAvaliacao.objects.create(
+                contrato=contrato,
+                nome=f'{formulario_padrao.nome} (Padrão)',
+                descricao=formulario_padrao.descricao,
+                observacoes=formulario_padrao.observacoes,
+                ativo=True,
             )
-        messages.success(self.request, f'Checklist padrão "{checklist_padrao.nome}" carregado com sucesso no contrato.')
+            for escala in formulario_padrao.escalas.order_by('ordem', 'id'):
+                EscalaNotaAvaliacao.objects.create(
+                    formulario=nova_versao,
+                    ordem=escala.ordem,
+                    valor=escala.valor,
+                    legenda=escala.legenda,
+                )
+            for faixa in formulario_padrao.faixas_liberacao.order_by('ordem', 'id'):
+                FaixaLiberacaoAvaliacao.objects.create(
+                    formulario=nova_versao,
+                    ordem=faixa.ordem,
+                    nota_minima=faixa.nota_minima,
+                    nota_maxima=faixa.nota_maxima,
+                    percentual_liberacao=faixa.percentual_liberacao,
+                )
+            for grupo_padrao in formulario_padrao.grupos.order_by('ordem', 'id'):
+                novo_grupo = GrupoAvaliacao.objects.create(
+                    formulario=nova_versao,
+                    ordem=grupo_padrao.ordem,
+                    nome=grupo_padrao.nome,
+                    descricao=grupo_padrao.descricao,
+                )
+                for item_padrao in grupo_padrao.itens.order_by('ordem', 'id'):
+                    ItemAvaliacao.objects.create(
+                        grupo=novo_grupo,
+                        ordem=item_padrao.ordem,
+                        descricao=item_padrao.descricao,
+                        peso_percentual=item_padrao.peso_percentual,
+                        observacoes_padrao=item_padrao.observacoes_padrao,
+                    )
+        registrar_evento_contrato(
+            contrato=contrato,
+            tipo_evento=ContratoAuditoriaEvento.TipoEvento.FORMULARIO_PADRAO_CARREGADO,
+            resumo='carregou um formulário de avaliação padrão no contrato',
+            payload=build_competencia_extra_payload(
+                {
+                    'formulario_padrao': formulario_padrao.nome,
+                    'nova_versao': nova_versao.nome,
+                    'escalas_copiadas': formulario_padrao.escalas.count(),
+                    'faixas_copiadas': formulario_padrao.faixas_liberacao.count(),
+                    'grupos_copiados': formulario_padrao.grupos.count(),
+                    'itens_copiados': sum(grupo.itens.count() for grupo in formulario_padrao.grupos.all()),
+                }
+            ),
+        )
+        messages.success(
+            self.request,
+            f'Formulário de avaliação padrão "{formulario_padrao.nome}" carregado com sucesso no contrato.',
+        )
         return redirect_contract_detail(contrato)
 
 
@@ -1452,10 +2080,35 @@ class CompetenciasGenerateView(ContratosWriteMixin, ContractManagePermissionMixi
         if response:
             return response
         try:
-            contrato.gerar_competencias()
+            competencias_criadas = contrato.gerar_competencias()
         except ValidationError as exc:
             messages.error(request, exc.message)
             return redirect_contract_detail(contrato)
+        registrar_evento_contrato(
+            contrato=contrato,
+            tipo_evento=ContratoAuditoriaEvento.TipoEvento.COMPETENCIAS_GERADAS,
+            resumo='gerou competências para o contrato',
+            payload=build_competencia_extra_payload(
+                {
+                    'quantidade_competencias': len(competencias_criadas),
+                    'competencias': [competencia.periodo_inicio.strftime('%m/%Y') for competencia in competencias_criadas],
+                }
+            ),
+        )
+        for competencia in competencias_criadas:
+            registrar_evento_competencia(
+                competencia=competencia,
+                tipo_evento=CompetenciaAuditoriaEvento.TipoEvento.COMPETENCIA_CRIADA,
+                resumo='Sistema gerou a competência',
+                usuario=None,
+                payload=build_competencia_extra_payload(
+                    {
+                        'periodo_inicio': competencia.periodo_inicio.strftime('%d/%m/%Y'),
+                        'periodo_fim': competencia.periodo_fim.strftime('%d/%m/%Y'),
+                        'valor_previsto': f'{competencia.valor_previsto:.2f}',
+                    }
+                ),
+            )
         messages.success(request, 'Competências geradas com sucesso.')
         return redirect_contract_detail(contrato)
 
@@ -1479,12 +2132,8 @@ class CompetenciaChecklistUpdateView(ContratosWriteMixin, ContractOperatePermiss
         )
         if not self.competencia.contrato.usuario_pode_preencher_checklist(request.user):
             return self.deny(self.competencia.contrato, 'Você não pode preencher o checklist desta competência.')
-        if not self.competencia.medicao_concluida_em:
-            return self.deny(self.competencia.contrato, 'Só é possível partir para o checklist com a medição concluída.')
-        if self.competencia.exige_avaliacao and not getattr(self.competencia.avaliacao_qualidade_segura, 'concluida_em', None):
-            return self.deny(self.competencia.contrato, 'Só é possível partir para o checklist após concluir a avaliação.')
-        if self.competencia.status in {self.competencia.Status.PAGA, self.competencia.Status.CANCELADA}:
-            return self.deny(self.competencia.contrato, 'A competência já foi encerrada.')
+        if self.competencia.motivo_bloqueio_checklist:
+            return self.deny(self.competencia.contrato, self.competencia.motivo_bloqueio_checklist)
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
@@ -1493,12 +2142,14 @@ class CompetenciaChecklistUpdateView(ContratosWriteMixin, ContractOperatePermiss
         return kwargs
 
     def form_valid(self, form):
+        checklist_alteracoes = []
         for item in form.itens:
             novo_arquivo = form.cleaned_data.get(f'arquivo_{item.pk}')
             limpar = form.cleaned_data.get(f'limpar_{item.pk}')
             existente = item.anexo_principal
             if limpar and existente:
                 existente.delete()
+                checklist_alteracoes.append({'item': item.titulo, 'acao': 'Removido'})
                 continue
             if not novo_arquivo:
                 continue
@@ -1506,9 +2157,18 @@ class CompetenciaChecklistUpdateView(ContratosWriteMixin, ContractOperatePermiss
                 existente.arquivo = novo_arquivo
                 existente.nome_exibicao = ''
                 existente.save(update_fields=['arquivo', 'nome_exibicao', 'atualizado_em'])
+                checklist_alteracoes.append({'item': item.titulo, 'acao': 'Substituído'})
             else:
                 ChecklistCompetenciaAnexo.objects.create(item=item, arquivo=novo_arquivo, nome_exibicao='')
+                checklist_alteracoes.append({'item': item.titulo, 'acao': 'Incluído'})
         recalcular_competencia_v2(self.competencia)
+        if checklist_alteracoes:
+            registrar_evento_competencia(
+                competencia=self.competencia,
+                tipo_evento=CompetenciaAuditoriaEvento.TipoEvento.CHECKLIST_ATUALIZADO,
+                resumo='atualizou o checklist da competência',
+                payload=build_competencia_extra_payload({'itens_alterados': checklist_alteracoes}),
+            )
         messages.success(self.request, 'Checklist atualizado com sucesso.')
         return super().form_valid(form)
 
@@ -1534,8 +2194,8 @@ class CompetenciaMedicaoUpdateView(ContratosWriteMixin, ContractOperatePermissio
         )
         if not self.competencia.contrato.usuario_pode_preencher_medicao(request.user):
             return self.deny(self.competencia.contrato, 'Você não pode preencher a medição desta competência.')
-        if self.competencia.status in {self.competencia.Status.PAGA, self.competencia.Status.CANCELADA}:
-            return self.deny(self.competencia.contrato, 'A competência já foi encerrada.')
+        if self.competencia.motivo_bloqueio_medicao:
+            return self.deny(self.competencia.contrato, self.competencia.motivo_bloqueio_medicao)
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
@@ -1546,10 +2206,39 @@ class CompetenciaMedicaoUpdateView(ContratosWriteMixin, ContractOperatePermissio
 
     def form_valid(self, form):
         momento_auditoria = timezone.now()
+        competencia_before = capture_instance_audit_state(
+            self.competencia,
+            {
+                'aplicar_pro_rata': 'Aplicar pró-rata',
+                'data_aceite_provisorio': 'Data do aceite provisório',
+                'prazo_aceite_definitivo_dias': 'Prazo do aceite definitivo',
+                'data_aceite_definitivo': 'Data do aceite definitivo',
+                'prazo_pagamento_dias': 'Prazo de pagamento',
+                'numero_nota_fiscal': 'Número da nota fiscal',
+                'valor_nota_fiscal': 'Valor da nota fiscal',
+                'retencao_ir': 'Retenção IR',
+                'retencao_inss': 'Retenção INSS',
+                'retencao_iss': 'Retenção ISS',
+                'retencao_pis_pasep': 'Retenção PIS/PASEP',
+                'retencao_cofins': 'Retenção COFINS',
+                'valor_liberado_final': 'Valor liberado final',
+                'numero_nota_adicional': 'Número da nota adicional',
+                'nota_adicional_nao_consta': 'Nota adicional não consta',
+                'valor_nota_adicional': 'Valor da nota adicional',
+                'retencao_ir_adicional': 'Retenção IR adicional',
+                'retencao_inss_adicional': 'Retenção INSS adicional',
+                'retencao_iss_adicional': 'Retenção ISS adicional',
+                'retencao_pis_pasep_adicional': 'Retenção PIS/PASEP adicional',
+                'retencao_cofins_adicional': 'Retenção COFINS adicional',
+                'valor_liquido_nota_adicional': 'Valor líquido da nota adicional',
+                'observacoes_medicao': 'Observações finais',
+            },
+        )
         medicoes_atuais = {
             medicao.item_contrato_id: medicao.quantidade
             for medicao in self.competencia.medicoes.all()
         }
+        medicoes_alteradas = []
         medicao_alterada = self.competencia.aplicar_pro_rata != bool(form.cleaned_data.get('aplicar_pro_rata', False))
         secoes_alteradas = {
             'aceite_provisorio': False,
@@ -1568,6 +2257,13 @@ class CompetenciaMedicaoUpdateView(ContratosWriteMixin, ContractOperatePermissio
             quantidade_nova = Decimal('0.00') if quantidade == 0 else quantidade
             if quantidade_atual != quantidade_nova:
                 medicao_alterada = True
+                medicoes_alteradas.append(
+                    {
+                        'item': item.descricao,
+                        'antes': f'{quantidade_atual:.2f}',
+                        'depois': f'{quantidade_nova:.2f}',
+                    }
+                )
             if quantidade == 0:
                 MedicaoItemCompetencia.objects.filter(competencia=self.competencia, item_contrato=item).delete()
                 continue
@@ -1723,6 +2419,46 @@ class CompetenciaMedicaoUpdateView(ContratosWriteMixin, ContractOperatePermissio
 
         self.competencia.save()
         recalcular_competencia_v2(self.competencia)
+        payload_medicao = build_changes_payload(
+            competencia_before,
+            self.competencia,
+            {
+                'aplicar_pro_rata': 'Aplicar pró-rata',
+                'data_aceite_provisorio': 'Data do aceite provisório',
+                'prazo_aceite_definitivo_dias': 'Prazo do aceite definitivo',
+                'data_aceite_definitivo': 'Data do aceite definitivo',
+                'prazo_pagamento_dias': 'Prazo de pagamento',
+                'numero_nota_fiscal': 'Número da nota fiscal',
+                'valor_nota_fiscal': 'Valor da nota fiscal',
+                'retencao_ir': 'Retenção IR',
+                'retencao_inss': 'Retenção INSS',
+                'retencao_iss': 'Retenção ISS',
+                'retencao_pis_pasep': 'Retenção PIS/PASEP',
+                'retencao_cofins': 'Retenção COFINS',
+                'valor_liberado_final': 'Valor liberado final',
+                'numero_nota_adicional': 'Número da nota adicional',
+                'nota_adicional_nao_consta': 'Nota adicional não consta',
+                'valor_nota_adicional': 'Valor da nota adicional',
+                'retencao_ir_adicional': 'Retenção IR adicional',
+                'retencao_inss_adicional': 'Retenção INSS adicional',
+                'retencao_iss_adicional': 'Retenção ISS adicional',
+                'retencao_pis_pasep_adicional': 'Retenção PIS/PASEP adicional',
+                'retencao_cofins_adicional': 'Retenção COFINS adicional',
+                'valor_liquido_nota_adicional': 'Valor líquido da nota adicional',
+                'observacoes_medicao': 'Observações finais',
+            },
+        )
+        if payload_medicao.get('changes') or medicoes_alteradas:
+            payload_medicao['extra'] = {
+                'medicoes_alteradas': medicoes_alteradas,
+                'secoes_alteradas': [secao for secao, alterada in secoes_alteradas.items() if alterada],
+            }
+            registrar_evento_competencia(
+                competencia=self.competencia,
+                tipo_evento=CompetenciaAuditoriaEvento.TipoEvento.MEDICAO_ATUALIZADA,
+                resumo='atualizou a medição',
+                payload=payload_medicao,
+            )
         messages.success(self.request, 'Medição atualizada com sucesso.')
         return super().form_valid(form)
 
@@ -1748,6 +2484,34 @@ class CompetenciaAvaliacaoUpdateView(ContratosWriteMixin, ContractOperatePermiss
     form_class = AvaliacaoCompetenciaV2Form
     template_name = 'contratos/competencia_avaliacao_form.html'
 
+    def _calcular_resultado_automatico(self):
+        """Replica o cálculo automático para comparar com eventuais ajustes manuais da tela."""
+
+        respostas = list(self.avaliacao.itens.order_by('grupo_ordem', 'item_ordem', 'id'))
+        nota_final = sum(
+            (resposta.nota_valor or Decimal('0.00')) * ((resposta.item_peso_percentual or Decimal('0.00')) / Decimal('100.00'))
+            for resposta in respostas
+        )
+        nota_final = Decimal(f'{nota_final:.2f}')
+
+        percentual = Decimal('100.00')
+        for faixa in self.avaliacao.faixas_liberacao_snapshot:
+            nota_minima = Decimal(faixa['nota_minima'])
+            nota_maxima = Decimal(faixa['nota_maxima']) if faixa.get('nota_maxima') not in {'', None} else None
+            if nota_final < nota_minima:
+                continue
+            if nota_maxima is not None and nota_final > nota_maxima:
+                continue
+            percentual = Decimal(faixa['percentual_liberacao'])
+            break
+
+        valor_final = (self.competencia.valor_nota_fiscal or Decimal('0.00')) * (percentual / Decimal('100.00'))
+        return {
+            'nota_final': Decimal(f'{nota_final:.2f}'),
+            'percentual': Decimal(f'{percentual:.2f}'),
+            'valor_final': Decimal(f'{valor_final:.2f}'),
+        }
+
     def _avaliacao_possui_conteudo_salvo(self):
         """Libera o download assim que houver conteúdo suficiente para revisão e assinatura externa."""
 
@@ -1769,12 +2533,8 @@ class CompetenciaAvaliacaoUpdateView(ContratosWriteMixin, ContractOperatePermiss
         )
         if not self.competencia.contrato.usuario_pode_preencher_avaliacao(request.user):
             return self.deny(self.competencia.contrato, 'Você não pode preencher a avaliação desta competência.')
-        if not self.competencia.medicao_concluida_em:
-            return self.deny(self.competencia.contrato, 'Só é possível partir para a avaliação com a medição concluída.')
-        if not self.competencia.exige_avaliacao:
-            return self.deny(self.competencia.contrato, 'Esta competência não exige avaliação de qualidade.')
-        if self.competencia.status in {self.competencia.Status.PAGA, self.competencia.Status.CANCELADA}:
-            return self.deny(self.competencia.contrato, 'A competência já foi encerrada.')
+        if self.competencia.motivo_bloqueio_avaliacao:
+            return self.deny(self.competencia.contrato, self.competencia.motivo_bloqueio_avaliacao)
         self.pode_preencher_fiscal = usuario_pode_preencher_avaliacao_fiscal_v2(request.user, self.competencia.contrato)
         self.pode_preencher_gestor = usuario_pode_preencher_avaliacao_gestor_v2(request.user, self.competencia.contrato)
         self.avaliacao = self.competencia.avaliacao_qualidade_segura
@@ -1795,6 +2555,13 @@ class CompetenciaAvaliacaoUpdateView(ContratosWriteMixin, ContractOperatePermiss
             for item in self.avaliacao.formulario_snapshot.get('escala', [])
         }
         agora = timezone.now()
+        observacoes_antes = self.avaliacao.observacoes or ''
+        concluiu_antes = bool(self.avaliacao.concluida_em)
+        avaliacao_assinada_antes = getattr(self.competencia.avaliacao_assinada, 'name', '') or ''
+        nota_final_antes = self.avaliacao.nota_final
+        percentual_antes = self.avaliacao.percentual_liberacao_sugerido
+        valor_final_antes = self.competencia.valor_liberado_final
+        itens_alterados = []
 
         def normalizar_nota_para_persistencia(valor):
             """Evita que string vazia chegue ao DecimalField quando um papel salvar de forma independente."""
@@ -1816,6 +2583,8 @@ class CompetenciaAvaliacaoUpdateView(ContratosWriteMixin, ContractOperatePermiss
             if self.pode_preencher_fiscal and papel_informado.get('fiscal'):
                 nota_fiscal = normalizar_nota_para_persistencia(form.cleaned_data.get(campo_nota_fiscal))
                 justificativa_fiscal = form.cleaned_data.get(campo_justificativa_fiscal) or ''
+                if resposta.nota_fiscal_valor != nota_fiscal or resposta.justificativa_fiscal != justificativa_fiscal:
+                    itens_alterados.append({'item': resposta.item_descricao, 'papel': 'Fiscal'})
                 resposta.nota_fiscal_valor = nota_fiscal
                 resposta.nota_fiscal_preenchida_por = self.request.user
                 resposta.nota_fiscal_preenchida_em = agora
@@ -1834,6 +2603,8 @@ class CompetenciaAvaliacaoUpdateView(ContratosWriteMixin, ContractOperatePermiss
             if self.pode_preencher_gestor and papel_informado.get('gestor'):
                 nota_gestor = normalizar_nota_para_persistencia(form.cleaned_data.get(campo_nota_gestor))
                 manifestacao_gestor = form.cleaned_data.get(campo_manifestacao_gestor) or ''
+                if resposta.nota_gestor_valor != nota_gestor or resposta.manifestacao_gestor_item != manifestacao_gestor:
+                    itens_alterados.append({'item': resposta.item_descricao, 'papel': 'Gestor'})
                 resposta.nota_gestor_valor = nota_gestor
                 resposta.nota_gestor_preenchida_por = self.request.user
                 resposta.nota_gestor_preenchida_em = agora
@@ -1853,15 +2624,133 @@ class CompetenciaAvaliacaoUpdateView(ContratosWriteMixin, ContractOperatePermiss
             resposta.nota_legenda = escala_mapa.get(resposta.nota_valor, '')
             update_fields.extend(['nota_valor', 'nota_legenda', 'atualizado_em'])
             resposta.save(update_fields=sorted(set(update_fields)))
+
+        calculado_automatico = self._calcular_resultado_automatico()
+        nota_final_informada = form.cleaned_data.get('nota_final_aprovada')
+        valor_final_informado = form.cleaned_data.get('valor_liberado_final')
+        avaliacao_assinada_informada = bool(
+            form.cleaned_data.get('avaliacao_assinada')
+            or getattr(self.competencia.avaliacao_assinada, 'name', '')
+        )
+        fechamento_em_edicao = form.fechamento_avaliacao_liberado and not form.fechamento_avaliacao_concluido
+
+        self.avaliacao.nota_final_manual = None
+        if fechamento_em_edicao and not avaliacao_assinada_informada:
+            self.avaliacao.nota_final_manual = (
+                nota_final_informada
+                if nota_final_informada is not None and nota_final_informada != calculado_automatico['nota_final']
+                else None
+            )
+        self.avaliacao.percentual_liberacao_manual = None
         self.avaliacao.observacoes = form.cleaned_data.get('observacoes') or ''
         self.avaliacao.preenchido_por = self.request.user
+        if fechamento_em_edicao:
+            self.competencia.valor_liberado_final_manual = (
+                valor_final_informado
+                if valor_final_informado is not None and valor_final_informado != calculado_automatico['valor_final']
+                else None
+            )
+        for nome_campo, campo_manual, campo_exercicio in (
+            ('gestor_pagamento', 'gestor_pagamento_nome_manual', 'gestor_pagamento_em_exercicio'),
+            ('coordenadora_pagamento', 'coordenadora_pagamento_nome_manual', 'coordenadora_em_exercicio'),
+            ('diretora_pagamento', 'diretora_pagamento_nome_manual', 'diretora_em_exercicio'),
+            ('subsecretario_pagamento', 'subsecretario_pagamento_nome_manual', 'subsecretario_em_exercicio'),
+        ):
+            setattr(self.competencia, nome_campo, form.cleaned_data.get(nome_campo))
+            setattr(self.competencia, campo_manual, form.cleaned_data.get(campo_manual) or '')
+            setattr(self.competencia, campo_exercicio, bool(form.cleaned_data.get(campo_exercicio)))
         if form.cleaned_data.get('avaliacao_assinada'):
             self.competencia.avaliacao_assinada = form.cleaned_data['avaliacao_assinada']
-            self.competencia.save(update_fields=['avaliacao_assinada', 'atualizado_em'])
+        self.competencia.save(
+            update_fields=[
+                'avaliacao_assinada',
+                'valor_liberado_final_manual',
+                'gestor_pagamento',
+                'gestor_pagamento_nome_manual',
+                'gestor_pagamento_em_exercicio',
+                'coordenadora_pagamento',
+                'coordenadora_pagamento_nome_manual',
+                'coordenadora_em_exercicio',
+                'diretora_pagamento',
+                'diretora_pagamento_nome_manual',
+                'diretora_em_exercicio',
+                'subsecretario_pagamento',
+                'subsecretario_pagamento_nome_manual',
+                'subsecretario_em_exercicio',
+                'atualizado_em',
+            ]
+        )
         # Mantém a competência em avaliação pendente até o gestor preencher as manifestações exigidas.
         self.avaliacao.concluida_em = timezone.now() if avaliacao_v2_esta_concluida(self.avaliacao) else None
-        self.avaliacao.save(update_fields=['observacoes', 'preenchido_por', 'concluida_em', 'atualizado_em'])
+        self.avaliacao.save(
+            update_fields=[
+                'nota_final_manual',
+                'percentual_liberacao_manual',
+                'observacoes',
+                'preenchido_por',
+                'concluida_em',
+                'atualizado_em',
+            ]
+        )
         recalcular_avaliacao_v2(self.avaliacao)
+        payload_avaliacao = {'changes': []}
+        if observacoes_antes != self.avaliacao.observacoes:
+            payload_avaliacao['changes'].append(
+                {
+                    'field': 'observacoes',
+                    'label': 'Observações da avaliação',
+                    'before': observacoes_antes or '-',
+                    'after': self.avaliacao.observacoes or '-',
+                }
+            )
+        if avaliacao_assinada_antes != (getattr(self.competencia.avaliacao_assinada, 'name', '') or ''):
+            payload_avaliacao['changes'].append(
+                {
+                    'field': 'avaliacao_assinada',
+                    'label': 'PDF assinado',
+                    'before': avaliacao_assinada_antes or '-',
+                    'after': (getattr(self.competencia.avaliacao_assinada, 'name', '') or '-'),
+                }
+            )
+        if nota_final_antes != self.avaliacao.nota_final:
+            payload_avaliacao['changes'].append(
+                {
+                    'field': 'nota_final',
+                    'label': 'Nota final',
+                    'before': f'{nota_final_antes:.2f}',
+                    'after': f'{self.avaliacao.nota_final:.2f}',
+                }
+            )
+        if percentual_antes != self.avaliacao.percentual_liberacao_sugerido:
+            payload_avaliacao['changes'].append(
+                {
+                    'field': 'percentual_liberacao_sugerido',
+                    'label': 'Faixa de liberação',
+                    'before': f'{percentual_antes:.2f}%',
+                    'after': f'{self.avaliacao.percentual_liberacao_sugerido:.2f}%',
+                }
+            )
+        if valor_final_antes != self.competencia.valor_liberado_final:
+            payload_avaliacao['changes'].append(
+                {
+                    'field': 'valor_liberado_final',
+                    'label': 'Valor a pagar',
+                    'before': f'{valor_final_antes:.2f}',
+                    'after': f'{self.competencia.valor_liberado_final:.2f}',
+                }
+            )
+        payload_avaliacao['extra'] = {
+            'itens_alterados': itens_alterados,
+            'concluida_antes': 'Sim' if concluiu_antes else 'Não',
+            'concluida_depois': 'Sim' if self.avaliacao.concluida_em else 'Não',
+        }
+        if payload_avaliacao['changes'] or itens_alterados or concluiu_antes != bool(self.avaliacao.concluida_em):
+            registrar_evento_competencia(
+                competencia=self.competencia,
+                tipo_evento=CompetenciaAuditoriaEvento.TipoEvento.AVALIACAO_ATUALIZADA,
+                resumo='atualizou a avaliação da competência',
+                payload=payload_avaliacao,
+            )
         if self.avaliacao.concluida_em:
             messages.success(self.request, 'Avaliação concluída com sucesso.')
         elif self.competencia.avaliacao_assinada:
@@ -1880,6 +2769,7 @@ class CompetenciaAvaliacaoUpdateView(ContratosWriteMixin, ContractOperatePermiss
         context['contrato'] = self.competencia.contrato
         context['avaliacao'] = self.avaliacao
         context['avaliacao_tem_conteudo'] = self._avaliacao_possui_conteudo_salvo()
+        context['faixas_liberacao'] = list(self.avaliacao.faixas_liberacao_snapshot)
         return context
 
 
@@ -1937,15 +2827,25 @@ class CompetenciaChecklistExtraItemCreateView(ContratosWriteMixin, ContractManag
 
     def form_valid(self, form):
         ordem = (self.competencia.checklist_itens.aggregate(maior=Max('ordem')).get('maior') or 0) + 1
-        item = ChecklistCompetenciaItem.objects.create(
+        item_criado = ChecklistCompetenciaItem.objects.create(
             competencia=self.competencia,
             ordem=ordem,
             titulo=form.cleaned_data['titulo'],
             categoria=ChecklistCompetenciaItem.Categoria.NOTA_ADICIONAL,
             obrigatorio=True,
         )
-        ChecklistCompetenciaAnexo.objects.create(item=item, arquivo=form.cleaned_data['arquivo'], nome_exibicao='')
-        messages.success(self.request, 'Documento adicional do checklist cadastrado com sucesso.')
+        registrar_evento_competencia(
+            competencia=self.competencia,
+            tipo_evento=CompetenciaAuditoriaEvento.TipoEvento.CHECKLIST_ATUALIZADO,
+            resumo='atualizou o checklist da competência',
+            payload=build_competencia_extra_payload(
+                {
+                    'item_adicionado': item_criado.titulo,
+                    'categoria': item_criado.get_categoria_display(),
+                }
+            ),
+        )
+        messages.success(self.request, 'Documento adicional incluído no checklist da competência. O anexo será feito na etapa de checklist.')
         return super().form_valid(form)
 
     def get_success_url(self):
@@ -1953,9 +2853,26 @@ class CompetenciaChecklistExtraItemCreateView(ContratosWriteMixin, ContractManag
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['titulo'] = f'Novo documento da nota adicional - {self.competencia.periodo_inicio:%m/%Y}'
+        context['titulo'] = f'Adicionar documento ao checklist - {self.competencia.periodo_inicio:%m/%Y}'
         context['cancel_url'] = reverse('contratos:competencia_medicao', args=[self.competencia.pk])
         return context
+
+
+class CompetenciaResetView(ContratosWriteMixin, ContractManagePermissionMixin, View):
+    """Permite que gestor e administradores reiniciem uma competência já iniciada."""
+
+    def post(self, request, *args, **kwargs):
+        competencia = get_object_or_404(CompetenciaPagamento.objects.select_related('contrato'), pk=kwargs['pk'])
+        response = self.ensure_manage_permission(request, competencia.contrato)
+        if response:
+            return response
+
+        resetar_competencia_v2(competencia)
+        messages.success(
+            request,
+            f'A competência {competencia.periodo_inicio:%m/%Y} foi resetada e voltou ao início do fluxo.',
+        )
+        return redirect_contract_detail(competencia.contrato)
 
 
 class CompetenciaOBExecuteView(ContratosWriteMixin, ContractManagePermissionMixin, UpdateView):
@@ -1968,12 +2885,14 @@ class CompetenciaOBExecuteView(ContratosWriteMixin, ContractManagePermissionMixi
         response = self.ensure_manage_permission(request, self.object.contrato)
         if response:
             return response
-        if self.object.status != self.object.Status.OB_PENDENTE:
-            messages.error(request, 'Só pode partir para a OB após concluir medição, avaliação, checklist e download.')
+        if self.object.motivo_bloqueio_ob:
+            messages.error(request, self.object.motivo_bloqueio_ob)
             return redirect_contract_detail(self.object.contrato)
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
+        status_antes = self.object.status
+        data_pagamento_antes = self.object.data_pagamento
         self.object = form.save(commit=False)
         self.object.status = self.object.Status.PAGA
         if not self.object.data_pagamento:
@@ -1982,6 +2901,30 @@ class CompetenciaOBExecuteView(ContratosWriteMixin, ContractManagePermissionMixi
         self.object.monitoramento_inicio = None
         self.object.monitoramento_limite = None
         self.object.save()
+        registrar_evento_competencia(
+            competencia=self.object,
+            tipo_evento=CompetenciaAuditoriaEvento.TipoEvento.OB_EXECUTADA,
+            resumo='executou a ordem bancária da competência',
+            payload={
+                'changes': [
+                    {
+                        'field': 'status',
+                        'label': 'Status',
+                        'before': status_antes,
+                        'after': self.object.status,
+                    },
+                    {
+                        'field': 'data_pagamento',
+                        'label': 'Data do pagamento',
+                        'before': data_pagamento_antes.strftime('%d/%m/%Y') if data_pagamento_antes else '-',
+                        'after': self.object.data_pagamento.strftime('%d/%m/%Y') if self.object.data_pagamento else '-',
+                    },
+                ],
+                'extra': {
+                    'valor_liberado_final': f'{self.object.valor_liberado_final:.2f}',
+                },
+            },
+        )
         messages.success(self.request, 'Ordem bancária registrada com sucesso.')
         return super().form_valid(form)
 
@@ -2188,8 +3131,16 @@ class PrazoMonitoramentoConcluirView(ContratosWriteMixin, CheckCompetenciasGerad
     
     def post(self, request, *args, **kwargs):
         prazo = get_object_or_404(PrazoMonitoramento, pk=kwargs['pk'])
-        prazo.concluido = True
-        prazo.save()
+        prazo_before = capture_instance_audit_state(prazo, PRAZO_MONITORAMENTO_AUDITORIA_FIELD_LABELS)
+        with suspend_audit_logging():
+            prazo.concluido = True
+            prazo.save()
+        registrar_evento_contrato(
+            contrato=prazo.contrato,
+            tipo_evento=ContratoAuditoriaEvento.TipoEvento.PRAZO_CONCLUIDO,
+            resumo='concluiu um prazo de monitoramento',
+            payload=build_changes_payload(prazo_before, prazo, PRAZO_MONITORAMENTO_AUDITORIA_FIELD_LABELS),
+        )
         messages.success(request, f'Prazo "{prazo.nome}" concluído com sucesso.')
         return redirect('contratos:contrato_detail', pk=prazo.contrato.pk)
 
@@ -2382,11 +3333,16 @@ def gerar_relatorio_avaliacao_competencia(doc_path, contrato, competencia):
     p_resumo.add_run("Nota final: ").bold = True
     # O relatório deve refletir exatamente a nota consolidada persistida pela regra central da avaliação.
     p_resumo.add_run(f"{avaliacao.nota_final if avaliacao else '-'}\n")
-    p_resumo.add_run("Percentual de liberação sugerido: ").bold = True
+    p_resumo.add_run("Faixa de liberação: ").bold = True
     p_resumo.add_run(f"{avaliacao.percentual_liberacao_sugerido if avaliacao else '-'}%\n")
-    p_resumo.add_run("Valor liberado sugerido: ").bold = True
-    p_resumo.add_run(f"R$ {competencia.valor_liberado_sugerido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+    p_resumo.add_run("Valor a pagar: ").bold = True
+    p_resumo.add_run(f"R$ {competencia.valor_liberado_final:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
     p_resumo.paragraph_format.space_after = Pt(12)
+
+    def subtotal_ponderado_resposta(resposta):
+        """Replica no relatório a mesma fórmula consolidada da avaliação."""
+
+        return (resposta.nota_valor or Decimal('0.00')) * ((resposta.item_peso_percentual or Decimal('0.00')) / Decimal('100.00'))
 
     h_itens = doc.add_paragraph()
     h_itens_run = h_itens.add_run("2. Itens Avaliados")
@@ -2395,50 +3351,76 @@ def gerar_relatorio_avaliacao_competencia(doc_path, contrato, competencia):
     h_itens_run.font.color.rgb = RGBColor(20, 54, 66)
     h_itens.paragraph_format.space_after = Pt(6)
 
-    t_itens = doc.add_table(rows=1, cols=8)
-    t_itens.alignment = WD_TABLE_ALIGNMENT.CENTER
-    set_table_borders(t_itens)
-
-    hdr_cells = t_itens.rows[0].cells
-    hdr_titles = ["Grupo", "Item", "Peso", "Nota fiscal", "Justificativa fiscal", "Nota gestor", "Manifestação gestor", "Nota final"]
-    for idx, title in enumerate(hdr_titles):
-        hdr_cells[idx].text = title
-        set_cell_background(hdr_cells[idx], "143642")
-        set_cell_margins(hdr_cells[idx])
-        for p in hdr_cells[idx].paragraphs:
-            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            for run in p.runs:
-                run.font.bold = True
-                run.font.color.rgb = RGBColor(255, 255, 255)
-                run.font.size = Pt(9)
-
     respostas = list(avaliacao.itens.order_by('grupo_ordem', 'item_ordem', 'id')) if avaliacao else []
-    for idx, resposta in enumerate(respostas):
-        row_cells = t_itens.add_row().cells
-        row_cells[0].text = resposta.grupo_nome
-        row_cells[1].text = resposta.item_descricao
-        row_cells[2].text = f"{resposta.item_peso_percentual}%"
-        row_cells[3].text = '' if resposta.nota_fiscal_valor is None else str(resposta.nota_fiscal_valor)
-        row_cells[4].text = resposta.justificativa_fiscal or '-'
-        row_cells[5].text = '' if resposta.nota_gestor_valor is None else str(resposta.nota_gestor_valor)
-        row_cells[6].text = resposta.manifestacao_gestor_item or '-'
-        row_cells[7].text = '' if resposta.nota_valor is None else str(resposta.nota_valor)
-
-        for cell in row_cells:
-            set_cell_margins(cell)
-            if idx % 2 == 1:
-                set_cell_background(cell, "f8fafc")
-            for p in cell.paragraphs:
-                for run in p.runs:
-                    run.font.size = Pt(8.5)
-
     if not respostas:
-        row_cells = t_itens.add_row().cells
-        row_cells[0].text = "Sem avaliação detalhada disponível."
-        for cell in row_cells[1:]:
-            cell.text = ""
-        for cell in row_cells:
-            set_cell_margins(cell)
+        p_vazio = doc.add_paragraph("Sem avaliação detalhada disponível.")
+        p_vazio.paragraph_format.space_after = Pt(8)
+    else:
+        grupos = []
+        grupo_atual = None
+        for resposta in respostas:
+            if grupo_atual is None or grupo_atual['nome'] != resposta.grupo_nome:
+                grupo_atual = {'nome': resposta.grupo_nome, 'itens': []}
+                grupos.append(grupo_atual)
+            grupo_atual['itens'].append(resposta)
+
+        for grupo_idx, grupo in enumerate(grupos, start=1):
+            titulo_grupo = doc.add_paragraph()
+            titulo_run = titulo_grupo.add_run(f"Grupo {grupo_idx} - {grupo['nome']}")
+            titulo_run.bold = True
+            titulo_run.font.size = Pt(11)
+            titulo_run.font.color.rgb = RGBColor(20, 54, 66)
+            titulo_grupo.paragraph_format.space_before = Pt(8)
+            titulo_grupo.paragraph_format.space_after = Pt(4)
+
+            t_grupo = doc.add_table(rows=1, cols=6)
+            t_grupo.alignment = WD_TABLE_ALIGNMENT.CENTER
+            set_table_borders(t_grupo)
+
+            hdr_cells = t_grupo.rows[0].cells
+            hdr_titles = ["Item", "Peso", "Nota fiscal", "Nota gestor", "Nota final", "Subtotal"]
+            for idx, title in enumerate(hdr_titles):
+                hdr_cells[idx].text = title
+                set_cell_background(hdr_cells[idx], "143642")
+                set_cell_margins(hdr_cells[idx])
+                for p in hdr_cells[idx].paragraphs:
+                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    for run in p.runs:
+                        run.font.bold = True
+                        run.font.color.rgb = RGBColor(255, 255, 255)
+                        run.font.size = Pt(9)
+
+            total_grupo = Decimal('0.00')
+            for idx, resposta in enumerate(grupo['itens']):
+                subtotal = subtotal_ponderado_resposta(resposta)
+                total_grupo += subtotal
+                row_cells = t_grupo.add_row().cells
+                row_cells[0].text = f"{resposta.item_ordem}. {resposta.item_descricao}"
+                row_cells[1].text = f"{resposta.item_peso_percentual}%"
+                row_cells[2].text = '' if resposta.nota_fiscal_valor is None else str(resposta.nota_fiscal_valor)
+                row_cells[3].text = '' if resposta.nota_gestor_valor is None else str(resposta.nota_gestor_valor)
+                row_cells[4].text = '' if resposta.nota_valor is None else str(resposta.nota_valor)
+                row_cells[5].text = f"{subtotal:.2f}"
+
+                for cell in row_cells:
+                    set_cell_margins(cell)
+                    if idx % 2 == 1:
+                        set_cell_background(cell, "f8fafc")
+                    for p in cell.paragraphs:
+                        for run in p.runs:
+                            run.font.size = Pt(8.5)
+
+            total_cells = t_grupo.add_row().cells
+            total_cells[0].merge(total_cells[4])
+            total_cells[0].text = "Total do grupo"
+            total_cells[5].text = f"{total_grupo:.2f}"
+            for cell in total_cells:
+                set_cell_background(cell, "eef2f6")
+                set_cell_margins(cell)
+                for p in cell.paragraphs:
+                    for run in p.runs:
+                        run.font.bold = True
+                        run.font.size = Pt(8.5)
 
     if avaliacao and avaliacao.observacoes:
         h_obs = doc.add_paragraph()
@@ -2470,8 +3452,10 @@ def gerar_ultima_folha_atestado(doc_path, contrato, competencia, tipo_nota='prin
     retencao_pis = competencia.retencao_pis_pasep_adicional if eh_nota_adicional else competencia.retencao_pis_pasep
     retencao_cofins = competencia.retencao_cofins_adicional if eh_nota_adicional else competencia.retencao_cofins
     valor_liquido = competencia.valor_liquido_nota_adicional if eh_nota_adicional else competencia.valor_liberado_final
+    # O atestado sempre considera vencimento em 30 dias após o aceite definitivo,
+    # tanto para a NF principal quanto para a nota adicional/débito quando houver.
     vencimento_pagamento = (
-        competencia.data_aceite_definitivo + timedelta(days=competencia.prazo_pagamento_dias or 0)
+        competencia.data_aceite_definitivo + timedelta(days=30)
         if competencia.data_aceite_definitivo
         else None
     )
@@ -2648,24 +3632,28 @@ def gerar_ultima_folha_atestado(doc_path, contrato, competencia, tipo_nota='prin
             competencia.gestor_pagamento,
             'Gestor do contrato',
             competencia.gestor_pagamento_em_exercicio,
+            nome_manual=competencia.gestor_pagamento_nome_manual,
         ),
         montar_assinatura_pagamento(
             competencia,
             competencia.coordenadora_pagamento,
             'Coordenadora',
             competencia.coordenadora_em_exercicio,
+            nome_manual=competencia.coordenadora_pagamento_nome_manual,
         ),
         montar_assinatura_pagamento(
             competencia,
             competencia.diretora_pagamento,
             'Diretora',
             competencia.diretora_em_exercicio,
+            nome_manual=competencia.diretora_pagamento_nome_manual,
         ),
         montar_assinatura_pagamento(
             competencia,
             competencia.subsecretario_pagamento,
             'Subsecretário',
             competencia.subsecretario_em_exercicio,
+            nome_manual=competencia.subsecretario_pagamento_nome_manual,
         ),
     ]
     textos_assinatura = [
@@ -2868,11 +3856,14 @@ def _serializar_exportacao(job):
 
     data = {
         'job_id': job.pk,
+        'competencia_id': job.competencia_id,
         'status': job.status,
+        'status_display': job.get_status_display(),
         'etapa_atual': job.etapa_atual,
         'percentual': job.percentual,
         'mensagem': job.mensagem,
         'erro_detalhe': job.erro_detalhe,
+        'tipo_saida': job.tipo_saida,
         'download_url': '',
     }
     if job.status == job.Status.CONCLUIDO and job.arquivo_pdf:
@@ -3135,8 +4126,8 @@ class CompetenciaDownloadDocsStartView(ContratosWriteMixin, ContractManagePermis
         response = self.ensure_manage_permission(request, competencia.contrato)
         if response:
             return JsonResponse({'detail': 'Acesso negado.'}, status=403)
-        if competencia.status not in {competencia.Status.DOWNLOAD_PENDENTE, competencia.Status.OB_PENDENTE, competencia.Status.PAGA}:
-            return JsonResponse({'detail': 'Os documentos só podem ser gerados após concluir medição, avaliação e checklist.'}, status=400)
+        if competencia.motivo_bloqueio_download:
+            return JsonResponse({'detail': competencia.motivo_bloqueio_download}, status=400)
         tipo_saida = request.GET.get('tipo_saida', 'unificado')
 
         job = ExportacaoDocumentosCompetencia.objects.filter(

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 19/06/2026 -->
+<!-- Objetivo: Exibir o conteúdo completo da tarefa técnica para consulta e conferência rápida. -->
+
+{% block title %}To-Do Técnico{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'todo_tecnico/css/todo_tecnico.css' %}">{% endblock %}
+
+{% block content %}
+  <!-- O detalhe mantém o histórico completo da tarefa sem exigir entrada em modo de edição. -->
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{{ tarefa.titulo|default:"Tarefa técnica sem título" }}</h1>
+      <p>Consulta completa da Tarefa #{{ tarefa.pk }} com descrição, solução e metadados de acompanhamento.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'todo_tecnico:list' %}">Voltar</a>
+      <a class="btn btn-primary" href="{% url 'todo_tecnico:update' tarefa.pk %}">Editar</a>
+    </div>
+  </div>
+
+  <section class="card border-0 shadow-sm todo-tecnico-form-card mb-4">
+    <div class="card-body p-4">
+      <div class="todo-tecnico-detail-grid">
+        <article class="todo-tecnico-detail-card">
+          <span>Identificador</span>
+          <strong>#{{ tarefa.pk }}</strong>
+        </article>
+        <article class="todo-tecnico-detail-card">
+          <span>Situação</span>
+          <strong>{% if tarefa.esta_concluida %}Concluída{% else %}Aberta{% endif %}</strong>
+        </article>
+        <article class="todo-tecnico-detail-card">
+          <span>Criado por</span>
+          <strong>{{ tarefa.criado_por.get_full_name|default:tarefa.criado_por.username }}</strong>
+        </article>
+        <article class="todo-tecnico-detail-card">
+          <span>Data de inserção</span>
+          <strong>{{ tarefa.criado_em|date:"d/m/Y H:i" }}</strong>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="card border-0 shadow-sm todo-tecnico-form-card">
+    <div class="card-body p-4">
+      <div class="todo-tecnico-detail-section">
+        <h2>Descrição</h2>
+        <div class="todo-tecnico-detail-body">{{ tarefa.descricao|linebreaksbr }}</div>
+      </div>
+
+      <div class="todo-tecnico-detail-section">
+        <h2>Solução</h2>
+        {% if tarefa.solucao %}
+          <div class="todo-tecnico-detail-body">{{ tarefa.solucao|linebreaksbr }}</div>
+        {% else %}
+          <p class="text-muted mb-0">A tarefa ainda não possui solução registrada.</p>
+        {% endif %}
+      </div>
+
+      <div class="todo-tecnico-detail-section">
+        <h2>Fechamento</h2>
+        {% if tarefa.concluido_em %}
+          <p class="mb-0">{{ tarefa.concluido_em|date:"d/m/Y H:i" }}</p>
+        {% else %}
+          <p class="text-muted mb-0">A tarefa segue em aberto.</p>
+        {% endif %}
+      </div>
+
+      <div class="todo-tecnico-detail-section">
+        <h2>Execuções automáticas do Codex</h2>
+        <p class="text-muted">Título sugerido para automação: {{ titulo_sugerido }}</p>
+        <div class="todo-tecnico-history-list">
+          {% for execucao in execucoes_codex %}
+            <article class="todo-tecnico-history-item {% if execucao.status == 'erro' %}is-error{% endif %}">
+              <div class="d-flex justify-content-between gap-3 flex-wrap">
+                <strong>{{ execucao.status_legivel }}</strong>
+                <span>{{ execucao.criado_em|date:"d/m/Y H:i" }}</span>
+              </div>
+              <div>{{ execucao.get_tipo_display }}</div>
+              {% if execucao.agendado_para %}<div>Agendado para {{ execucao.agendado_para|date:"d/m/Y H:i" }}</div>{% endif %}
+              {% if execucao.total_tokens %}<div>{{ execucao.total_tokens }} tokens utilizados</div>{% endif %}
+              {% if execucao.resumo_execucao %}<div class="todo-tecnico-detail-body mt-2">{{ execucao.resumo_execucao|linebreaksbr }}</div>{% endif %}
+              {% if execucao.erro_detalhe %}<div class="todo-tecnico-detail-body mt-2">{{ execucao.erro_detalhe|linebreaksbr }}</div>{% endif %}
+            </article>
+          {% empty %}
+            <p class="text-muted mb-0">Nenhuma execução automática registrada para esta tarefa.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

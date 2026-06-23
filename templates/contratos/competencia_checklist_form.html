@@ -24,6 +24,7 @@
               <div>
                 <strong>{{ item.ordem }}. {{ item.titulo }}</strong>
                 {% if item.obrigatorio %}<span class="badge text-bg-warning ms-2">Obrigatório</span>{% endif %}
+                {% if item.categoria == 'NOTA_ADICIONAL' %}<span class="badge text-bg-info ms-2 text-white">Nota adicional/débito</span>{% endif %}
                 {% if item.descricao %}<p class="text-muted mt-2 mb-2">{{ item.descricao }}</p>{% endif %}
                 {% if item.anexo_principal %}
                   <p class="small mb-2">Arquivo atual: <a href="{{ item.anexo_principal.arquivo.url }}" target="_blank" rel="noopener">visualizar PDF</a></p>

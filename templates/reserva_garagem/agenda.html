@@ -17,15 +17,15 @@
     <div class="d-flex flex-wrap gap-2">
       {% if pode_solicitar_reserva %}
         <a class="btn btn-primary" href="{% url 'reserva_garagem:reserva_create' %}">Nova reserva</a>
+        <a class="btn btn-light" href="{% url 'reserva_garagem:minhas_reservas' %}">Minhas reservas</a>
       {% endif %}
-      <a class="btn btn-light" href="{% url 'reserva_garagem:reserva_list' %}">Reservas</a>
-      <a class="btn btn-light" href="{% url 'reserva_garagem:dashboard' %}">Dashboard</a>
       {% if pode_analisar_reservas %}
-        <a class="btn btn-outline-secondary" href="{% url 'reserva_garagem:fila_fiscal' %}">Fila fiscal</a>
-      {% endif %}
-      {% if pode_gerenciar_base %}
-        <a class="btn btn-outline-secondary" href="{% url 'reserva_garagem:vaga_list' %}">Vagas</a>
-        <a class="btn btn-outline-secondary" href="{% url 'reserva_garagem:configuracao' %}">Configuração</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:reserva_predefinida_create' %}">Vaga pré-reservada</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:reserva_list' %}">Reservas</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:dashboard' %}">Dashboard</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:fila_fiscal' %}">Fila fiscal</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:vaga_list' %}">Vagas</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:configuracao' %}">Configuração</a>
       {% endif %}
     </div>
   </div>
@@ -57,7 +57,6 @@
 
   <script>
     const locale = "pt-BR";
-    const usuarioLogadoNome = "{{ usuario_logado_nome|default:''|escapejs }}";
     const vagas = JSON.parse(document.getElementById("vagas-data")?.textContent || "[]");
     const ocupacoes = JSON.parse(document.getElementById("ocupacoes-data")?.textContent || "[]");
     const filtroVaga = document.getElementById("calendar-vaga-filter");
@@ -135,14 +134,16 @@
         const slotsContainer = cell.querySelector(".reserva-garagem-day-slots");
         vagasDoDia.forEach((vaga) => {
           const ocupacao = ocupacoesPorDiaEVaga.get(`${key}:${vaga.id}`);
-          const circulo = document.createElement("button");
-          const statusLabel = ocupacao?.is_mine
-            ? `${usuarioLogadoNome || "Sua reserva"}, ${vaga.nome_exibicao}`
-            : (ocupacao ? "Ocupada" : "Disponível");
+          const circulo = ocupacao?.detail_url ? document.createElement("a") : document.createElement("button");
+          const statusLabel = ocupacao ? (ocupacao.tooltip_label || "Ocupada") : "Disponível";
           const tooltipId = `tooltip-${key}-${vaga.id}`;
 
-          circulo.type = "button";
-          circulo.className = `reserva-garagem-slot${ocupacao ? " is-occupied" : " is-available"}${ocupacao?.is_mine ? " is-mine" : ""}`;
+          if (circulo.tagName === "BUTTON") {
+            circulo.type = "button";
+          } else if (ocupacao?.detail_url) {
+            circulo.href = ocupacao.detail_url;
+          }
+          circulo.className = `reserva-garagem-slot${ocupacao ? " is-occupied" : " is-available"}${ocupacao?.is_mine ? " is-mine" : ""}${ocupacao?.detail_url ? " is-clickable" : ""}`;
           circulo.setAttribute("aria-label", `${vaga.nome_exibicao}: ${statusLabel}`);
           circulo.setAttribute("aria-describedby", tooltipId);
           circulo.innerHTML = `<span class="reserva-garagem-slot-tooltip" id="${tooltipId}" role="tooltip">${statusLabel}</span>`;

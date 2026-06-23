@@ -106,6 +106,25 @@ class ReservaRecursoForm(BootstrapModelForm):
             "observacoes": forms.Textarea(attrs={"rows": 4}),
         }
 
+    @staticmethod
+    def objetos_disponiveis_na_data(data_referencia, *, objeto_atual_id=None):
+        """Retorna objetos ativos sem reserva deferida na data escolhida."""
+
+        objetos = ObjetoReservavel.objects.filter(ativo=True)
+        if not data_referencia:
+            if objeto_atual_id:
+                return ObjetoReservavel.objects.filter(Q(pk=objeto_atual_id) | Q(ativo=True)).order_by("nome").distinct()
+            return objetos.none()
+
+        ocupados_ids = ReservaRecurso.objects.filter(
+            data=data_referencia,
+            status=ReservaRecurso.Status.DEFERIDA,
+        ).values_list("objeto_id", flat=True)
+        objetos = objetos.exclude(pk__in=ocupados_ids)
+        if objeto_atual_id:
+            objetos = ObjetoReservavel.objects.filter(Q(pk=objeto_atual_id) | Q(pk__in=objetos.values("pk"))).distinct()
+        return objetos.order_by("nome")
+
     def __init__(self, *args, **kwargs):
         self.request_user = kwargs.pop("request_user", None)
         self.modo_fiscal = kwargs.pop("modo_fiscal", False)
@@ -113,14 +132,19 @@ class ReservaRecursoForm(BootstrapModelForm):
         self.usuarios_responsaveis_sugestoes = []
         self.usuario_responsavel_resolvido = None
 
-        objetos = ObjetoReservavel.objects.filter(ativo=True).order_by("nome")
-        if self.instance and self.instance.pk:
-            objetos = ObjetoReservavel.objects.filter(Q(pk=self.instance.objeto_id) | Q(ativo=True)).order_by("nome")
-        self.fields["objeto"].queryset = objetos.distinct()
+        data_referencia = self.data.get("data") or self.initial.get("data") or getattr(self.instance, "data", None)
+        objeto_atual_id = getattr(self.instance, "objeto_id", None)
+        self.fields["objeto"].queryset = self.objetos_disponiveis_na_data(
+            data_referencia,
+            objeto_atual_id=objeto_atual_id,
+        )
         self.fields["objeto"].label_from_instance = lambda obj: obj.nome_exibicao
         self.fields["data"].input_formats = ["%Y-%m-%d"]
         self.fields["hora_inicio"].input_formats = ["%H:%M"]
         self.fields["hora_fim"].input_formats = ["%H:%M"]
+        self.fields["objeto"].help_text = "Escolha primeiro a data para listar somente os objetos disponíveis."
+        if not data_referencia and not (self.instance and self.instance.pk):
+            self.fields["objeto"].widget.attrs["disabled"] = True
 
         # O fluxo comum segue automático: o responsável sempre é o próprio usuário logado.
         if self.request_user and getattr(self.request_user, "is_authenticated", False) and not self.modo_fiscal:

@@ -427,7 +427,11 @@
                   <form method="post" action="{% url 'mensageria:ciente' %}">
                     {% csrf_token %}
                     <input type="hidden" name="destino_id" value="{{ mensageria_primeira_pendente.pk }}">
-                    <input type="hidden" name="next_url" value="{{ request.get_full_path }}">
+                    <input
+                      type="hidden"
+                      name="next_url"
+                      value="{{ mensageria_primeira_pendente.mensagem.payload_email.link_analise|default:request.get_full_path }}"
+                    >
                     <button class="btn btn-primary" type="submit">Ciente</button>
                   </form>
                 </div>

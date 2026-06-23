@@ -12,11 +12,19 @@
 {% block content %}
   <div class="spi-page-title">
     <h1>Analisar reserva #{{ reserva.pk }}</h1>
-    <p>Defina a decisão fiscal para a reserva{% if serie_count %} e suas {{ serie_count }} ocorrências da série{% endif %}.</p>
+    {% if reserva_ja_decidida %}
+      <p>Esta solicitação já foi {{ reserva.get_status_display|lower }} e está bloqueada para nova análise.</p>
+    {% else %}
+      <p>Defina a decisão fiscal para a reserva{% if serie_count %} e suas {{ serie_count }} ocorrências da série{% endif %}.</p>
+    {% endif %}
   </div>
 
   <section class="reserva-espacos-surface reserva-espacos-detail-card mb-4">
     <p><strong>Solicitante:</strong> {{ solicitante_payload.nome|default:reserva.solicitante.username }}</p>
+    <p><strong>Status atual:</strong> {{ reserva.get_status_display }}</p>
+    {% if fiscal_payload.nome %}
+      <p><strong>Fiscal responsável:</strong> {{ fiscal_payload.nome }}</p>
+    {% endif %}
     <p><strong>Vaga:</strong> {{ reserva.vaga.nome_exibicao }}</p>
     <p><strong>Data:</strong> {{ reserva.data|date:"d/m/Y" }}</p>
     <p><strong>Veículo:</strong> {{ reserva.marca_veiculo }} {{ reserva.modelo_veiculo }} - {{ reserva.cor_veiculo }}</p>
@@ -25,35 +33,47 @@
   </section>
 
   <section class="reserva-espacos-surface reserva-espacos-form-surface">
-    <form method="post" class="row g-4">
-      {% csrf_token %}
-      {% if form.non_field_errors %}
-        <div class="col-12"><div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div></div>
-      {% endif %}
-      <div class="col-lg-4">
-        <label class="form-label" for="{{ form.decisao.id_for_label }}">Decisão</label>
-        {{ form.decisao }}
-        {{ form.decisao.errors }}
+    {% if reserva_ja_decidida %}
+      <div class="alert alert-info mb-0">
+        A reserva já recebeu a decisão fiscal de {{ reserva.get_status_display|lower }} e não aceita novo deferimento ou indeferimento.
       </div>
-      <div class="col-12" id="bloco-indeferimento">
-        <label class="form-label" for="{{ form.justificativa_indeferimento.id_for_label }}">Justificativa do indeferimento</label>
-        {{ form.justificativa_indeferimento }}
-        {{ form.justificativa_indeferimento.errors }}
+      <div class="mt-3 d-flex gap-2 flex-wrap">
+        <a class="btn btn-light" href="{% url 'reserva_garagem:fila_fiscal' %}">Voltar para a fila</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:reserva_detail' reserva.pk %}">Ver detalhe</a>
       </div>
-      <div class="col-12 d-flex gap-2 flex-wrap">
-        <button class="btn btn-primary" type="submit">Salvar decisão</button>
-        <a class="btn btn-light" href="{% url 'reserva_garagem:fila_fiscal' %}">Cancelar</a>
-      </div>
-    </form>
+    {% else %}
+      <form method="post" class="row g-4">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="col-12"><div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div></div>
+        {% endif %}
+        <div class="col-lg-4">
+          <label class="form-label" for="{{ form.decisao.id_for_label }}">Decisão</label>
+          {{ form.decisao }}
+          {{ form.decisao.errors }}
+        </div>
+        <div class="col-12" id="bloco-indeferimento">
+          <label class="form-label" for="{{ form.justificativa_indeferimento.id_for_label }}">Justificativa do indeferimento</label>
+          {{ form.justificativa_indeferimento }}
+          {{ form.justificativa_indeferimento.errors }}
+        </div>
+        <div class="col-12 d-flex gap-2 flex-wrap">
+          <button class="btn btn-dark text-white" type="submit">Salvar decisão</button>
+          <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:fila_fiscal' %}">Cancelar</a>
+        </div>
+      </form>
+    {% endif %}
   </section>
 
-  <script>
-    const decisaoSelect = document.getElementById("id_decisao");
-    const blocoIndeferimento = document.getElementById("bloco-indeferimento");
-    const toggleIndeferimento = () => {
-      blocoIndeferimento.style.display = decisaoSelect.value === "INDEFERIR" ? "block" : "none";
-    };
-    decisaoSelect.addEventListener("change", toggleIndeferimento);
-    toggleIndeferimento();
-  </script>
+  {% if not reserva_ja_decidida %}
+    <script>
+      const decisaoSelect = document.getElementById("id_decisao");
+      const blocoIndeferimento = document.getElementById("bloco-indeferimento");
+      const toggleIndeferimento = () => {
+        blocoIndeferimento.style.display = decisaoSelect.value === "INDEFERIR" ? "block" : "none";
+      };
+      decisaoSelect.addEventListener("change", toggleIndeferimento);
+      toggleIndeferimento();
+    </script>
+  {% endif %}
 {% endblock %}

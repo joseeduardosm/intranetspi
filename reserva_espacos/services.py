@@ -7,6 +7,7 @@ from datetime import date
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count
+from django.contrib.auth import get_user_model
 from django.db.models.functions import TruncMonth
 from django.urls import reverse
 from django.utils import timezone
@@ -14,6 +15,8 @@ from django.utils import timezone
 from mensageria_assincrona.services import criar_mensagem_rascunho, publicar_mensagem
 
 from .models import ConfiguracaoReservaEspacos, ObjetoReservavel, ReservaRecurso, ReservaRecursoEvento
+
+User = get_user_model()
 
 
 def registrar_evento(reserva, acao, usuario=None, payload=None):
@@ -31,6 +34,18 @@ def fiscal_group():
     """Obtém o grupo operacional configurado para os fiscais do módulo."""
 
     return ConfiguracaoReservaEspacos.singleton().grupo_fiscais
+
+
+def _usuarios_destinatarios_fiscais():
+    """Resolve os destinatários da fila fiscal com fallback para admins ativos."""
+
+    group = fiscal_group()
+    if group:
+        usuarios = list(group.user_set.filter(is_active=True).distinct())
+        if usuarios:
+            return usuarios
+    # Quando o grupo ainda não foi configurado, evita perder a solicitação enviando aos administradores.
+    return list(User.objects.filter(is_active=True).filter(is_superuser=True) | User.objects.filter(is_active=True, is_staff=True).exclude(is_superuser=True))
 
 
 def user_is_fiscal(user) -> bool:
@@ -129,8 +144,7 @@ def _mensagem_nova_solicitacao_para_fiscais(reservas):
         f"Período: {intervalo}\n"
         f"Horário: {_format_time(reserva.hora_inicio)} às {_format_time(reserva.hora_fim)}\n"
         f"Título: {reserva.titulo}\n"
-        f"Observações: {reserva.observacoes or '-'}\n\n"
-        f"Analisar solicitação: {link_analise}"
+        f"Observações: {reserva.observacoes or '-'}"
     )
     payload = {
         "tipo": "nova_solicitacao_reserva_espaco",
@@ -263,11 +277,7 @@ def notificar_solicitante(reservas, usuario_responsavel=None):
 def notificar_fiscais_nova_solicitacao(reservas, usuario_responsavel=None):
     """Publica uma mensagem para todos os usuários do grupo fiscal com link direto de análise."""
 
-    group = fiscal_group()
-    if not group:
-        return None
-
-    usuarios_fiscais = list(group.user_set.filter(is_active=True).distinct())
+    usuarios_fiscais = _usuarios_destinatarios_fiscais()
     if not usuarios_fiscais:
         return None
 

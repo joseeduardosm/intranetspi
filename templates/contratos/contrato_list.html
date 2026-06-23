@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load contratos_extras %}
 <!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 08/06/2026 -->
 <!-- Objetivo: Listar contratos da V2 com busca ampla e ações curtas, inspiradas no RegulaSGI. -->
 {% block title %}Contratos V2{% endblock %}
@@ -15,9 +16,116 @@
       {% if usuario_pode_gerir_checklists_padrao_globais %}
         <a class="btn btn-outline-primary" href="{% url 'contratos:checklist_padrao_list' %}">Checklists Padrão</a>
       {% endif %}
+      {% if usuario_pode_gerir_formularios_padrao_globais %}
+        <a class="btn btn-outline-primary" href="{% url 'contratos:avaliacao_padrao_list' %}">Avaliações Padrão</a>
+      {% endif %}
       <a class="btn btn-primary" href="{% url 'contratos:contrato_create' %}">Novo contrato</a>
     </div>
   </div>
+
+  <section class="contratos-dashboard-grid mb-4">
+    <article class="card shadow-sm border-0 contratos-dashboard-card">
+      <div class="card-body">
+        <span class="contratos-kicker">Contratos vigentes</span>
+        <h2>{{ dashboard_resumo.vigentes }}</h2>
+        <p class="mb-0">Carteira com vigência ativa na data atual.</p>
+      </div>
+    </article>
+    <article class="card shadow-sm border-0 contratos-dashboard-card">
+      <div class="card-body">
+        <span class="contratos-kicker">A vencer até 30 dias</span>
+        <h2>{{ dashboard_resumo.vence_ate_30_dias }}</h2>
+        <p class="mb-0">Contratos que pedem atenção imediata da gestão.</p>
+      </div>
+    </article>
+    <article class="card shadow-sm border-0 contratos-dashboard-card">
+      <div class="card-body">
+        <span class="contratos-kicker">A vencer 31 a 60 dias</span>
+        <h2>{{ dashboard_resumo.vence_31_60_dias }}</h2>
+        <p class="mb-0">Próxima onda de renovações e tratativas.</p>
+      </div>
+    </article>
+    <article class="card shadow-sm border-0 contratos-dashboard-card">
+      <div class="card-body">
+        <span class="contratos-kicker">A vencer 61 a 90 dias</span>
+        <h2>{{ dashboard_resumo.vence_61_90_dias }}</h2>
+        <p class="mb-0">Janela futura para organização da carteira.</p>
+      </div>
+    </article>
+    <article class="card shadow-sm border-0 contratos-dashboard-card">
+      <div class="card-body">
+        <span class="contratos-kicker">Competências atrasadas</span>
+        <h2>{{ dashboard_resumo.competencias_atrasadas }}</h2>
+        <p class="mb-0">Etapas monitoradas que já ultrapassaram o prazo.</p>
+      </div>
+    </article>
+    <article class="card shadow-sm border-0 contratos-dashboard-card">
+      <div class="card-body">
+        <span class="contratos-kicker">Pagamentos pendentes</span>
+        <h2>{{ dashboard_resumo.pagamentos_pendentes }}</h2>
+        <p class="mb-0">Competências aguardando download ou OB.</p>
+      </div>
+    </article>
+    <article class="card shadow-sm border-0 contratos-dashboard-card">
+      <div class="card-body">
+        <span class="contratos-kicker">Prazos críticos</span>
+        <h2>{{ dashboard_resumo.prazos_criticos }}</h2>
+        <p class="mb-0">Monitoramentos vencidos ou acima de 75%.</p>
+      </div>
+    </article>
+  </section>
+
+  <section class="card shadow-sm border-0 mb-4">
+    <div class="card-header contratos-section-header">
+      <h2>Contratos com atenção operacional</h2>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive contratos-table-wrap">
+        <table class="table align-middle mb-0 contratos-table contratos-dashboard-table">
+          <thead>
+            <tr>
+              <th>Contrato</th>
+              <th>Empresa</th>
+              <th>Vigência</th>
+              <th class="text-center">Comp. pendentes</th>
+              <th class="text-center">Comp. atrasadas</th>
+              <th class="text-center">Prazos críticos</th>
+              <th class="text-end">Executado</th>
+              <th class="text-end">Saldo</th>
+              <th class="text-end">% consumido</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for contrato in dashboard_contratos_operacionais %}
+              <tr>
+                <td>
+                  <a class="fw-semibold text-decoration-none" href="{% url 'contratos:contrato_detail' contrato.pk %}">{{ contrato.numero_contrato }}</a>
+                  <div class="text-muted small mt-1">{{ contrato.apelido }}</div>
+                </td>
+                <td>{{ contrato.empresa_contratada.razao_social }}</td>
+                <td>
+                  <strong>{{ contrato.situacao_vigencia_dashboard }}</strong>
+                  {% if contrato.data_fim_vigencia %}
+                    <div class="text-muted small mt-1">até {{ contrato.data_fim_vigencia|date:"d/m/Y" }}</div>
+                  {% endif %}
+                </td>
+                <td class="text-center">{{ contrato.dashboard_pagamentos_pendentes }}</td>
+                <td class="text-center">{{ contrato.dashboard_competencias_atrasadas }}</td>
+                <td class="text-center">{{ contrato.dashboard_prazos_criticos }}</td>
+                <td class="text-end">R$ {{ contrato.dashboard_valor_executado|brl }}</td>
+                <td class="text-end">R$ {{ contrato.dashboard_valor_saldo|brl }}</td>
+                <td class="text-end">{{ contrato.percentual_consumido_display }}%</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="9" class="text-center text-muted py-5">Nenhum contrato com atenção operacional no recorte atual.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 
   <section class="card shadow-sm border-0">
     <div class="card-body border-bottom">
@@ -42,6 +150,7 @@
               <th>Apelido</th>
               <th>Empresa contratada</th>
               <th>Início</th>
+              <th>Fim</th>
               <th>Situação</th>
               <th class="text-end">Ações</th>
             </tr>
@@ -58,12 +167,9 @@
                 </td>
                 <td>{{ contrato.empresa_contratada.razao_social }}</td>
                 <td>{{ contrato.data_inicio_vigencia|date:"d/m/Y" }}</td>
+                <td>{{ contrato.data_fim_vigencia|date:"d/m/Y" }}</td>
                 <td>
-                  {% if contrato.situacao_forcada %}
-                    <span class="badge text-bg-secondary">{{ contrato.get_situacao_forcada_display }}</span>
-                  {% else %}
-                    <span class="badge text-bg-light border">Automática</span>
-                  {% endif %}
+                  <span class="badge text-bg-light border">{{ contrato.situacao_vigencia_dashboard }}</span>
                 </td>
                 <td class="text-end">
                   <div class="dropdown">
@@ -87,7 +193,7 @@
               </tr>
             {% empty %}
               <tr>
-                <td colspan="6" class="text-center text-muted py-5">Nenhum contrato V2 cadastrado.</td>
+                <td colspan="7" class="text-center text-muted py-5">Nenhum contrato V2 cadastrado.</td>
               </tr>
             {% endfor %}
           </tbody>

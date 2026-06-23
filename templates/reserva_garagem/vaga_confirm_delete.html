@@ -20,7 +20,7 @@
     <form method="post" class="d-flex gap-2 flex-wrap">
       {% csrf_token %}
       <button class="btn btn-danger" type="submit">Excluir vaga</button>
-      <a class="btn btn-light" href="{% url 'reserva_garagem:vaga_list' %}">Cancelar</a>
+      <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:vaga_list' %}">Cancelar</a>
     </form>
   </section>
 {% endblock %}

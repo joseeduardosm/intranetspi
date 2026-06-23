@@ -32,6 +32,7 @@ from .forms import (
 from .models import ConfiguracaoReservaGaragem, ReservaGaragem, ReservaGaragemEvento, VagaGaragem
 from .services import (
     cancelar_reserva,
+    cancelar_reserva_com_escopo,
     deferir_reserva,
     fiscal_group,
     indeferir_reserva,
@@ -120,10 +121,9 @@ def _pode_gerenciar_base(acl_level: str | None) -> bool:
 
 
 def _pode_analisar(view) -> bool:
-    """Grupo fiscal e controle total acessam a fila de análise."""
+    """Somente o grupo fiscal e admins do sistema acessam as áreas restritas do fluxo."""
 
-    acl_level = _nivel_usuario(view)
-    return _pode_gerenciar_base(acl_level) or user_is_fiscal(view.request.user)
+    return user_is_fiscal(view.request.user)
 
 
 def _parse_iso_date(value: str) -> date | None:
@@ -135,6 +135,42 @@ def _parse_iso_date(value: str) -> date | None:
         return date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _escopo_evento_legivel(payload: dict) -> str:
+    """Traduz o escopo técnico do evento para um texto amigável no histórico."""
+
+    apply_scope = (payload or {}).get("apply_scope") or ""
+    data_inicial = _parse_iso_date((payload or {}).get("data_inicial") or "")
+    data_final = _parse_iso_date((payload or {}).get("data_final") or "")
+    if apply_scope == "all":
+        return "Toda a série"
+    if apply_scope == "range" and data_inicial and data_final:
+        return f"Período de {data_inicial:%d/%m/%Y} a {data_final:%d/%m/%Y}"
+    if apply_scope == "single":
+        return "Somente esta ocorrência"
+    if (payload or {}).get("serie_id"):
+        return "Série criada"
+    return ""
+
+
+def _origem_evento_legivel(payload: dict, evento: ReservaGaragemEvento, reserva: ReservaGaragem) -> str:
+    """Identifica se a ação veio do fluxo do usuário, do fluxo fiscal ou de uma pré-reserva."""
+
+    origem = (payload or {}).get("origem") or ""
+    if origem == "predefinida_fiscal":
+        return "Pré-reserva fiscal"
+    if origem == "fluxo_fiscal":
+        return "Fluxo fiscal"
+    if origem == "fluxo_usuario":
+        return "Fluxo do usuário"
+    if evento.acao in {ReservaGaragemEvento.Acao.DEFERIMENTO, ReservaGaragemEvento.Acao.INDEFERIMENTO}:
+        return "Fluxo fiscal"
+    if evento.usuario_id and evento.usuario_id == reserva.solicitante_id:
+        return "Fluxo do usuário"
+    if evento.usuario_id:
+        return "Fluxo fiscal"
+    return "Sistema"
 
 
 def _pode_ver_reserva(user, reserva: ReservaGaragem, acl_level: str | None) -> bool:
@@ -151,6 +187,19 @@ def _pode_editar_reserva(user, reserva: ReservaGaragem, acl_level: str | None) -
     if _pode_gerenciar_base(acl_level):
         return reserva.status == ReservaGaragem.Status.AGUARDANDO_APROVACAO
     return reserva.solicitante_id == getattr(user, "id", None) and reserva.pode_editar_solicitante
+
+
+def _pode_cancelar_reserva(user, reserva: ReservaGaragem, acl_level: str | None) -> bool:
+    """Cancelamento alcança reservas ativas do próprio usuário ou qualquer reserva para fiscal/admin."""
+
+    if reserva.status not in {
+        ReservaGaragem.Status.AGUARDANDO_APROVACAO,
+        ReservaGaragem.Status.DEFERIDA,
+    }:
+        return False
+    if _pode_gerenciar_base(acl_level) or user_is_fiscal(user):
+        return True
+    return reserva.solicitante_id == getattr(user, "id", None)
 
 
 class ReservaGaragemMixin(ACLRequiredMixin):
@@ -182,11 +231,20 @@ class AgendaReservaGaragemView(ReservaGaragemMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         vagas = list(context["vagas"])
+        pode_ver_todas_nominalmente = any(
+            [
+                bool(getattr(self.request.user, "is_superuser", False)),
+                bool(getattr(self.request.user, "is_staff", False)),
+                _pode_gerenciar_base(_nivel_usuario(self)),
+                user_is_fiscal(self.request.user),
+            ]
+        )
         reservas = (
             ReservaGaragem.objects.filter(
                 status__in=[ReservaGaragem.Status.AGUARDANDO_APROVACAO, ReservaGaragem.Status.DEFERIDA]
             )
             .select_related("solicitante", "vaga")
+            .order_by("data", "vaga_id", "id")
         )
         ocupacao_por_data_vaga = {}
         for reserva in reservas:
@@ -199,10 +257,18 @@ class AgendaReservaGaragemView(ReservaGaragemMixin, ListView):
                     "occupied": True,
                     # Se qualquer ocupação do dia pertencer ao usuário logado, o círculo recebe anel azul.
                     "is_mine": False,
+                    "tooltip_label": "Ocupada",
+                    "detail_url": "",
                 },
             )
             if reserva.solicitante_id == getattr(self.request.user, "id", None):
                 ocupacao["is_mine"] = True
+                ocupacao["tooltip_label"] = f"{reserva.responsavel}, {reserva.vaga.nome_exibicao}"
+                ocupacao["detail_url"] = reverse("reserva_garagem:reserva_detail", kwargs={"pk": reserva.pk})
+            elif pode_ver_todas_nominalmente:
+                ocupacao["tooltip_label"] = f"{reserva.responsavel}, {reserva.vaga.nome_exibicao}"
+                if not ocupacao["detail_url"]:
+                    ocupacao["detail_url"] = reverse("reserva_garagem:reserva_detail", kwargs={"pk": reserva.pk})
         vagas_data = [
             {
                 "id": vaga.pk,
@@ -219,7 +285,6 @@ class AgendaReservaGaragemView(ReservaGaragemMixin, ListView):
                 "vaga_atual": (self.request.GET.get("vaga") or "").strip(),
                 "vagas_data": vagas_data,
                 "ocupacoes_data": ocupacoes_data,
-                "usuario_logado_nome": _dados_usuario(self.request.user)["nome"] if self.request.user.is_authenticated else "",
                 "view_atual": (self.request.GET.get("view") or "month").strip(),
             }
         )
@@ -230,6 +295,11 @@ class ReservaGaragemDashboardView(ReservaGaragemMixin, TemplateView):
     """Dashboard analítico de ocupação da garagem."""
 
     template_name = "reserva_garagem/dashboard.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not _pode_analisar(self):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -245,11 +315,19 @@ class ReservaListView(ReservaGaragemMixin, ListView):
     context_object_name = "reservas"
     paginate_by = 20
 
+    ORDENACAO_OPCOES = {
+        "dia": ("-data", "-id"),
+        "solicitante": ("responsavel", "-data", "-id"),
+        "vaga": ("vaga__nome", "vaga__localizacao", "-data", "-id"),
+    }
+
+    def dispatch(self, request, *args, **kwargs):
+        if not _pode_analisar(self):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
+
     def get_queryset(self):
         queryset = ReservaGaragem.objects.select_related("solicitante", "vaga", "fiscal_responsavel")
-        acl_level = _nivel_usuario(self)
-        if not (_pode_gerenciar_base(acl_level) or user_is_fiscal(self.request.user)):
-            queryset = queryset.filter(solicitante=self.request.user)
         query = (self.request.GET.get("q") or "").strip()
         status = (self.request.GET.get("status") or "").strip()
         if status in ReservaGaragem.Status.values:
@@ -265,13 +343,57 @@ class ReservaListView(ReservaGaragemMixin, ListView):
                 | Q(solicitante__first_name__icontains=query)
             )
             queryset = queryset.filter(filtros)
-        return queryset.order_by("-data", "-id")
+        ordenacao = (self.request.GET.get("ordenar_por") or "dia").strip()
+        if ordenacao not in self.ORDENACAO_OPCOES:
+            ordenacao = "dia"
+        return queryset.order_by(*self.ORDENACAO_OPCOES[ordenacao])
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["search_query"] = (self.request.GET.get("q") or "").strip()
         context["status_atual"] = (self.request.GET.get("status") or "").strip()
+        context["ordenacao_atual"] = (self.request.GET.get("ordenar_por") or "dia").strip()
+        if context["ordenacao_atual"] not in self.ORDENACAO_OPCOES:
+            context["ordenacao_atual"] = "dia"
         context["status_opcoes"] = ReservaGaragem.Status.choices
+        context["ordenacao_opcoes"] = [
+            ("dia", "Por dia"),
+            ("solicitante", "Por solicitante"),
+            ("vaga", "Por vaga"),
+        ]
+        return context
+
+
+class MinhasReservasGaragemView(ReservaGaragemMixin, LoginRequiredMixin, UserPassesTestMixin, ListView):
+    """Lista apenas as reservas do usuário logado com filtros rápidos por status."""
+
+    model = ReservaGaragem
+    template_name = "reserva_garagem/minhas_reservas.html"
+    context_object_name = "reservas"
+    paginate_by = 20
+
+    def test_func(self):
+        return _pode_solicitar(self.request.user, _nivel_usuario(self))
+
+    def get_queryset(self):
+        queryset = ReservaGaragem.objects.select_related("vaga", "fiscal_responsavel").filter(
+            solicitante=self.request.user
+        )
+        status = (self.request.GET.get("status") or "").strip()
+        if status in ReservaGaragem.Status.values:
+            queryset = queryset.filter(status=status)
+        return queryset.order_by("-data", "-id")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["status_atual"] = (self.request.GET.get("status") or "").strip()
+        context["status_filtros"] = [
+            ("", "Todas"),
+            (ReservaGaragem.Status.AGUARDANDO_APROVACAO, "Aguardando"),
+            (ReservaGaragem.Status.DEFERIDA, "Deferidas"),
+            (ReservaGaragem.Status.INDEFERIDA, "Indeferidas"),
+            (ReservaGaragem.Status.CANCELADA, "Canceladas"),
+        ]
         return context
 
 
@@ -302,12 +424,17 @@ class ReservaDetailView(ReservaGaragemMixin, DetailView):
         context["solicitante_payload"] = _dados_usuario(self.object.solicitante)
         context["fiscal_payload"] = _dados_usuario(self.object.fiscal_responsavel)
         context["pode_editar"] = _pode_editar_reserva(self.request.user, self.object, _nivel_usuario(self))
+        context["pode_cancelar"] = _pode_cancelar_reserva(self.request.user, self.object, _nivel_usuario(self))
         context["pode_analisar"] = _pode_analisar(self) and self.object.status == ReservaGaragem.Status.AGUARDANDO_APROVACAO
-        # Resolve o nome humano do responsável em cada evento para evitar exibir apenas o login no histórico.
+        # Resolve o nome humano do responsável e traduz payloads para uma trilha de auditoria legível.
         context["eventos_historico"] = [
             {
                 "evento": evento,
                 "usuario_nome": (_dados_usuario(evento.usuario)["nome"] if evento.usuario else "") or "Sistema",
+                "escopo_label": _escopo_evento_legivel(evento.payload or {}),
+                "origem_label": _origem_evento_legivel(evento.payload or {}, evento, self.object),
+                "motivo_cancelamento": (evento.payload or {}).get("motivo_cancelamento") or "",
+                "justificativa": (evento.payload or {}).get("justificativa") or "",
             }
             for evento in self.object.eventos.all()
         ]
@@ -401,6 +528,112 @@ class ReservaCreateView(ReservaGaragemMixin, LoginRequiredMixin, UserPassesTestM
         return response
 
 
+class ReservaPredefinidaFiscalCreateView(ReservaGaragemMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
+    """Permite ao time fiscal bloquear vagas previamente definidas sem passar pela fila de aprovação."""
+
+    model = ReservaGaragem
+    form_class = ReservaGaragemSolicitacaoForm
+    template_name = "reserva_garagem/reserva_form.html"
+
+    def test_func(self):
+        return _pode_analisar(self)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["request_user"] = self.request.user
+        kwargs["modo_fiscal"] = True
+        return kwargs
+
+    def get_success_url(self):
+        return self.object.get_absolute_url()
+
+    def get_initial(self):
+        initial = super().get_initial()
+        data_param = (self.request.GET.get("data") or "").strip()
+        vaga_param = (self.request.GET.get("vaga") or "").strip()
+        if data_param:
+            try:
+                data_base = date.fromisoformat(data_param)
+                initial["data_inicial"] = data_base
+                initial["data_final"] = data_base
+            except ValueError:
+                pass
+        if vaga_param.isdigit():
+            initial["vaga"] = int(vaga_param)
+        initial["responsavel"] = _nome_usuario_responsavel(self.request.user)
+        return initial
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["titulo"] = "Nova vaga pré-reservada"
+        context["vagas_disponiveis_url"] = reverse("reserva_garagem:vagas_disponiveis")
+        context["modo_fiscal_predefinido"] = True
+        return context
+
+    def form_valid(self, form):
+        recurrence_dates = form.get_recurrence_dates()
+        dados = form.cleaned_data
+        solicitante = form.usuario_responsavel_resolvido or self.request.user
+        responsavel = dados["responsavel"]
+        fiscal = self.request.user
+
+        if recurrence_dates and len(recurrence_dates) > 1:
+            serie_id = uuid.uuid4()
+            criadas = []
+            for occ_date in recurrence_dates:
+                reserva = ReservaGaragem.objects.create(
+                    vaga=dados["vaga"],
+                    data=occ_date,
+                    responsavel=responsavel,
+                    solicitante=solicitante,
+                    status=ReservaGaragem.Status.DEFERIDA,
+                    fiscal_responsavel=fiscal,
+                    marca_veiculo=dados["marca_veiculo"],
+                    modelo_veiculo=dados["modelo_veiculo"],
+                    cor_veiculo=dados["cor_veiculo"],
+                    placa_veiculo=dados["placa_veiculo"],
+                    observacoes=dados["observacoes"],
+                    serie_id=serie_id,
+                )
+                criadas.append(reserva)
+                # O cadastro fiscal nasce já deferido para representar bloqueios previamente definidos.
+                registrar_evento(
+                    reserva,
+                    ReservaGaragemEvento.Acao.CRIACAO,
+                    usuario=fiscal,
+                    payload={"origem": "predefinida_fiscal", "data": reserva.data.isoformat(), "serie_id": str(serie_id)},
+                )
+                registrar_evento(
+                    reserva,
+                    ReservaGaragemEvento.Acao.DEFERIMENTO,
+                    usuario=fiscal,
+                    payload={"origem": "predefinida_fiscal", "serie_id": str(serie_id)},
+                )
+            messages.success(self.request, "Série de vagas pré-reservadas criada com sucesso.")
+            return redirect(criadas[0].get_absolute_url())
+
+        form.instance.solicitante = solicitante
+        form.instance.responsavel = responsavel
+        form.instance.status = ReservaGaragem.Status.DEFERIDA
+        form.instance.fiscal_responsavel = fiscal
+        form.instance.data = dados["data_inicial"]
+        messages.success(self.request, "Vaga pré-reservada criada com sucesso.")
+        response = super().form_valid(form)
+        registrar_evento(
+            self.object,
+            ReservaGaragemEvento.Acao.CRIACAO,
+            usuario=fiscal,
+            payload={"origem": "predefinida_fiscal"},
+        )
+        registrar_evento(
+            self.object,
+            ReservaGaragemEvento.Acao.DEFERIMENTO,
+            usuario=fiscal,
+            payload={"origem": "predefinida_fiscal"},
+        )
+        return response
+
+
 class ReservaUpdateView(ReservaGaragemMixin, LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     """Permite ao solicitante ajustar a reserva antes da análise."""
 
@@ -468,18 +701,31 @@ class ReservaCancelView(ReservaGaragemMixin, LoginRequiredMixin, UserPassesTestM
     context_object_name = "reserva"
 
     def test_func(self):
-        return _pode_editar_reserva(self.request.user, self.get_object(), _nivel_usuario(self))
+        return _pode_cancelar_reserva(self.request.user, self.get_object(), _nivel_usuario(self))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         if self.object.serie_id:
             context["serie_count"] = ReservaGaragem.objects.filter(serie_id=self.object.serie_id).count()
+            context["serie_primeira_data"] = ReservaGaragem.objects.filter(serie_id=self.object.serie_id).order_by("data").first().data
+            context["serie_ultima_data"] = ReservaGaragem.objects.filter(serie_id=self.object.serie_id).order_by("-data").first().data
         return context
 
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
+        apply_scope = (request.POST.get("apply_scope") or "single").strip()
+        data_inicial = _parse_iso_date((request.POST.get("cancel_data_inicial") or "").strip())
+        data_final = _parse_iso_date((request.POST.get("cancel_data_final") or "").strip())
+        motivo_cancelamento = (request.POST.get("motivo_cancelamento") or "").strip()
         try:
-            cancelar_reserva(self.object, usuario=request.user)
+            cancelar_reserva_com_escopo(
+                self.object,
+                usuario=request.user,
+                apply_scope=apply_scope,
+                data_inicial=data_inicial,
+                data_final=data_final,
+                motivo_cancelamento=motivo_cancelamento,
+            )
         except ValidationError as exc:
             messages.error(request, exc.message)
             return redirect(self.object.get_absolute_url())
@@ -491,7 +737,8 @@ def vagas_disponiveis_api(request):
     """Retorna as vagas livres para o período informado no formulário de criação/edição."""
 
     acl_level = obter_nivel_acesso(request.user, "reserva_garagem")
-    if not _pode_solicitar(request.user, acl_level):
+    # O mesmo endpoint atende o fluxo comum e a reserva pré-definida do time fiscal.
+    if not (_pode_solicitar(request.user, acl_level) or user_is_fiscal(request.user)):
         raise PermissionDenied
 
     data_inicial = _parse_iso_date((request.GET.get("data_inicial") or "").strip())
@@ -571,11 +818,20 @@ class FilaFiscalAnaliseView(ReservaGaragemMixin, LoginRequiredMixin, UserPassesT
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["solicitante_payload"] = _dados_usuario(self.object.solicitante)
+        context["fiscal_payload"] = _dados_usuario(self.object.fiscal_responsavel)
+        # Quando outro fiscal já decidiu, a tela vira somente leitura para evitar dupla decisão.
+        context["reserva_ja_decidida"] = self.object.status != ReservaGaragem.Status.AGUARDANDO_APROVACAO
         if self.object.serie_id:
             context["serie_count"] = ReservaGaragem.objects.filter(serie_id=self.object.serie_id).count()
         return context
 
     def form_valid(self, form):
+        if self.object.status != ReservaGaragem.Status.AGUARDANDO_APROVACAO:
+            messages.info(
+                self.request,
+                f"Esta solicitação já foi {self.object.get_status_display().lower()} e não pode ser analisada novamente.",
+            )
+            return redirect(self.object.get_absolute_url())
         try:
             if form.cleaned_data["decisao"] == "DEFERIR":
                 deferir_reserva(self.object, fiscal=self.request.user)
@@ -601,7 +857,7 @@ class VagaListView(ReservaGaragemMixin, ListView):
     context_object_name = "vagas"
 
     def dispatch(self, request, *args, **kwargs):
-        if not _pode_gerenciar_base(_nivel_usuario(self)):
+        if not _pode_analisar(self):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
 
@@ -618,7 +874,7 @@ class VagaCreateView(ReservaGaragemMixin, LoginRequiredMixin, UserPassesTestMixi
     success_url = reverse_lazy("reserva_garagem:vaga_list")
 
     def test_func(self):
-        return _pode_gerenciar_base(_nivel_usuario(self))
+        return _pode_analisar(self)
 
     def form_valid(self, form):
         messages.success(self.request, "Vaga cadastrada com sucesso.")
@@ -634,7 +890,7 @@ class VagaUpdateView(ReservaGaragemMixin, LoginRequiredMixin, UserPassesTestMixi
     success_url = reverse_lazy("reserva_garagem:vaga_list")
 
     def test_func(self):
-        return _pode_gerenciar_base(_nivel_usuario(self))
+        return _pode_analisar(self)
 
     def form_valid(self, form):
         messages.success(self.request, "Vaga atualizada com sucesso.")
@@ -649,7 +905,7 @@ class VagaDeleteView(ReservaGaragemMixin, LoginRequiredMixin, UserPassesTestMixi
     success_url = reverse_lazy("reserva_garagem:vaga_list")
 
     def test_func(self):
-        return _pode_gerenciar_base(_nivel_usuario(self))
+        return _pode_analisar(self)
 
     def form_valid(self, form):
         messages.success(self.request, "Vaga excluída com sucesso.")
@@ -668,7 +924,7 @@ class ConfiguracaoUpdateView(ReservaGaragemMixin, LoginRequiredMixin, UserPasses
         return ConfiguracaoReservaGaragem.singleton()
 
     def test_func(self):
-        return _pode_gerenciar_base(_nivel_usuario(self))
+        return _pode_analisar(self)
 
     def form_valid(self, form):
         messages.success(self.request, "Configuração atualizada com sucesso.")

@@ -10,6 +10,38 @@
   min-width: min(32rem, 100%);
 }
 
+.contratos-dashboard-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.contratos-dashboard-card {
+  background:
+    radial-gradient(circle at top right, rgba(11, 110, 79, 0.10), transparent 45%),
+    linear-gradient(180deg, #fffefb 0%, #f8fafc 100%);
+}
+
+.contratos-dashboard-card .card-body {
+  min-height: 148px;
+}
+
+.contratos-dashboard-card h2 {
+  color: #143642;
+  font-size: 1.7rem;
+  margin: .35rem 0 .5rem;
+}
+
+.contratos-dashboard-card p {
+  color: #667085;
+  font-size: .92rem;
+}
+
+.contratos-dashboard-table td,
+.contratos-dashboard-table th {
+  vertical-align: middle;
+}
+
 .contratos-table-wrap {
   overflow: visible;
 }
@@ -157,6 +189,44 @@
   margin-bottom: .75rem;
 }
 
+.contratos-section-toolbar {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.contratos-section-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  justify-content: flex-end;
+}
+
+.contratos-section-actions--nota-adicional {
+  max-width: 100%;
+}
+
+.contratos-inline-check {
+  align-items: center;
+  display: flex;
+  gap: .45rem;
+  min-height: 2.25rem;
+  white-space: nowrap;
+}
+
+.contratos-inline-check .form-check-input {
+  float: none;
+  margin: 0;
+}
+
+.contratos-toolbar-btn {
+  max-width: 100%;
+  text-align: center;
+  white-space: normal;
+}
+
 .contratos-inline-action {
   align-items: center;
   display: flex;
@@ -171,6 +241,62 @@
 
 .contratos-form-section + .contratos-form-section {
   margin-top: 1rem;
+}
+
+.contratos-etapas-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.contratos-etapa-card {
+  border: 1px solid rgba(20, 54, 66, 0.10);
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.contratos-etapa-card--done {
+  background: rgba(25, 135, 84, 0.08);
+  border-color: rgba(25, 135, 84, 0.18);
+}
+
+.contratos-etapa-card--pending {
+  background: rgba(255, 193, 7, 0.10);
+  border-color: rgba(255, 193, 7, 0.22);
+}
+
+.contratos-etapa-card--locked {
+  background: rgba(108, 117, 125, 0.08);
+  border-color: rgba(108, 117, 125, 0.18);
+}
+
+.contratos-etapa-card__titulo {
+  color: #143642;
+  display: block;
+  font-size: .85rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  margin-bottom: .45rem;
+  text-transform: uppercase;
+}
+
+.contratos-etapa-card__status {
+  color: #143642;
+  display: block;
+  margin-bottom: .35rem;
+}
+
+.contratos-group-box--locked {
+  background: rgba(248, 250, 252, 0.8);
+}
+
+.contratos-step-alert {
+  background: rgba(255, 243, 205, 0.75);
+  border: 1px solid rgba(255, 193, 7, 0.22);
+  border-radius: .85rem;
+  color: #6b5a12;
+  margin-bottom: 1rem;
+  padding: .85rem 1rem;
 }
 
 .contratos-competencia-values {
@@ -204,6 +330,31 @@
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
+.contratos-avaliacao-table thead th,
+.contratos-avaliacao-table tfoot th {
+  background: #143642;
+  color: #fff;
+  font-size: .88rem;
+}
+
+.contratos-avaliacao-table tbody td {
+  vertical-align: top;
+}
+
+.contratos-avaliacao-item-cell {
+  min-width: 280px;
+}
+
+.contratos-avaliacao-detail-row td {
+  background: #f8fafc;
+}
+
+.contratos-avaliacao-detail-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
 .contratos-avaliacao-role {
   background: #fff;
   border: 1px solid rgba(20, 54, 66, 0.10);
@@ -227,10 +378,65 @@
   margin-top: .35rem;
 }
 
+.contratos-form-section .form-text {
+  min-height: 1.1rem;
+}
+
 .contratos-stage-btn {
   border: 1px solid rgba(20, 54, 66, 0.16);
   color: #526071;
   font-weight: 700;
+}
+
+.contratos-stage-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .3rem;
+}
+
+.contratos-stage-help {
+  color: #667085;
+  font-size: .76rem;
+  line-height: 1.35;
+  max-width: 14rem;
+}
+
+.contratos-export-feedback:empty {
+  display: none;
+}
+
+.contratos-export-card {
+  border: 1px solid rgba(20, 54, 66, 0.12);
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.98));
+  padding: 1rem 1.1rem;
+}
+
+.contratos-export-card.is-processando,
+.contratos-export-card.is-pendente {
+  border-color: rgba(255, 193, 7, 0.28);
+  background: linear-gradient(180deg, rgba(255, 248, 225, 0.96), rgba(255, 255, 255, 0.98));
+}
+
+.contratos-export-card.is-concluido {
+  border-color: rgba(11, 110, 79, 0.24);
+  background: linear-gradient(180deg, rgba(238, 252, 246, 0.96), rgba(255, 255, 255, 0.98));
+}
+
+.contratos-export-card.is-erro {
+  border-color: rgba(220, 53, 69, 0.24);
+  background: linear-gradient(180deg, rgba(255, 241, 243, 0.96), rgba(255, 255, 255, 0.98));
+}
+
+.contratos-export-kicker {
+  color: #667085;
+  display: block;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  margin-bottom: .25rem;
+  text-transform: uppercase;
 }
 
 .contratos-stage-btn.is-done {
@@ -258,6 +464,26 @@
   opacity: .58;
   pointer-events: none;
   box-shadow: none;
+}
+
+.contratos-reset-btn {
+  border-style: dashed;
+  font-weight: 700;
+}
+
+@media (max-width: 991.98px) {
+  .contratos-section-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .contratos-section-actions {
+    justify-content: flex-start;
+  }
+
+  .contratos-avaliacao-item-cell {
+    min-width: 220px;
+  }
 }
 
 .contratos-payment-summary {
@@ -470,4 +696,77 @@
 }
 .prazo-linha-danger:hover {
   background-color: rgba(220, 53, 69, 0.08) !important;
+}
+
+/* Histórico e auditoria inline do contrato e das competências. */
+.contratos-auditoria-lista {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.contratos-auditoria-item {
+  background: #f8fafc;
+  border: 1px solid #dbe3ea;
+  border-radius: 16px;
+  padding: 1rem 1.1rem;
+}
+
+.contratos-auditoria-meta {
+  align-items: center;
+  color: #475467;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 0.45rem;
+}
+
+.contratos-auditoria-detalhes {
+  margin-top: 0.85rem;
+}
+
+.contratos-auditoria-detalhes summary,
+.contratos-auditoria-competencia summary {
+  color: #0b6e4f;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.contratos-auditoria-tabela th {
+  background: #eff6f3;
+  color: #27594b;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.contratos-auditoria-extra-lista {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: minmax(150px, 220px) 1fr;
+}
+
+.contratos-auditoria-extra-lista dt {
+  color: #344054;
+  font-weight: 700;
+  margin: 0;
+}
+
+.contratos-auditoria-extra-lista dd {
+  color: #475467;
+  margin: 0;
+}
+
+.contratos-auditoria-competencia {
+  border-top: 1px solid rgba(148, 163, 184, 0.28);
+  padding-top: 1rem;
+}
+
+.contratos-auditoria-lista-competencia .contratos-auditoria-item {
+  background: #fff;
+}
+
+@media (max-width: 767.98px) {
+  .contratos-auditoria-extra-lista {
+    grid-template-columns: 1fr;
+  }
 }

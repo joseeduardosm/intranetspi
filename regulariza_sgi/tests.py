@@ -47,6 +47,7 @@ class RegularizaSgiTests(TestCase):
             'inscricao_imobiliaria': '123.456.789',
             'matricula': 'MAT-001',
             'processo_judicial': '0001/2026',
+            'motivo_desapropriacao': 'Ampliação viária de interesse público.',
             'sei': 'SEI-001',
             'link_sei': 'https://sei.exemplo/001',
             'numero_sgi': 'SGI-100',
@@ -84,6 +85,7 @@ class RegularizaSgiTests(TestCase):
                 'bairro': 'Consolação',
                 'area': '45.00',
                 'processo_judicial': '0003/2026',
+                'motivo_desapropriacao': 'Obra de mobilidade urbana.',
                 'imissao_posse': '',
                 'imunidade': 'nao',
                 'tempo_imunidade': '',
@@ -100,6 +102,7 @@ class RegularizaSgiTests(TestCase):
         imovel = form.save()
         self.assertFalse(imovel.imunidade)
         self.assertIsNone(imovel.tempo_imunidade)
+        self.assertEqual(imovel.motivo_desapropriacao, 'Obra de mobilidade urbana.')
 
     def test_campos_monetarios_aceitam_formato_brasileiro_e_salvam_como_decimal(self):
         form = ImovelForm(
@@ -114,6 +117,7 @@ class RegularizaSgiTests(TestCase):
                 'bairro': 'Centro',
                 'area': '',
                 'processo_judicial': '0006/2026',
+                'motivo_desapropriacao': '',
                 'imissao_posse': '',
                 'imunidade': 'nao',
                 'tempo_imunidade': '',
@@ -145,6 +149,7 @@ class RegularizaSgiTests(TestCase):
                 'bairro': 'Sé',
                 'area': '90.00',
                 'processo_judicial': '0004/2026',
+                'motivo_desapropriacao': 'Adequação fundiária.',
                 'imissao_posse': '2026-01-05',
                 'imunidade': 'sim',
                 'tempo_imunidade': '',
@@ -162,6 +167,7 @@ class RegularizaSgiTests(TestCase):
                 'bairro': 'Sé',
                 'area': '91.00',
                 'processo_judicial': '0005/2026',
+                'motivo_desapropriacao': 'Expansão de corredor público.',
                 'imissao_posse': '2026-01-06',
                 'imunidade': 'sim',
                 'tempo_imunidade': '5',
@@ -227,6 +233,14 @@ class RegularizaSgiTests(TestCase):
         self.assertContains(response, 'Salvar prorrogação')
         self.assertContains(response, 'Salvar manifestação')
 
+    def test_detalhe_exibe_motivo_da_desapropriacao(self):
+        imovel = self.criar_imovel(motivo_desapropriacao='Implantação de equipamento público.')
+
+        response = self.client.get(reverse('regulariza_sgi:imovel_detail', args=[imovel.pk]))
+
+        self.assertContains(response, 'Motivo da desapropriação')
+        self.assertContains(response, 'Implantação de equipamento público.')
+
     def test_manifestacao_pode_ocorrer_sem_prorrogacao(self):
         imovel = self.criar_imovel()
         ciclo = current_cycle(imovel)
@@ -281,6 +295,27 @@ class RegularizaSgiTests(TestCase):
         )
         self.assertEqual(imovel.observacoes.count(), 1)
         self.assertTrue(imovel.timeline_eventos.filter(tipo=ImovelTimelineEvento.Tipo.OBSERVACAO).exists())
+
+    def test_edicao_exibe_formulario_de_observacao_para_imovel_ja_salvo(self):
+        imovel = self.criar_imovel()
+
+        response = self.client.get(reverse('regulariza_sgi:imovel_update', args=[imovel.pk]), {'aba': 'observacoes'})
+
+        self.assertContains(response, 'Registrar observação')
+        self.assertContains(response, f'action="{reverse("regulariza_sgi:observacao_create", args=[imovel.pk])}"', html=False)
+        self.assertContains(response, f'name="next" value="{reverse("regulariza_sgi:imovel_update", args=[imovel.pk])}?aba=observacoes"', html=False)
+
+    def test_criar_observacao_a_partir_da_edicao_retorna_para_a_mesma_tela(self):
+        imovel = self.criar_imovel()
+        next_url = f"{reverse('regulariza_sgi:imovel_update', args=[imovel.pk])}?aba=observacoes"
+
+        response = self.client.post(
+            reverse('regulariza_sgi:observacao_create', args=[imovel.pk]),
+            {'texto': 'Observação lançada na edição.', 'next': next_url},
+        )
+
+        self.assertRedirects(response, next_url, fetch_redirect_response=False)
+        self.assertEqual(imovel.observacoes.count(), 1)
 
     def test_timeline_registra_eventos_de_sei_anexo_e_fluxo(self):
         imovel = self.criar_imovel()
@@ -344,6 +379,7 @@ class RegularizaSgiTests(TestCase):
                 'bairro': imovel.bairro,
                 'area': imovel.area,
                 'processo_judicial': imovel.processo_judicial,
+                'motivo_desapropriacao': 'Motivo ajustado na edição',
                 'imissao_posse': '',
                 'imunidade': 'nao',
                 'tempo_imunidade': '',
@@ -359,6 +395,7 @@ class RegularizaSgiTests(TestCase):
 
         self.assertRedirects(response, reverse('regulariza_sgi:imovel_detail', args=[imovel.pk]), fetch_redirect_response=False)
         self.assertEqual(imovel.logradouro, 'Rua Alterada')
+        self.assertEqual(imovel.motivo_desapropriacao, 'Motivo ajustado na edição')
 
     def test_reinicio_de_ciclo_registra_timeline(self):
         imovel = self.criar_imovel()

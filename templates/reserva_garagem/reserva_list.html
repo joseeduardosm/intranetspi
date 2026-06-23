@@ -19,15 +19,18 @@
       {% if pode_solicitar_reserva %}
         <a class="btn btn-primary" href="{% url 'reserva_garagem:reserva_create' %}">Nova reserva</a>
       {% endif %}
-      <a class="btn btn-light" href="{% url 'reserva_garagem:agenda' %}">Calendário</a>
       {% if pode_analisar_reservas %}
-        <a class="btn btn-outline-secondary" href="{% url 'reserva_garagem:fila_fiscal' %}">Fila fiscal</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:reserva_predefinida_create' %}">Vaga pré-reservada</a>
+      {% endif %}
+      <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:agenda' %}">Calendário</a>
+      {% if pode_analisar_reservas %}
+        <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:fila_fiscal' %}">Fila fiscal</a>
       {% endif %}
     </div>
   </div>
 
   <section class="reserva-espacos-surface">
-    <form method="get" class="row g-3 align-items-end mb-4">
+    <form method="get" class="row g-3 align-items-end mb-4" id="reservas-filtros-form">
       <div class="col-lg-5">
         <label class="form-label" for="q">Pesquisar</label>
         <input class="form-control form-control-lg" type="search" name="q" id="q" value="{{ search_query }}" placeholder="Vaga, placa, marca, modelo ou solicitante">
@@ -41,7 +44,15 @@
           {% endfor %}
         </select>
       </div>
-      <div class="col-lg-4 d-flex gap-2 flex-wrap">
+      <div class="col-lg-2">
+        <label class="form-label" for="ordenar-por">Ordenar</label>
+        <select class="form-select form-select-lg" id="ordenar-por" name="ordenar_por">
+          {% for value, label in ordenacao_opcoes %}
+            <option value="{{ value }}" {% if ordenacao_atual == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-lg-2 d-flex gap-2 flex-wrap">
         <button class="btn btn-primary" type="submit">Pesquisar</button>
         <a class="btn btn-light" href="{% url 'reserva_garagem:reserva_list' %}">Limpar</a>
       </div>
@@ -78,4 +89,13 @@
       </table>
     </div>
   </section>
+
+  <script>
+    (() => {
+      const form = document.getElementById("reservas-filtros-form");
+      const ordenarSelect = document.getElementById("ordenar-por");
+      if (!form || !ordenarSelect) return;
+      ordenarSelect.addEventListener("change", () => form.submit());
+    })();
+  </script>
 {% endblock %}

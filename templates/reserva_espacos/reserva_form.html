@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{{ titulo_pagina|default:object|default:"Reserva" }}{% endblock %}
+{% block title %}{% firstof titulo_pagina object "Reserva" %}{% endblock %}
 
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'reserva_espacos/css/reserva_espacos.css' %}">
@@ -9,7 +9,7 @@
 
 {% block content %}
   <div class="spi-page-title">
-    <h1>{{ titulo_pagina|default:object|default:"Reserva" }}</h1>
+    <h1>{% firstof titulo_pagina object "Reserva" %}</h1>
     <p>Escolha o objeto, o horário e os dados da reserva.</p>
   </div>
 
@@ -25,15 +25,16 @@
           {% endif %}
         {% endfor %}
       {% endwith %}
-      <div class="col-lg-6">
-        <label class="form-label" for="{{ form.objeto.id_for_label }}">Objeto</label>
-        {{ form.objeto }}
-        {{ form.objeto.errors }}
-      </div>
       <div class="col-lg-4">
         <label class="form-label" for="{{ form.data.id_for_label }}">Data</label>
         {{ form.data }}
         {{ form.data.errors }}
+      </div>
+      <div class="col-lg-8">
+        <label class="form-label" for="{{ form.objeto.id_for_label }}">Objeto</label>
+        {{ form.objeto }}
+        {% if form.objeto.help_text %}<div class="form-text">{{ form.objeto.help_text }}</div>{% endif %}
+        {{ form.objeto.errors }}
       </div>
       <div class="col-lg-4">
         <label class="form-label" for="{{ form.hora_inicio.id_for_label }}">Hora de início</label>
@@ -125,6 +126,9 @@
     const recurrenceSelect = document.getElementById("id_recorrencia");
     const recurrenceWrapper = document.getElementById("recorrencia-fim-wrapper");
     const conflitoModalElement = document.getElementById("reservaConflitoModal");
+    const dataInput = document.getElementById("id_data");
+    const objectSelect = document.getElementById("id_objeto");
+    const isCreateMode = {{ is_create_mode|yesno:"true,false" }};
 
     const toggleRecurrence = () => {
       if (!recurrenceSelect || !recurrenceWrapper) return;
@@ -133,6 +137,20 @@
     if (recurrenceSelect) {
       recurrenceSelect.addEventListener("change", toggleRecurrence);
       toggleRecurrence();
+    }
+
+    if (dataInput && objectSelect && isCreateMode) {
+      dataInput.addEventListener("change", () => {
+        const selectedDate = dataInput.value;
+        const url = new URL(window.location.href);
+        if (selectedDate) {
+          url.searchParams.set("data", selectedDate);
+        } else {
+          url.searchParams.delete("data");
+        }
+        url.searchParams.delete("objeto");
+        window.location.assign(url.toString());
+      });
     }
 
     if (conflitoModalElement && window.bootstrap?.Modal) {

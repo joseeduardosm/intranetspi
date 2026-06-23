@@ -82,6 +82,11 @@
           </section>
         {% endfor %}
 
+        {% if avaliacao_tem_conteudo %}
+          <div class="d-flex justify-content-end mb-3">
+            <a class="btn btn-outline-secondary" href="{% url 'contratos:competencia_avaliacao_download' competencia.pk %}">Baixar avaliação sem assinaturas</a>
+          </div>
+        {% endif %}
         <div class="mb-3">
           <label class="form-label" for="{{ form.avaliacao_assinada.id_for_label }}">{{ form.avaliacao_assinada.label }}</label>
           {{ form.avaliacao_assinada }}
@@ -95,12 +100,124 @@
           {{ form.observacoes }}
           {% for error in form.observacoes.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
         </div>
+        <section class="card border-0 bg-light-subtle mt-4">
+          <div class="card-body p-4">
+            <div class="contratos-payment-summary mb-4">
+              <div><span class="contratos-kicker">Valor da nota fiscal</span><strong>R$ {{ competencia.valor_nota_fiscal|brl }}</strong></div>
+              <div><span class="contratos-kicker">Valor medido</span><strong>R$ {{ competencia.valor_medido|brl }}</strong></div>
+              <div><span class="contratos-kicker">Valor sugerido atual</span><strong>R$ {{ competencia.valor_liberado_sugerido|brl }}</strong></div>
+            </div>
+            <h2 class="h5 mb-3">Fechamento da avaliação</h2>
+            {% if form.fechamento_avaliacao_concluido %}
+              <div class="contratos-step-alert mb-4">
+                Fechamento da avaliação concluído. Esta seção ficou bloqueada para evitar alterações posteriores.
+              </div>
+            {% elif not form.fechamento_avaliacao_liberado %}
+              <div class="contratos-step-alert mb-4">
+                O fechamento da avaliação só libera depois que todas as notas forem atribuídas, todas as justificativas e manifestações obrigatórias forem preenchidas e a avaliação de qualidade assinada pelas partes for anexada.
+              </div>
+            {% else %}
+              <p class="text-muted small mb-4">
+                O sistema preenche automaticamente a nota final, a faixa de liberação e o valor a pagar. Você pode ajustar os campos antes de salvar, e o valor informado na tela prevalecerá.
+              </p>
+            {% endif %}
+            <fieldset {% if not form.fechamento_avaliacao_liberado or form.fechamento_avaliacao_concluido %}disabled{% endif %}>
+              <div
+                class="row g-3"
+                data-avaliacao-resumo
+                data-valor-nota="{{ competencia.valor_nota_fiscal|default_if_none:'0' }}"
+                data-faixas-script-id="avaliacaoFaixasLiberacaoJson"
+              >
+                <div class="col-md-4">
+                  <label class="form-label" for="{{ form.nota_final_aprovada.id_for_label }}">{{ form.nota_final_aprovada.label }}</label>
+                  {{ form.nota_final_aprovada }}
+                  {% for error in form.nota_final_aprovada.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label" for="{{ form.percentual_liberacao_aprovado.id_for_label }}">{{ form.percentual_liberacao_aprovado.label }}</label>
+                  {{ form.percentual_liberacao_aprovado }}
+                  <div class="form-text">
+                    {% for faixa in faixas_liberacao %}
+                      {{ faixa.percentual_liberacao }}% para notas de {{ faixa.nota_minima }}{% if faixa.nota_maxima %} até {{ faixa.nota_maxima }}{% endif %}{% if not forloop.last %} • {% endif %}
+                    {% empty %}
+                      Sem faixas de liberação configuradas.
+                    {% endfor %}
+                  </div>
+                  {% for error in form.percentual_liberacao_aprovado.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label" for="{{ form.valor_liberado_final.id_for_label }}">{{ form.valor_liberado_final.label }}</label>
+                  {{ form.valor_liberado_final }}
+                  <div class="form-text">Cálculo automático pela faixa sobre o valor da nota fiscal, com possibilidade de ajuste manual.</div>
+                  {% for error in form.valor_liberado_final.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+              </div>
+
+              <h2 class="h5 mt-4 mb-3">Assinaturas do atestado</h2>
+              <div class="row g-3">
+                <div class="col-12">
+                  <label class="form-label" for="{{ form.gestor_pagamento.id_for_label }}">{{ form.gestor_pagamento.label }}</label>
+                  <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-center">
+                    <div class="flex-grow-1">{{ form.gestor_pagamento }}</div>
+                    <div class="form-check mt-2 mt-lg-0">
+                      {{ form.gestor_pagamento_em_exercicio }}
+                      <label class="form-check-label" for="{{ form.gestor_pagamento_em_exercicio.id_for_label }}">Em exercício</label>
+                    </div>
+                  </div>
+                  <div class="mt-2">{{ form.gestor_pagamento_nome_manual }}</div>
+                  {% for error in form.gestor_pagamento.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  {% for error in form.gestor_pagamento_nome_manual.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  {% for error in form.gestor_pagamento_em_exercicio.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="{{ form.coordenadora_pagamento.id_for_label }}">{{ form.coordenadora_pagamento.label }}</label>
+                  <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-center">
+                    <div class="flex-grow-1">{{ form.coordenadora_pagamento }}</div>
+                    <div class="form-check mt-2 mt-lg-0">
+                      {{ form.coordenadora_em_exercicio }}
+                      <label class="form-check-label" for="{{ form.coordenadora_em_exercicio.id_for_label }}">Em exercício</label>
+                    </div>
+                  </div>
+                  <div class="mt-2">{{ form.coordenadora_pagamento_nome_manual }}</div>
+                  {% for error in form.coordenadora_pagamento.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  {% for error in form.coordenadora_pagamento_nome_manual.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  {% for error in form.coordenadora_em_exercicio.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="{{ form.diretora_pagamento.id_for_label }}">{{ form.diretora_pagamento.label }}</label>
+                  <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-center">
+                    <div class="flex-grow-1">{{ form.diretora_pagamento }}</div>
+                    <div class="form-check mt-2 mt-lg-0">
+                      {{ form.diretora_em_exercicio }}
+                      <label class="form-check-label" for="{{ form.diretora_em_exercicio.id_for_label }}">Em exercício</label>
+                    </div>
+                  </div>
+                  <div class="mt-2">{{ form.diretora_pagamento_nome_manual }}</div>
+                  {% for error in form.diretora_pagamento.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  {% for error in form.diretora_pagamento_nome_manual.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  {% for error in form.diretora_em_exercicio.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="{{ form.subsecretario_pagamento.id_for_label }}">{{ form.subsecretario_pagamento.label }}</label>
+                  <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-center">
+                    <div class="flex-grow-1">{{ form.subsecretario_pagamento }}</div>
+                    <div class="form-check mt-2 mt-lg-0">
+                      {{ form.subsecretario_em_exercicio }}
+                      <label class="form-check-label" for="{{ form.subsecretario_em_exercicio.id_for_label }}">Em exercício</label>
+                    </div>
+                  </div>
+                  <div class="mt-2">{{ form.subsecretario_pagamento_nome_manual }}</div>
+                  {% for error in form.subsecretario_pagamento.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  {% for error in form.subsecretario_pagamento_nome_manual.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                  {% for error in form.subsecretario_em_exercicio.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+              </div>
+            </fieldset>
+          </div>
+        </section>
         {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
         <div class="d-flex gap-2 justify-content-end mt-4">
           <a class="btn btn-light" href="{% url 'contratos:contrato_detail' contrato.pk %}">Cancelar</a>
-          {% if avaliacao_tem_conteudo %}
-            <a class="btn btn-outline-secondary" href="{% url 'contratos:competencia_avaliacao_download' competencia.pk %}">Baixar avaliação</a>
-          {% endif %}
           <button class="btn btn-primary" type="submit">Salvar avaliação</button>
         </div>
       </form>
@@ -109,6 +226,7 @@
 {% endblock %}
 
 {% block extra_js %}
+  {{ faixas_liberacao|json_script:"avaliacaoFaixasLiberacaoJson" }}
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       function atualizarContextoItem(container) {
@@ -143,6 +261,51 @@
           });
         });
       });
+
+      const resumoElement = document.querySelector('[data-avaliacao-resumo]');
+      if (resumoElement) {
+        const faixasScriptId = resumoElement.dataset.faixasScriptId;
+        const faixas = faixasScriptId ? JSON.parse(document.getElementById(faixasScriptId).textContent) : [];
+        const inputNotaFinal = document.getElementById('{{ form.nota_final_aprovada.id_for_label }}');
+        const inputPercentual = document.getElementById('{{ form.percentual_liberacao_aprovado.id_for_label }}');
+        const inputValorFinal = document.getElementById('{{ form.valor_liberado_final.id_for_label }}');
+        const valorNota = parseFloat((resumoElement.dataset.valorNota || '0').replace(',', '.')) || 0;
+
+        function percentualParaNota(notaFinal) {
+          let percentual = 100;
+          faixas.forEach(function (faixa) {
+            const notaMinima = parseFloat(faixa.nota_minima || '0');
+            const notaMaxima = faixa.nota_maxima === null || faixa.nota_maxima === '' ? null : parseFloat(faixa.nota_maxima);
+            if (notaFinal < notaMinima) {
+              return;
+            }
+            if (notaMaxima !== null && notaFinal > notaMaxima) {
+              return;
+            }
+            percentual = parseFloat(faixa.percentual_liberacao || '100');
+          });
+          return percentual;
+        }
+
+        function atualizarValorFinal() {
+          const percentualAtual = parseFloat(inputPercentual?.value || '0') || 0;
+          if (inputValorFinal) {
+            inputValorFinal.value = ((valorNota * percentualAtual) / 100).toFixed(2);
+          }
+        }
+
+        if (inputNotaFinal && inputPercentual && inputValorFinal) {
+          inputNotaFinal.addEventListener('input', function () {
+            const notaAtual = parseFloat(inputNotaFinal.value || '0') || 0;
+            inputPercentual.value = percentualParaNota(notaAtual).toFixed(2);
+            atualizarValorFinal();
+          });
+
+          inputPercentual.addEventListener('input', function () {
+            atualizarValorFinal();
+          });
+        }
+      }
     });
   </script>
 {% endblock %}

@@ -1,0 +1,18 @@
+{% if entradas_auditoria_extra %}
+  <dl class="contratos-auditoria-extra-lista mt-3 mb-0">
+    {% for entrada in entradas_auditoria_extra %}
+      <dt>{{ entrada.titulo }}</dt>
+      <dd>
+        {% if entrada.tipo == 'lista' %}
+          <ul class="contratos-auditoria-extra-itens">
+            {% for item in entrada.itens %}
+              <li>{{ item }}</li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          {{ entrada.valor }}
+        {% endif %}
+      </dd>
+    {% endfor %}
+  </dl>
+{% endif %}

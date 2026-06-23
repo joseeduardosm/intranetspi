@@ -113,6 +113,7 @@
           <div><dt>Bairro</dt><dd>{{ imovel.bairro }}</dd></div>
           <div><dt>Área (m²)</dt><dd>{% if imovel.area %}{{ imovel.area }}{% else %}-{% endif %}</dd></div>
           <div><dt>Processo Judicial</dt><dd>{{ imovel.processo_judicial }}</dd></div>
+          <div><dt>Motivo da desapropriação</dt><dd>{{ imovel.motivo_desapropriacao|default:"-"|linebreaksbr }}</dd></div>
           <div><dt>Imissão na posse</dt><dd>{% if imovel.imissao_posse %}{{ imovel.imissao_posse|date:"d/m/Y" }}{% else %}-{% endif %}</dd></div>
           <div><dt>Imunidade</dt><dd>{% if imovel.imunidade %}Sim{% else %}Não{% endif %}{% if imovel.tempo_imunidade %} • {{ imovel.tempo_imunidade }} ano(s){% endif %}</dd></div>
         </dl>

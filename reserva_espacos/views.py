@@ -509,6 +509,8 @@ class ReservaCreateView(ReservasRecursosMixin, LoginRequiredMixin, UserPassesTes
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["titulo_pagina"] = "Nova reserva"
+        context["data_selecionada"] = self.request.GET.get("data") or ""
+        context["is_create_mode"] = True
         return context
 
     def form_valid(self, form):
@@ -589,6 +591,7 @@ class ReservaPredefinidaFiscalCreateView(ReservasRecursosMixin, LoginRequiredMix
         context = super().get_context_data(**kwargs)
         context["titulo_pagina"] = "Nova pré-reserva"
         context["modo_fiscal_predefinido"] = True
+        context["is_create_mode"] = True
         return context
 
     def form_valid(self, form):
@@ -673,6 +676,7 @@ class ReservaUpdateView(ReservasRecursosMixin, LoginRequiredMixin, UserPassesTes
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["titulo_pagina"] = "Editar reserva"
+        context["is_create_mode"] = False
         if self.object.serie_id:
             context["serie_count"] = ReservaRecurso.objects.filter(serie_id=self.object.serie_id).count()
         return context

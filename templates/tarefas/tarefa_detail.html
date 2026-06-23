@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 23/06/2026 -->
+<!-- Objetivo: Mostrar metadados fortes da tarefa, ações rápidas e histórico cronológico pesquisável. -->
+
+{% block title %}Tarefa {{ tarefa.pk }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'tarefas/css/tarefas.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>#{{ tarefa.pk }} {{ tarefa.titulo }}</h1>
+      <p>Painel completo da tarefa com status, prazo, responsáveis e linha do tempo auditável.</p>
+      <div class="tarefas-inline-meta">
+        <span><strong>Autor:</strong> {{ tarefa.autor_nome }}</span>
+        <span><strong>Atribuído:</strong> {{ tarefa.responsavel_nome }}</span>
+        <span><strong>Criada em:</strong> {{ tarefa.criado_em|date:"d/m/Y H:i" }}</span>
+        <span><strong>ID interno:</strong> #{{ tarefa.pk }}</span>
+      </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'tarefas:list' %}">Voltar</a>
+      <a class="btn btn-outline-primary" href="{% url 'tarefas:update' tarefa.pk %}">Editar tarefa</a>
+      <a class="btn btn-primary" href="{% url 'tarefas:update_prazo' tarefa.pk %}">Alterar prazo</a>
+    </div>
+  </div>
+
+  <section class="card border-0 shadow-sm tarefas-detail-card mb-4">
+    <div class="card-body p-4">
+      <div class="tarefas-detail-header-grid">
+        <article class="tarefas-detail-item">
+          <span>Status</span>
+          <strong>{{ tarefa.get_status_display }}</strong>
+          <small class="badge rounded-pill text-bg-{% if tarefa.status == 'CONCLUIDA' %}success{% elif tarefa.status == 'EM_ANDAMENTO' %}warning{% elif tarefa.status == 'ARQUIVADA' %}secondary{% else %}primary{% endif %} mt-2">
+            {{ tarefa.get_status_display }}
+          </small>
+        </article>
+        <article class="tarefas-detail-item">
+          <span>Prioridade</span>
+          <strong>{{ tarefa.get_prioridade_display }}</strong>
+          <small class="badge rounded-pill text-bg-{% if tarefa.prioridade == 'CRITICA' %}danger{% elif tarefa.prioridade == 'ALTA' %}warning{% elif tarefa.prioridade == 'NORMAL' %}primary{% else %}secondary{% endif %} mt-2">
+            {{ tarefa.get_prioridade_display }}
+          </small>
+        </article>
+        <article class="tarefas-detail-item">
+          <span>Prazo final</span>
+          <strong>{{ tarefa.prazo|date:"d/m/Y H:i" }}</strong>
+          <small class="{% if tarefa.progresso_prazo.atrasada %}text-danger fw-semibold{% else %}text-muted{% endif %} mt-2 d-block">{{ tarefa.progresso_prazo.texto }}</small>
+        </article>
+        <article class="tarefas-detail-item">
+          <span>Última atualização</span>
+          <strong>{{ tarefa.atualizado_em|date:"d/m/Y H:i" }}</strong>
+        </article>
+      </div>
+
+      <div class="tarefas-progress-highlight mt-4">
+        <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+          <strong>Consumo do prazo</strong>
+          <span>{{ tarefa.progresso_prazo.percentual|floatformat:1 }}%</span>
+        </div>
+        <div class="progress tarefas-progress tarefas-progress--lg mt-2">
+          <div class="progress-bar bg-{% if tarefa.progresso_prazo.cor == 'danger-strong' %}danger{% else %}{{ tarefa.progresso_prazo.cor }}{% endif %}" role="progressbar" style="width: {{ tarefa.progresso_prazo.percentual }}%;" aria-valuenow="{{ tarefa.progresso_prazo.percentual }}" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="tarefas-detail-layout">
+    <section class="card border-0 shadow-sm tarefas-detail-card">
+      <div class="card-body p-4">
+        <div class="tarefas-detail-grid mb-4">
+          <article class="tarefas-detail-item">
+            <span>Autor</span>
+            <strong>{{ tarefa.autor_nome }}</strong>
+          </article>
+          <article class="tarefas-detail-item">
+            <span>Atribuído</span>
+            <strong>{{ tarefa.responsavel_nome }}</strong>
+          </article>
+        </div>
+
+        <div class="tarefas-description-box mb-4">
+          <h3 class="h6">Descrição</h3>
+          <div class="tarefas-description">{{ tarefa.descricao|linebreaksbr }}</div>
+        </div>
+
+        {% if tarefa.status != 'ARQUIVADA' %}
+          <div class="tarefas-status-actions mb-4">
+            <h3 class="h6">Ações rápidas de status</h3>
+            <div class="d-flex flex-wrap gap-2">
+              {% if tarefa.status == 'PENDENTE' %}
+                <form method="post" action="{% url 'tarefas:update_status' tarefa.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="status" value="EM_ANDAMENTO">
+                  <button class="btn btn-outline-primary" type="submit">Iniciar tarefa</button>
+                </form>
+              {% elif tarefa.status == 'EM_ANDAMENTO' %}
+                <form method="post" action="{% url 'tarefas:update_status' tarefa.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="status" value="PENDENTE">
+                  <button class="btn btn-outline-secondary" type="submit">Voltar para pendente</button>
+                </form>
+                <form method="post" action="{% url 'tarefas:update_status' tarefa.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="status" value="CONCLUIDA">
+                  <button class="btn btn-success" type="submit">Concluir tarefa</button>
+                </form>
+              {% elif tarefa.status == 'CONCLUIDA' %}
+                <form method="post" action="{% url 'tarefas:update_status' tarefa.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="status" value="PENDENTE">
+                  <button class="btn btn-outline-secondary" type="submit">Reabrir como pendente</button>
+                </form>
+                <form method="post" action="{% url 'tarefas:update_status' tarefa.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="status" value="EM_ANDAMENTO">
+                  <button class="btn btn-outline-primary" type="submit">Reabrir em andamento</button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+        {% endif %}
+
+        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+          <div>
+            <h2 class="h4 mb-1">Histórico cronológico</h2>
+            <p class="text-muted mb-0">Pesquise comentários, anexos e acontecimentos dentro do universo desta tarefa.</p>
+          </div>
+        </div>
+
+        <form method="get" class="row g-3 align-items-end mb-4">
+          <div class="col-lg-7">
+            <label class="form-label" for="{{ busca_form.q.id_for_label }}">{{ busca_form.q.label }}</label>
+            <input class="form-control form-control-lg" type="text" name="q" id="{{ busca_form.q.id_for_label }}" value="{{ request.GET.q|default:'' }}" placeholder="Buscar no histórico desta tarefa...">
+          </div>
+          <div class="col-lg-3">
+            <label class="form-label" for="{{ busca_form.tipo.id_for_label }}">{{ busca_form.tipo.label }}</label>
+            {{ busca_form.tipo }}
+          </div>
+          <div class="col-lg-2 d-flex gap-2">
+            <a class="btn btn-light w-50" href="{% url 'tarefas:detail' tarefa.pk %}">Limpar</a>
+            <button class="btn btn-outline-secondary w-50" type="submit">Buscar</button>
+          </div>
+        </form>
+
+        <div class="tarefas-history-list">
+          {% for item in historicos %}
+            <article class="tarefas-history-item">
+              <div class="d-flex justify-content-between gap-3 flex-wrap">
+                <div>
+                  <strong>{{ item.titulo_evento }}</strong>
+                  <div class="text-muted small">
+                    {{ item.get_tipo_evento_display }}
+                    {% if item.autor %}
+                      • {{ item.autor.perfil.nome_completo|default:item.autor.username }}
+                    {% endif %}
+                  </div>
+                </div>
+                <span class="text-muted small">{{ item.criado_em|date:"d/m/Y H:i" }}</span>
+              </div>
+              {% if item.descricao_evento %}<div class="mt-2">{{ item.descricao_evento|linebreaksbr }}</div>{% endif %}
+              {% if item.comentario %}<div class="mt-2">{{ item.comentario|linebreaksbr }}</div>{% endif %}
+              {% if item.prazo_anterior or item.prazo_novo %}
+                <div class="mt-2 text-muted small">
+                  {% if item.prazo_anterior %}De: {{ item.prazo_anterior|date:"d/m/Y H:i" }}{% endif %}
+                  {% if item.prazo_novo %}<br>Para: {{ item.prazo_novo|date:"d/m/Y H:i" }}{% endif %}
+                </div>
+              {% endif %}
+              {% if item.arquivo %}
+                <div class="mt-2">
+                  <a href="{{ item.arquivo.url }}" target="_blank" rel="noopener">Baixar anexo: {{ item.nome_arquivo|default:item.arquivo.name }}</a>
+                </div>
+              {% endif %}
+            </article>
+          {% empty %}
+            <p class="text-muted mb-0">Nenhum item encontrado no histórico para esta pesquisa.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <aside class="card border-0 shadow-sm tarefas-detail-card">
+      <div class="card-body p-4">
+        <h2 class="h4 mb-1">Novo incremento</h2>
+        <p class="text-muted">Registre comentário, evidência ou ambos para compor a linha do tempo da tarefa.</p>
+        <form method="post" action="{% url 'tarefas:historico_create' tarefa.pk %}" enctype="multipart/form-data">
+          {% csrf_token %}
+          {% for field in historico_form %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+              {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+          {% for error in historico_form.non_field_errors %}<div class="text-danger small mb-3">{{ error }}</div>{% endfor %}
+          <button class="btn btn-primary" type="submit">Adicionar ao histórico</button>
+        </form>
+      </div>
+    </aside>
+  </div>
+{% endblock %}

@@ -22,7 +22,10 @@ def user_modules(user):
 
     if not user or user.is_anonymous:
         return []
-    recursos = Recurso.objects.all().order_by('nome')
+    if getattr(user, 'username', '') != 'root':
+        recursos = Recurso.objects.exclude(slug='todo_tecnico').order_by('nome')
+    else:
+        recursos = Recurso.objects.all().order_by('nome')
     acessos = []
     for r in recursos:
         if obter_nivel_acesso(user, r.slug) is not None:

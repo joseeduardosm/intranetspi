@@ -150,6 +150,7 @@
   appearance: none;
   align-items: center;
   justify-content: center;
+  text-decoration: none;
 }
 
 .reserva-garagem-slot.is-available {
@@ -163,6 +164,10 @@
 .reserva-garagem-slot.is-mine {
   border-color: #2563eb;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, .18);
+}
+
+.reserva-garagem-slot.is-clickable {
+  cursor: pointer;
 }
 
 .reserva-garagem-slot:focus-visible {

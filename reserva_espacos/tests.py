@@ -15,7 +15,7 @@ from acls.models import Recurso, RegraAcesso
 
 from .forms import ReservaRecursoForm
 from .models import ConfiguracaoReservaEspacos, ObjetoReservavel, ReservaRecurso
-from .services import cancelar_reserva_com_escopo, deferir_reserva, indeferir_reserva
+from .services import cancelar_reserva_com_escopo, deferir_reserva, indeferir_reserva, notificar_fiscais_nova_solicitacao
 
 
 class ReservaEspacosBaseTestCase(TestCase):
@@ -68,6 +68,23 @@ class ReservaEspacosBaseTestCase(TestCase):
 
 class ReservaRecursoFormTests(ReservaEspacosBaseTestCase):
     """Valida regras temporais, recorrência e conflitos deferidos."""
+
+    def test_sem_data_o_campo_objeto_comeca_bloqueado(self):
+        """Na criação, a escolha do objeto depende primeiro da data selecionada."""
+
+        form = ReservaRecursoForm()
+        self.assertFalse(form.fields["objeto"].queryset.exists())
+        self.assertIn("disabled", form.fields["objeto"].widget.attrs)
+
+    def test_data_filtra_objetos_sem_reserva_deferida_no_dia(self):
+        """Objetos ocupados por reserva deferida no dia não devem aparecer no combobox inicial."""
+
+        outro_objeto = ObjetoReservavel.objects.create(nome="Sala 02", localizacao="3º andar")
+        self._reserva(status=ReservaRecurso.Status.DEFERIDA)
+        form = ReservaRecursoForm(data={"data": self.data_base.isoformat()})
+        objetos_ids = list(form.fields["objeto"].queryset.values_list("id", flat=True))
+        self.assertNotIn(self.objeto.id, objetos_ids)
+        self.assertIn(outro_objeto.id, objetos_ids)
 
     def test_gera_recorrencia_quinzenal(self):
         """A expansão quinzenal deve incluir as datas até o fim informado."""
@@ -136,6 +153,23 @@ class ReservaWorkflowTests(ReservaEspacosBaseTestCase):
 
     @patch("reserva_espacos.services.publicar_mensagem")
     @patch("reserva_espacos.services.criar_mensagem_rascunho")
+    def test_notificacao_para_fiscais_faz_fallback_para_admins_sem_grupo_configurado(self, criar_mensagem, publicar_mensagem):
+        """Sem grupo fiscal configurado, a solicitação ainda precisa chegar aos administradores ativos."""
+
+        ConfiguracaoReservaEspacos.singleton().grupo_fiscais = None
+        ConfiguracaoReservaEspacos.singleton().save()
+        reserva = self._reserva(criado_por=self.admin, responsavel="root")
+        mensagem_mock = criar_mensagem.return_value
+
+        notificar_fiscais_nova_solicitacao(ReservaRecurso.objects.filter(pk=reserva.pk), usuario_responsavel=self.admin)
+
+        mensagem_mock.usuarios_alvo.add.assert_called()
+        destinatarios = mensagem_mock.usuarios_alvo.add.call_args.args
+        self.assertIn(self.admin, destinatarios)
+        self.assertTrue(publicar_mensagem.called)
+
+    @patch("reserva_espacos.services.publicar_mensagem")
+    @patch("reserva_espacos.services.criar_mensagem_rascunho")
     def test_criacao_recorrrente_notifica_fiscais(self, criar_mensagem, publicar_mensagem):
         """Série criada pelo usuário nasce pendente e avisa o grupo fiscal."""
 
@@ -160,6 +194,8 @@ class ReservaWorkflowTests(ReservaEspacosBaseTestCase):
         self.assertTrue(all(item.status == ReservaRecurso.Status.AGUARDANDO_APROVACAO for item in reservas))
         self.assertTrue(criar_mensagem.called)
         self.assertTrue(publicar_mensagem.called)
+        self.assertNotIn("Analisar solicitação:", criar_mensagem.call_args.kwargs["corpo"])
+        self.assertIn("link_analise", criar_mensagem.call_args.kwargs["payload_email"])
 
     @patch("reserva_espacos.services.publicar_mensagem")
     @patch("reserva_espacos.services.criar_mensagem_rascunho")
@@ -245,6 +281,24 @@ class ReservaWorkflowTests(ReservaEspacosBaseTestCase):
 
 class ReservaViewsTests(ReservaEspacosBaseTestCase):
     """Valida agenda, fila fiscal, permissões e histórico."""
+
+    def test_tela_de_nova_reserva_renderiza_com_data_preselecionada(self):
+        """A criação não deve depender de object no contexto para montar o título da página."""
+
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_espacos:reserva_create"), {"data": self.data_base.isoformat()})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Nova reserva")
+        self.assertContains(response, f'value="{self.data_base.isoformat()}"', html=False)
+
+    def test_tela_de_nova_reserva_orienta_escolha_da_data_antes_do_objeto(self):
+        """A criação deve recarregar o combobox quando a data muda."""
+
+        self.client.login(username="solicitante", password="123")
+        response = self.client.get(reverse("reserva_espacos:reserva_create"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Escolha primeiro a data")
+        self.assertContains(response, 'url.searchParams.set("data", selectedDate)', html=False)
 
     def test_agenda_renderiza_com_botoes_por_perfil(self):
         """A agenda precisa mostrar o botão pessoal e esconder a área fiscal do cliente."""

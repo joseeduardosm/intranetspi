@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
+from django.urls import reverse
 from django.utils import timezone
 
 from mensageria_assincrona.services import criar_mensagem_rascunho, publicar_mensagem
@@ -142,6 +143,39 @@ def _mensagem_reserva_indeferida(reserva):
     return assunto, corpo, payload
 
 
+def _mensagem_nova_solicitacao_para_fiscais(reserva):
+    """Prepara a mensagem usada para avisar a fila fiscal sobre uma nova viagem."""
+
+    solicitante = reserva.solicitante.get_full_name() or reserva.solicitante.username
+    observacoes = reserva.observacoes_solicitante or "Sem observações adicionais."
+    link_analise = reverse("reserva_carros:fila_fiscal_analise", args=[reserva.pk])
+    assunto = f"Nova solicitação de viagem #{reserva.pk}"
+    corpo = (
+        f"Uma nova solicitação de viagem aguarda análise fiscal.\n\n"
+        f"Solicitante: {solicitante}\n"
+        f"Saída planejada: {_format_dt(reserva.saida_planejada_em)}\n"
+        f"Retorno planejado: {_format_dt(reserva.retorno_planejado_em)}\n"
+        f"Destino: {reserva.destino_endereco}\n"
+        f"Permanência: {reserva.get_modo_destino_display()}\n"
+        f"Motivo: {reserva.motivo_viagem}\n"
+        f"Observações: {observacoes}"
+    )
+    payload = {
+        "tipo": "nova_solicitacao_reserva_carro",
+        "reserva_id": reserva.pk,
+        "solicitante": solicitante,
+        "saida_planejada_em": reserva.saida_planejada_em.isoformat(),
+        "retorno_planejada_em": reserva.retorno_planejado_em.isoformat(),
+        "destino": reserva.destino_endereco,
+        "modo_destino": reserva.modo_destino,
+        "motivo_viagem": reserva.motivo_viagem,
+        "observacoes_solicitante": reserva.observacoes_solicitante or "",
+        "link_analise": link_analise,
+        "url_analise": link_analise,
+    }
+    return assunto, corpo, payload
+
+
 def notificar_solicitante(reserva: ReservaCarro, usuario_responsavel=None):
     """Cria e publica a mensagem assíncrona após decisão fiscal."""
 
@@ -159,6 +193,29 @@ def notificar_solicitante(reserva: ReservaCarro, usuario_responsavel=None):
         payload_email=payload,
     )
     mensagem.usuarios_alvo.add(reserva.solicitante)
+    publicar_mensagem(mensagem, usuario=usuario_responsavel)
+    return mensagem
+
+
+def notificar_fiscais_nova_solicitacao(reserva: ReservaCarro, usuario_responsavel=None):
+    """Entrega a nova solicitação a todos os usuários ativos do grupo fiscal configurado."""
+
+    grupo = fiscal_group()
+    if not grupo:
+        return None
+
+    usuarios_fiscais = list(User.objects.filter(groups=grupo, is_active=True).distinct())
+    if not usuarios_fiscais:
+        return None
+
+    assunto, corpo, payload = _mensagem_nova_solicitacao_para_fiscais(reserva)
+    mensagem = criar_mensagem_rascunho(
+        assunto=assunto,
+        corpo=corpo,
+        criada_por=usuario_responsavel,
+        payload_email=payload,
+    )
+    mensagem.usuarios_alvo.add(*usuarios_fiscais)
     publicar_mensagem(mensagem, usuario=usuario_responsavel)
     return mensagem
 

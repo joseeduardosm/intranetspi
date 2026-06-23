@@ -18,12 +18,14 @@
     <div class="d-flex gap-2 flex-wrap">
       {% if pode_editar %}
         <a class="btn btn-primary" href="{% url 'reserva_garagem:reserva_update' reserva.pk %}">Editar</a>
-        <a class="btn btn-outline-danger" href="{% url 'reserva_garagem:reserva_cancel' reserva.pk %}">Cancelar</a>
+      {% endif %}
+      {% if pode_cancelar %}
+        <a class="btn btn-danger text-white" href="{% url 'reserva_garagem:reserva_cancel' reserva.pk %}">Cancelar</a>
       {% endif %}
       {% if pode_analisar %}
-        <a class="btn btn-dark" href="{% url 'reserva_garagem:fila_fiscal_analise' reserva.pk %}">Analisar</a>
+        <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:fila_fiscal_analise' reserva.pk %}">Analisar</a>
       {% endif %}
-      <a class="btn btn-light" href="{% url 'reserva_garagem:reserva_list' %}">Voltar</a>
+      <a class="btn btn-dark text-white" href="{% url 'reserva_garagem:reserva_list' %}">Voltar</a>
     </div>
   </div>
 
@@ -60,6 +62,10 @@
           <strong>{{ item.evento.get_acao_display }}</strong>
           <span>{{ item.evento.criado_em|date:"d/m/Y H:i" }}</span>
           <p>{{ item.usuario_nome }}</p>
+          {% if item.origem_label %}<p><strong>Origem:</strong> {{ item.origem_label }}</p>{% endif %}
+          {% if item.escopo_label %}<p><strong>Escopo:</strong> {{ item.escopo_label }}</p>{% endif %}
+          {% if item.motivo_cancelamento %}<p><strong>Motivo do cancelamento:</strong> {{ item.motivo_cancelamento }}</p>{% endif %}
+          {% if item.justificativa %}<p><strong>Justificativa:</strong> {{ item.justificativa }}</p>{% endif %}
         </article>
       {% empty %}
         <p class="text-muted mb-0">Nenhum evento registrado.</p>

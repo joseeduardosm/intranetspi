@@ -9,6 +9,9 @@ from django.contrib.auth.models import Group
 from django.db import models
 from django.db.models import Q
 
+from setores.services import user_display_name
+from usuarios.services import visible_users_queryset
+
 from .models import ConfiguracaoReservaGaragem, ReservaGaragem, VagaGaragem
 
 
@@ -128,6 +131,11 @@ class ReservaGaragemSolicitacaoForm(BootstrapModelForm):
         required=False,
         choices=Recorrencia.choices,
     )
+    responsavel = forms.CharField(
+        label="Nome do usuário",
+        required=False,
+        max_length=180,
+    )
 
     class Meta:
         model = ReservaGaragem
@@ -143,14 +151,19 @@ class ReservaGaragemSolicitacaoForm(BootstrapModelForm):
 
     def __init__(self, *args, **kwargs):
         self.request_user = kwargs.pop("request_user", None)
+        self.modo_fiscal = kwargs.pop("modo_fiscal", False)
         super().__init__(*args, **kwargs)
         self.tem_periodo_informado = False
         self.tem_vagas_disponiveis = False
         self.mensagem_sem_vagas = ""
+        self.mostrar_responsavel_campo = self.modo_fiscal
+        self.usuarios_responsaveis_sugestoes = []
+        self.usuario_responsavel_resolvido = None
 
         if self.instance and self.instance.pk:
             self.initial["data_inicial"] = self.instance.data
             self.initial["data_final"] = self.instance.data
+            self.initial["responsavel"] = self.instance.responsavel
             self.fields["recorrencia"].disabled = True
 
         data_inicial, data_final, recorrencia = self._periodo_atual()
@@ -173,9 +186,42 @@ class ReservaGaragemSolicitacaoForm(BootstrapModelForm):
         self.fields["vaga"].widget.attrs["data-selected-value"] = str(self.initial.get("vaga") or "")
         self.fields["data_inicial"].input_formats = ["%Y-%m-%d"]
         self.fields["data_final"].input_formats = ["%Y-%m-%d"]
+        self._configurar_campo_responsavel()
         if self.instance and self.instance.pk and self.instance.serie_id:
             self.fields["data_inicial"].disabled = True
             self.fields["data_final"].disabled = True
+
+    def _configurar_campo_responsavel(self) -> None:
+        """Ajusta o campo de responsável conforme o modo comum ou o fluxo fiscal pré-definido."""
+
+        if not self.modo_fiscal:
+            self.fields["responsavel"].initial = self.get_responsavel_padrao()
+            self.fields["responsavel"].widget = forms.HiddenInput()
+            return
+
+        usuarios = list(visible_users_queryset().select_related("perfil").order_by("first_name", "username"))
+        self.usuarios_responsaveis_sugestoes = [
+            {
+                "nome": user_display_name(usuario),
+                "username": usuario.username,
+                "email": usuario.email or "",
+            }
+            for usuario in usuarios
+        ]
+        self.fields["responsavel"].required = True
+        self.fields["responsavel"].help_text = "Selecione um usuário sugerido ou digite o nome manualmente."
+        self.fields["responsavel"].widget.attrs["list"] = "reserva-garagem-responsaveis"
+        self.fields["responsavel"].widget.attrs["autocomplete"] = "off"
+        if not self.initial.get("responsavel") and self.request_user:
+            self.fields["responsavel"].initial = self.get_responsavel_padrao()
+
+    def get_responsavel_padrao(self) -> str:
+        """Retorna o nome humano padrão do usuário logado para gravação automática."""
+
+        if not self.request_user:
+            return ""
+        perfil = getattr(self.request_user, "perfil", None)
+        return (getattr(perfil, "nome_completo", "") or self.request_user.get_full_name() or self.request_user.username).strip()
 
     def _periodo_atual(self) -> tuple[date | None, date | None, str]:
         """Lê o período atual a partir do POST/GET inicial para montar as vagas disponíveis."""
@@ -217,6 +263,22 @@ class ReservaGaragemSolicitacaoForm(BootstrapModelForm):
         recorrencia = self.cleaned_data.get("recorrencia") or ""
         return _datas_periodo(data_inicial, data_final, recorrencia)
 
+    def _resolver_usuario_por_nome(self, responsavel: str):
+        """Relaciona o texto informado a um usuário humano quando houver correspondência exata."""
+
+        termo = (responsavel or "").strip().casefold()
+        if not termo:
+            return None
+        for usuario in visible_users_queryset().select_related("perfil").order_by("first_name", "username"):
+            candidatos = {
+                user_display_name(usuario).strip().casefold(),
+                usuario.username.strip().casefold(),
+                (usuario.email or "").strip().casefold(),
+            }
+            if termo in candidatos:
+                return usuario
+        return None
+
     def validate_series_update_conflicts(self, instance: ReservaGaragem) -> None:
         """Valida conflitos nas mesmas datas da série ao editar com escopo total."""
 
@@ -248,7 +310,13 @@ class ReservaGaragemSolicitacaoForm(BootstrapModelForm):
         data_inicial = cleaned.get("data_inicial")
         data_final = cleaned.get("data_final")
         placa = (cleaned.get("placa_veiculo") or "").strip().upper()
+        responsavel = (cleaned.get("responsavel") or "").strip()
         cleaned["placa_veiculo"] = placa
+        cleaned["responsavel"] = responsavel or self.get_responsavel_padrao()
+        self.usuario_responsavel_resolvido = self._resolver_usuario_por_nome(cleaned["responsavel"])
+
+        if self.modo_fiscal and not responsavel:
+            self.add_error("responsavel", "Informe o nome do usuário responsável.")
 
         if data_inicial and data_final and data_final < data_inicial:
             self.add_error("data_final", "A data final deve ser maior ou igual à data inicial.")
@@ -275,7 +343,7 @@ class ReservaGaragemSolicitacaoForm(BootstrapModelForm):
                     self.add_error("placa_veiculo", "A placa informada já possui reserva em uma das datas selecionadas.")
                     return cleaned
 
-                if self.request_user and getattr(self.request_user, "is_authenticated", False):
+                if not self.modo_fiscal and self.request_user and getattr(self.request_user, "is_authenticated", False):
                     conflitos_solicitante = ReservaGaragem.objects.filter(
                         solicitante=self.request_user,
                         data=occ_date,

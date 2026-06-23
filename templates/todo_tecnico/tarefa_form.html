@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 19/06/2026 -->
+<!-- Objetivo: Exibir o formulário de criação e edição das tarefas técnicas simplificadas. -->
+
+{% block title %}To-Do Técnico{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'todo_tecnico/css/todo_tecnico.css' %}">{% endblock %}
+
+{% block content %}
+  <!-- Um único formulário atende criação e edição, mudando só o texto de contexto. -->
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{{ page_title }}</h1>
+      <p>{{ page_description }}</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'todo_tecnico:list' %}">Voltar</a>
+  </div>
+
+  <form method="post" class="card border-0 shadow-sm todo-tecnico-form-card" data-todo-tecnico-form>
+    <div class="card-body p-4">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+      {% if tarefa %}
+        <div class="alert alert-light border mb-4">
+          <strong>{{ tarefa.titulo|default:"Sem título" }}</strong>
+          <div class="mt-2">{{ tarefa.descricao|linebreaksbr }}</div>
+        </div>
+      {% endif %}
+      {% for field in form %}
+        <div class="mb-3">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-end gap-2 p-3">
+      <span class="todo-tecnico-shortcut-tip me-auto">Use <kbd>Ctrl</kbd> + <kbd>Enter</kbd> para salvar rapidamente.</span>
+      <a class="btn btn-light" href="{% url 'todo_tecnico:list' %}">Cancelar</a>
+      <button class="btn btn-primary" type="submit">{{ submit_label }}</button>
+    </div>
+  </form>
+{% endblock %}
+{% block extra_js %}
+  <script>
+    (function () {
+      var form = document.querySelector('[data-todo-tecnico-form]');
+      if (!form) {
+        return;
+      }
+
+      form.addEventListener('keydown', function (event) {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+          event.preventDefault();
+          form.requestSubmit();
+        }
+      });
+    }());
+  </script>
+{% endblock %}

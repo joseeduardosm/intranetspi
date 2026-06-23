@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -10,7 +13,6 @@ from django.utils import timezone
 
 
 import calendar
-from datetime import date, timedelta
 import re
 
 CONTRATO_NUMERO_RE = re.compile(r'^(?P<sequencial>\d{3})/(?P<ano>\d{4})$')
@@ -64,6 +66,241 @@ def parse_numero_contrato(value):
 
 
 ZERO = Decimal('0.00')
+AUDIT_EMPTY_VALUE = '-'
+_audit_user_var = ContextVar('contratos_audit_user', default=None)
+_audit_suspended_var = ContextVar('contratos_audit_suspended', default=False)
+
+# Os labels ficam centralizados aqui para a UI do histórico e para evitar textos
+# divergentes entre os diferentes pontos do módulo que auditam os mesmos campos.
+CONTRATO_AUDITORIA_FIELD_LABELS = {
+    'numero_contrato': 'Número do contrato',
+    'apelido': 'Apelido',
+    'objeto': 'Objeto',
+    'data_inicio_vigencia': 'Início da vigência',
+    'prazo_inicial_meses': 'Prazo inicial (meses)',
+    'vigencia_maxima_meses': 'Vigência máxima (meses)',
+    'mes_reajuste': 'Mês de reajuste',
+    'empresa_contratada': 'Empresa contratada',
+    'processo_sei_gestao_numero': 'Processo SEI (Gestão) - número',
+    'processo_sei_gestao_url': 'Processo SEI (Gestão) - link',
+    'processo_sei_execucao_numero': 'Processo SEI (Execução) - número',
+    'processo_sei_execucao_url': 'Processo SEI (Execução) - link',
+    'fiscal_administrativo': 'Fiscal administrativo',
+    'fiscal_tecnico': 'Fiscal técnico',
+    'gestor_contrato': 'Gestor do contrato',
+    'gestor_contrato_suplente': 'Gestor suplente',
+    'fiscal_administrativo_suplente': 'Fiscal administrativo suplente',
+    'fiscal_tecnico_suplente': 'Fiscal técnico suplente',
+    'situacao_forcada': 'Situação forçada',
+}
+CONTRATO_ITEM_AUDITORIA_FIELD_LABELS = {
+    'ordem': 'Item',
+    'descricao': 'Descrição',
+    'codigo_siafisico': 'Código SIAFÍSICO',
+    'codigo_catmat_catser': 'Código CATMAT/CATSER',
+    'quantidade': 'Quantidade',
+    'valor_unitario': 'Valor unitário',
+    'valor_subtotal': 'Subtotal mensal',
+}
+DOCUMENTO_IMPORTANTE_AUDITORIA_FIELD_LABELS = {
+    'nome': 'Nome',
+    'arquivo': 'Arquivo',
+}
+CHECKLIST_MODELO_AUDITORIA_FIELD_LABELS = {
+    'nome': 'Nome da versão',
+    'descricao': 'Descrição',
+    'observacoes': 'Observações',
+    'ativo': 'Ativo',
+}
+CHECKLIST_MODELO_ITEM_AUDITORIA_FIELD_LABELS = {
+    'ordem': 'Ordem',
+    'titulo': 'Título',
+    'descricao': 'Descrição',
+    'obrigatorio': 'Obrigatório',
+}
+FORMULARIO_AVALIACAO_AUDITORIA_FIELD_LABELS = {
+    'nome': 'Nome da versão',
+    'descricao': 'Descrição',
+    'observacoes': 'Observações',
+    'ativo': 'Ativo',
+}
+ESCALA_NOTA_AUDITORIA_FIELD_LABELS = {
+    'ordem': 'Ordem',
+    'valor': 'Nota',
+    'legenda': 'Legenda',
+}
+FAIXA_LIBERACAO_AUDITORIA_FIELD_LABELS = {
+    'ordem': 'Ordem',
+    'nota_minima': 'Nota mínima',
+    'nota_maxima': 'Nota máxima',
+    'percentual_liberacao': 'Percentual de liberação',
+}
+GRUPO_AVALIACAO_AUDITORIA_FIELD_LABELS = {
+    'ordem': 'Ordem',
+    'nome': 'Nome',
+    'descricao': 'Descrição',
+}
+ITEM_AVALIACAO_AUDITORIA_FIELD_LABELS = {
+    'ordem': 'Ordem',
+    'descricao': 'Descrição',
+    'peso_percentual': 'Peso percentual',
+    'observacoes_padrao': 'Observações padrão',
+}
+PRAZO_MONITORAMENTO_AUDITORIA_FIELD_LABELS = {
+    'nome': 'Nome',
+    'data_inicio': 'Data de início',
+    'data_limite': 'Data limite',
+    'anexo': 'Anexo',
+    'concluido': 'Concluído',
+}
+
+
+def set_current_audit_user(user):
+    """Guarda o ator atual da auditoria no contexto da requisição em andamento."""
+
+    return _audit_user_var.set(user)
+
+
+def reset_current_audit_user(token):
+    """Restaura o ator anterior para evitar vazamento entre requisições."""
+
+    _audit_user_var.reset(token)
+
+
+def get_current_audit_user():
+    """Recupera o ator atual da auditoria, quando existir."""
+
+    return _audit_user_var.get()
+
+
+@contextmanager
+def suspend_audit_logging():
+    """Desliga temporariamente os sinais para ações em lote que terão evento resumido próprio."""
+
+    token = _audit_suspended_var.set(True)
+    try:
+        yield
+    finally:
+        _audit_suspended_var.reset(token)
+
+
+def audit_logging_is_suspended():
+    """Informa se a execução atual está com a auditoria estrutural suspensa."""
+
+    return bool(_audit_suspended_var.get())
+
+
+def get_usuario_auditoria_display(usuario):
+    """Entrega um texto humano e resiliente para identificar o ator da mudança."""
+
+    if not usuario:
+        return 'Sistema'
+    perfil = getattr(usuario, 'perfil', None)
+    return getattr(perfil, 'nome_completo', None) or usuario.get_full_name() or usuario.username
+
+
+def _serializar_valor_auditoria(valor):
+    """Converte tipos de domínio para um formato compacto e legível no payload JSON."""
+
+    if valor in (None, '', [], (), {}):
+        return AUDIT_EMPTY_VALUE
+    if isinstance(valor, bool):
+        return 'Sim' if valor else 'Não'
+    if isinstance(valor, Decimal):
+        return f'{valor:.2f}'
+    if isinstance(valor, datetime):
+        data_local = timezone.localtime(valor) if timezone.is_aware(valor) else valor
+        return data_local.strftime('%d/%m/%Y %H:%M')
+    if isinstance(valor, date):
+        return valor.strftime('%d/%m/%Y')
+    if hasattr(valor, 'url') and hasattr(valor, 'name'):
+        return getattr(valor, 'name', '') or AUDIT_EMPTY_VALUE
+    if hasattr(valor, 'all') and callable(valor.all):
+        return ', '.join(str(item) for item in valor.all()) or AUDIT_EMPTY_VALUE
+    if hasattr(valor, '_meta'):
+        return str(valor)
+    return str(valor)
+
+
+def capture_instance_audit_state(instance, field_map):
+    """Lê apenas os campos auditáveis de uma instância já persistida ou em memória."""
+
+    return {
+        field_name: _serializar_valor_auditoria(getattr(instance, field_name, None))
+        for field_name in field_map
+    }
+
+
+def build_changes_payload(instance_before, instance_after, field_map):
+    """Gera um diff resumido somente com os campos realmente alterados."""
+
+    before_state = (
+        instance_before
+        if isinstance(instance_before, dict)
+        else capture_instance_audit_state(instance_before, field_map)
+    )
+    after_state = (
+        instance_after
+        if isinstance(instance_after, dict)
+        else capture_instance_audit_state(instance_after, field_map)
+    )
+    changes = []
+    for field_name, label in field_map.items():
+        before_value = before_state.get(field_name, AUDIT_EMPTY_VALUE)
+        after_value = after_state.get(field_name, AUDIT_EMPTY_VALUE)
+        if before_value == after_value:
+            continue
+        changes.append(
+            {
+                'field': field_name,
+                'label': label,
+                'before': before_value,
+                'after': after_value,
+            }
+        )
+    return {'changes': changes}
+
+
+def build_creation_payload(instance_after, field_map):
+    """Representa a criação como um diff partindo de valores vazios."""
+
+    before_state = {field_name: AUDIT_EMPTY_VALUE for field_name in field_map}
+    return build_changes_payload(before_state, instance_after, field_map)
+
+
+def build_deletion_payload(instance_before, field_map):
+    """Representa a exclusão como um diff cujo estado final é vazio."""
+
+    after_state = {field_name: AUDIT_EMPTY_VALUE for field_name in field_map}
+    return build_changes_payload(instance_before, after_state, field_map)
+
+
+def registrar_evento_contrato(*, contrato, tipo_evento, resumo, usuario=Ellipsis, payload=None):
+    """Cria um evento de auditoria do contrato com ator explícito ou inferido do contexto."""
+
+    from contratos.models import ContratoAuditoriaEvento
+
+    return ContratoAuditoriaEvento.objects.create(
+        contrato=contrato,
+        tipo_evento=tipo_evento,
+        usuario=get_current_audit_user() if usuario is Ellipsis else usuario,
+        resumo=resumo,
+        payload=payload or {},
+    )
+
+
+def registrar_evento_competencia(*, competencia, tipo_evento, resumo, usuario=Ellipsis, payload=None):
+    """Cria um evento de auditoria operacional de uma competência."""
+
+    from contratos.models import CompetenciaAuditoriaEvento
+
+    return CompetenciaAuditoriaEvento.objects.create(
+        competencia=competencia,
+        tipo_evento=tipo_evento,
+        usuario=get_current_audit_user() if usuario is Ellipsis else usuario,
+        resumo=resumo,
+        payload=payload or {},
+    )
 
 
 def validar_processos_sei_contrato(contrato):
@@ -357,12 +594,223 @@ def criar_avaliacao_shell_competencia_v2(competencia, formulario):
     return avaliacao
 
 
+def resetar_competencia_v2(competencia):
+    """Limpa o preenchimento operacional da competência e a devolve ao início do fluxo."""
+
+    from django.db import transaction
+
+    from .models import ChecklistCompetenciaItem
+
+    arquivos_competencia = [
+        'aceite_provisorio_arquivo',
+        'aceite_definitivo_arquivo',
+        'nota_fiscal_fatura',
+        'nota_adicional_arquivo',
+        'avaliacao_assinada',
+        'ordem_bancaria_arquivo',
+        'atestado_realizacao',
+        'despacho_dof',
+    ]
+
+    with transaction.atomic():
+        competencia = competencia.__class__.objects.select_related('contrato').get(pk=competencia.pk)
+        competencia_before = capture_instance_audit_state(
+            competencia,
+            {
+                'status': 'Status',
+                'valor_medido': 'Valor medido',
+                'valor_liberado_sugerido': 'Valor sugerido',
+                'download_realizado_em': 'Download realizado em',
+                'data_pagamento': 'Data do pagamento',
+            },
+        )
+
+        for job in competencia.exportacoes_documentos.all():
+            if job.arquivo_pdf:
+                job.arquivo_pdf.delete(save=False)
+            job.delete()
+
+        for item in competencia.checklist_itens.select_related('anexo').order_by('ordem', 'id'):
+            anexo = getattr(item, 'anexo', None)
+            if anexo:
+                anexo.delete()
+            if item.categoria == ChecklistCompetenciaItem.Categoria.NOTA_ADICIONAL:
+                item.delete()
+                continue
+            if item.concluido or item.validado_em:
+                item.concluido = False
+                item.validado_em = None
+                item.save(update_fields=['concluido', 'validado_em'])
+
+        competencia.medicoes.all().delete()
+
+        avaliacao = competencia.avaliacao_qualidade_segura
+        if avaliacao is not None:
+            for resposta in avaliacao.itens.all():
+                resposta.nota_fiscal_valor = None
+                resposta.nota_fiscal_preenchida_por = None
+                resposta.nota_fiscal_preenchida_em = None
+                resposta.nota_gestor_valor = None
+                resposta.nota_gestor_preenchida_por = None
+                resposta.nota_gestor_preenchida_em = None
+                resposta.nota_valor = None
+                resposta.nota_legenda = ''
+                resposta.justificativa_fiscal = ''
+                resposta.justificativa_fiscal_preenchida_por = None
+                resposta.justificativa_fiscal_preenchida_em = None
+                resposta.manifestacao_gestor_item = ''
+                resposta.manifestacao_gestor_item_preenchida_por = None
+                resposta.manifestacao_gestor_item_preenchida_em = None
+                resposta.save(
+                    update_fields=[
+                        'nota_fiscal_valor',
+                        'nota_fiscal_preenchida_por',
+                        'nota_fiscal_preenchida_em',
+                        'nota_gestor_valor',
+                        'nota_gestor_preenchida_por',
+                        'nota_gestor_preenchida_em',
+                        'nota_valor',
+                        'nota_legenda',
+                        'justificativa_fiscal',
+                        'justificativa_fiscal_preenchida_por',
+                        'justificativa_fiscal_preenchida_em',
+                        'manifestacao_gestor_item',
+                        'manifestacao_gestor_item_preenchida_por',
+                        'manifestacao_gestor_item_preenchida_em',
+                        'atualizado_em',
+                    ]
+                )
+            avaliacao.observacoes = ''
+            avaliacao.manifestacao_gestor = ''
+            avaliacao.preenchido_por = None
+            avaliacao.concluida_em = None
+            avaliacao.nota_final = ZERO
+            avaliacao.percentual_liberacao_sugerido = Decimal('100.00')
+            avaliacao.valor_liberado_sugerido = ZERO
+            avaliacao.save(
+                update_fields=[
+                    'observacoes',
+                    'manifestacao_gestor',
+                    'preenchido_por',
+                    'concluida_em',
+                    'nota_final',
+                    'percentual_liberacao_sugerido',
+                    'valor_liberado_sugerido',
+                    'atualizado_em',
+                ]
+            )
+
+        for campo in arquivos_competencia:
+            arquivo = getattr(competencia, campo)
+            if arquivo:
+                arquivo.delete(save=False)
+                setattr(competencia, campo, '')
+
+        competencia.aplicar_pro_rata = False
+        competencia.status = competencia.Status.BLOQUEADA
+        competencia.valor_medido = ZERO
+        competencia.valor_liberado_sugerido = ZERO
+        competencia.data_aceite_provisorio = None
+        competencia.prazo_aceite_definitivo_dias = None
+        competencia.data_aceite_definitivo = None
+        competencia.prazo_pagamento_dias = None
+        competencia.numero_nota_fiscal = ''
+        competencia.valor_nota_fiscal = ZERO
+        competencia.retencao_ir = ZERO
+        competencia.retencao_inss = ZERO
+        competencia.retencao_iss = ZERO
+        competencia.retencao_pis_pasep = ZERO
+        competencia.retencao_cofins = ZERO
+        competencia.valor_liberado_final = ZERO
+        competencia.valor_liberado_final_manual = None
+        competencia.numero_nota_adicional = ''
+        competencia.valor_nota_adicional = ZERO
+        competencia.retencao_ir_adicional = ZERO
+        competencia.retencao_inss_adicional = ZERO
+        competencia.retencao_iss_adicional = ZERO
+        competencia.retencao_pis_pasep_adicional = ZERO
+        competencia.retencao_cofins_adicional = ZERO
+        competencia.valor_liquido_nota_adicional = ZERO
+        competencia.nota_adicional_nao_consta = False
+        competencia.gestor_pagamento = None
+        competencia.gestor_pagamento_nome_manual = ''
+        competencia.gestor_pagamento_em_exercicio = False
+        competencia.coordenadora_pagamento = None
+        competencia.coordenadora_pagamento_nome_manual = ''
+        competencia.coordenadora_em_exercicio = False
+        competencia.diretora_pagamento = None
+        competencia.diretora_pagamento_nome_manual = ''
+        competencia.diretora_em_exercicio = False
+        competencia.subsecretario_pagamento = None
+        competencia.subsecretario_pagamento_nome_manual = ''
+        competencia.subsecretario_em_exercicio = False
+        competencia.checklist_concluido_em = None
+        competencia.medicao_concluida_em = None
+        competencia.download_realizado_em = None
+        competencia.data_pagamento = None
+        competencia.autorizado_por = None
+        competencia.justificativa_divergencia = ''
+        competencia.observacoes_medicao = ''
+        competencia.medicao_preenchida_por = None
+        competencia.medicao_preenchida_em = None
+        competencia.aceite_provisorio_preenchida_por = None
+        competencia.aceite_provisorio_preenchida_em = None
+        competencia.aceite_definitivo_preenchida_por = None
+        competencia.aceite_definitivo_preenchida_em = None
+        competencia.nota_principal_preenchida_por = None
+        competencia.nota_principal_preenchida_em = None
+        competencia.nota_adicional_preenchida_por = None
+        competencia.nota_adicional_preenchida_em = None
+        competencia.observacoes_finais_preenchida_por = None
+        competencia.observacoes_finais_preenchida_em = None
+        competencia.monitoramento_etapa = ''
+        competencia.monitoramento_inicio = None
+        competencia.monitoramento_limite = None
+        competencia.alerta_50_enviado_em = None
+        competencia.alerta_75_ultimo_envio_em = None
+        competencia.save()
+
+        if avaliacao is not None:
+            avaliacao.nota_final_manual = None
+            avaliacao.percentual_liberacao_manual = None
+            avaliacao.save(update_fields=['nota_final_manual', 'percentual_liberacao_manual', 'atualizado_em'])
+            recalcular_avaliacao_v2(avaliacao)
+        else:
+            recalcular_competencia_v2(competencia)
+
+        competencia.refresh_from_db()
+        payload_reset = build_changes_payload(
+            competencia_before,
+            competencia,
+            {
+                'status': 'Status',
+                'valor_medido': 'Valor medido',
+                'valor_liberado_sugerido': 'Valor sugerido',
+                'download_realizado_em': 'Download realizado em',
+                'data_pagamento': 'Data do pagamento',
+            },
+        )
+        payload_reset['extra'] = {
+            'periodo': competencia.periodo_inicio.strftime('%m/%Y'),
+            'status_reiniciado': competencia.get_status_display(),
+        }
+        registrar_evento_competencia(
+            competencia=competencia,
+            tipo_evento='RESET_EXECUTADO',
+            resumo='resetou a competência para reiniciar o fluxo',
+            payload=payload_reset,
+        )
+    return competencia
+
+
 def gerar_competencias_contrato_v2(contrato):
     """Gera competências mensais da vigência inicial usando checklist ativo e avaliação opcional."""
 
     from .models import CompetenciaPagamento
 
     validar_processos_sei_contrato(contrato)
+    if not contrato.itens.exists():
+        raise ValidationError('Cadastre ao menos um item no contrato antes de gerar as competências.')
 
     modelo = contrato.checklist_ativo
     if modelo is None:
@@ -371,6 +819,7 @@ def gerar_competencias_contrato_v2(contrato):
     data_fim = inclusive_end_date(contrato.data_inicio_vigencia, contrato.prazo_inicial_meses)
     periodos = iterar_periodos_competencia(contrato.data_inicio_vigencia, data_fim)
     formulario_ativo = contrato.formulario_avaliacao_ativo
+    competencias_criadas = []
 
     for periodo_inicio, periodo_fim in periodos:
         competencia, criada = CompetenciaPagamento.objects.get_or_create(
@@ -387,16 +836,17 @@ def gerar_competencias_contrato_v2(contrato):
             atualizar_checklist_snapshot_competencia_v2(competencia, modelo)
             if formulario_ativo:
                 criar_avaliacao_shell_competencia_v2(competencia, formulario_ativo)
+            competencias_criadas.append(competencia)
+    return competencias_criadas
 
 
 def recalcular_avaliacao_v2(avaliacao):
-    """Atualiza nota final e percentuais sugeridos a partir da média ponderada dos itens."""
+    """Atualiza nota final e percentuais sugeridos a partir da soma das notas ponderadas."""
 
     respostas = list(avaliacao.itens.order_by('grupo_ordem', 'item_ordem', 'id'))
-    soma_pesos_itens = sum((resposta.item_peso_percentual or ZERO) for resposta in respostas) or Decimal('1.00')
     acumulado = ZERO
     for resposta in respostas:
-        acumulado += (resposta.nota_valor or ZERO) * ((resposta.item_peso_percentual or ZERO) / soma_pesos_itens)
+        acumulado += (resposta.nota_valor or ZERO) * ((resposta.item_peso_percentual or ZERO) / Decimal('100.00'))
 
     nota_final = quantize_money(acumulado) if respostas else ZERO
     percentual = Decimal('100.00')
@@ -410,13 +860,23 @@ def recalcular_avaliacao_v2(avaliacao):
         percentual = Decimal(faixa['percentual_liberacao'])
         break
 
-    avaliacao.nota_final = nota_final
-    avaliacao.percentual_liberacao_sugerido = percentual
-    avaliacao.valor_liberado_sugerido = quantize_money((avaliacao.competencia.valor_medido or ZERO) * (percentual / Decimal('100.00')))
+    nota_final_efetiva = avaliacao.nota_final_manual if avaliacao.nota_final_manual is not None else nota_final
+    percentual_efetivo = (
+        avaliacao.percentual_liberacao_manual
+        if avaliacao.percentual_liberacao_manual is not None
+        else percentual
+    )
+    avaliacao.nota_final = quantize_money(nota_final_efetiva)
+    avaliacao.percentual_liberacao_sugerido = quantize_money(percentual_efetivo)
+    avaliacao.valor_liberado_sugerido = quantize_money(
+        (avaliacao.competencia.valor_medido or ZERO) * (avaliacao.percentual_liberacao_sugerido / Decimal('100.00'))
+    )
     avaliacao.save(
         update_fields=[
             'nota_final',
+            'nota_final_manual',
             'percentual_liberacao_sugerido',
+            'percentual_liberacao_manual',
             'valor_liberado_sugerido',
             'atualizado_em',
         ]
@@ -500,7 +960,12 @@ def recalcular_competencia_v2(competencia):
         competencia.valor_liberado_sugerido = avaliacao.valor_liberado_sugerido
     else:
         competencia.valor_liberado_sugerido = competencia.valor_medido
-    competencia.valor_liberado_final = quantize_money((competencia.valor_nota_fiscal or ZERO) - competencia.total_retencoes)
+    valor_liberado_calculado = quantize_money((competencia.valor_nota_fiscal or ZERO) - competencia.total_retencoes)
+    competencia.valor_liberado_final = (
+        quantize_money(competencia.valor_liberado_final_manual)
+        if competencia.valor_liberado_final_manual is not None
+        else valor_liberado_calculado
+    )
     competencia.valor_liquido_nota_adicional = quantize_money((competencia.valor_nota_adicional or ZERO) - competencia.total_retencoes_adicionais)
 
     if competencia_v2_esta_fechada(competencia):
@@ -509,6 +974,7 @@ def recalcular_competencia_v2(competencia):
                 'valor_medido',
                 'valor_liberado_sugerido',
                 'valor_liberado_final',
+                'valor_liberado_final_manual',
                 'valor_liquido_nota_adicional',
                 'checklist_concluido_em',
                 'medicao_concluida_em',
@@ -538,6 +1004,7 @@ def recalcular_competencia_v2(competencia):
             'valor_medido',
             'valor_liberado_sugerido',
             'valor_liberado_final',
+            'valor_liberado_final_manual',
             'valor_liquido_nota_adicional',
             'checklist_concluido_em',
             'medicao_concluida_em',

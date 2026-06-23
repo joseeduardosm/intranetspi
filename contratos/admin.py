@@ -12,10 +12,15 @@ from .models import (
     ContratoItem,
     Contrato,
     EscalaNotaAvaliacao,
+    EscalaNotaAvaliacaoPadraoGlobal,
     FaixaLiberacaoAvaliacao,
+    FaixaLiberacaoAvaliacaoPadraoGlobal,
     FormularioAvaliacao,
+    FormularioAvaliacaoPadraoGlobal,
     GrupoAvaliacao,
+    GrupoAvaliacaoPadraoGlobal,
     ItemAvaliacao,
+    ItemAvaliacaoPadraoGlobal,
     MedicaoItemCompetencia,
 )
 
@@ -55,10 +60,15 @@ class ContratoItemAdmin(admin.ModelAdmin):
 admin.site.register(ChecklistModelo)
 admin.site.register(ChecklistModeloItem)
 admin.site.register(FormularioAvaliacao)
+admin.site.register(FormularioAvaliacaoPadraoGlobal)
 admin.site.register(EscalaNotaAvaliacao)
+admin.site.register(EscalaNotaAvaliacaoPadraoGlobal)
 admin.site.register(FaixaLiberacaoAvaliacao)
+admin.site.register(FaixaLiberacaoAvaliacaoPadraoGlobal)
 admin.site.register(GrupoAvaliacao)
+admin.site.register(GrupoAvaliacaoPadraoGlobal)
 admin.site.register(ItemAvaliacao)
+admin.site.register(ItemAvaliacaoPadraoGlobal)
 admin.site.register(CompetenciaPagamento)
 admin.site.register(ChecklistCompetenciaItem)
 admin.site.register(MedicaoItemCompetencia)

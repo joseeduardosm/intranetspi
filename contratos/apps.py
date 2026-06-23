@@ -8,3 +8,8 @@ class ContratosConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'contratos'
     verbose_name = 'Contratos V2'
+
+    def ready(self):
+        """Carrega os sinais de auditoria quando o app sobe."""
+
+        from . import signals  # noqa: F401

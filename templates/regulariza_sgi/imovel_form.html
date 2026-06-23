@@ -98,6 +98,11 @@
               {{ form.processo_judicial }}
               {% for error in form.processo_judicial.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
             </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold" for="{{ form.motivo_desapropriacao.id_for_label }}">{{ form.motivo_desapropriacao.label }}</label>
+              {{ form.motivo_desapropriacao }}
+              {% for error in form.motivo_desapropriacao.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
             <div class="col-lg-6">
               <span class="form-label fw-semibold d-block mb-2">{{ form.imunidade.label }}</span>
               <div class="regulariza-inline-radios" id="regulariza-imunidade-radios">
@@ -149,10 +154,51 @@
         </section>
 
         <section class="regulariza-tab-panel" data-tab-panel="observacoes" hidden>
-          <div class="regulariza-form-placeholder">
-            <h2>Observações e timeline</h2>
-            <p>Salve o imóvel primeiro para registrar observações e consultar a timeline consolidada no detalhe.</p>
-          </div>
+          {% if object %}
+            <div class="regulariza-observacoes-panel">
+              <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+                <div>
+                  <h2>Observações e timeline</h2>
+                  <p class="mb-0 text-muted">Registre novas observações sem sair da edição e use o detalhe para consultar o histórico completo.</p>
+                </div>
+                <a class="btn btn-outline-secondary" href="{% url 'regulariza_sgi:imovel_detail' object.pk %}?aba=observacoes&subaba=observacoes">Abrir histórico completo</a>
+              </div>
+
+              <form method="post" action="{% url 'regulariza_sgi:observacao_create' object.pk %}" class="regulariza-inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{% url 'regulariza_sgi:imovel_update' object.pk %}?aba=observacoes">
+                <label class="form-label fw-semibold" for="{{ observacao_form.texto.id_for_label }}">Nova observação</label>
+                {{ observacao_form.texto }}
+                {% for error in observacao_form.texto.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                <div class="d-flex justify-content-end mt-3">
+                  <button class="btn btn-primary" type="submit">Registrar observação</button>
+                </div>
+              </form>
+
+              <div class="regulariza-timeline-list mt-4">
+                {% for observacao in observacoes_recentes %}
+                  <article class="regulariza-history-item">
+                    <div class="regulariza-history-meta">
+                      <strong>{{ observacao.usuario_responsavel }}</strong>
+                      <span>{{ observacao.criado_em|date:"d/m/Y" }} às {{ observacao.criado_em|time:"H:i" }}</span>
+                    </div>
+                    <p>{{ observacao.texto|linebreaksbr }}</p>
+                  </article>
+                {% empty %}
+                  <p class="text-muted mb-0">Nenhuma observação registrada até o momento.</p>
+                {% endfor %}
+              </div>
+
+              {% if observacoes_total > observacoes_recentes|length %}
+                <p class="text-muted small mt-3 mb-0">Mostrando as 5 observações mais recentes. O histórico completo está no detalhe do imóvel.</p>
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="regulariza-form-placeholder">
+              <h2>Observações e timeline</h2>
+              <p>Salve o imóvel primeiro para registrar observações e consultar a timeline consolidada no detalhe.</p>
+            </div>
+          {% endif %}
         </section>
       </div>
 
@@ -174,6 +220,7 @@
       var tempoImunidadeWrap = document.getElementById('tempo-imunidade-wrap');
       var tabButtons = document.querySelectorAll('.regulariza-tab-trigger');
       var tabPanels = document.querySelectorAll('.regulariza-tab-panel');
+      var initialTab = '{{ request.GET.aba|default:"dados-iniciais" }}';
       var moneyInputs = document.querySelectorAll('[data-money-field="true"]');
 
       function rebuildMunicipios() {
@@ -251,7 +298,7 @@
 
       rebuildMunicipios();
       toggleTempoImunidade();
-      openTab('dados-iniciais');
+      openTab(initialTab);
     }());
   </script>
 {% endblock %}

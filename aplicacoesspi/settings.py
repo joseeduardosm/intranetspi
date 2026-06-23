@@ -84,9 +84,11 @@ INSTALLED_APPS = [
     'regulariza_sgi',
     'reserva_espacos',
     'setores',
+    'tarefas',
     'usuarios',
     'acls',
     'organograma',
+    'todo_tecnico',
 ]
 
 # Middleware de segurança, arquivos estáticos, sessão, autenticação, mensagens e proteção de clickjacking.
@@ -134,7 +136,9 @@ DATABASES = {
         'NAME': 'spi_db',
         'USER': 'spi_user',
         'PASSWORD': 'admin123',
-        'HOST': 'localhost',
+        # Usa IPv4 explícito para evitar falhas intermitentes de resolução local
+        # que estavam derrubando a conexão do Django com o PostgreSQL.
+        'HOST': '127.0.0.1',
         'PORT': '5432',
         'TEST': {
             'NAME': 'spi_db_test',

@@ -1,0 +1,14 @@
+/* Criado por OpenAI Codex em 21/06/2026.
+   Objetivo: refinar a leitura dos blocos de auditoria no detalhe do contrato sem impactar outras telas. */
+
+.contratos-auditoria-extra-itens {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.contratos-auditoria-extra-itens li {
+  color: #475467;
+  line-height: 1.45;
+}

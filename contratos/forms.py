@@ -48,12 +48,17 @@ from .models import (
     EscalaNotaAvaliacao,
     FaixaLiberacaoAvaliacao,
     FormularioAvaliacao,
+    FormularioAvaliacaoPadraoGlobal,
     GrupoAvaliacao,
+    GrupoAvaliacaoPadraoGlobal,
     ItemAvaliacao,
+    ItemAvaliacaoPadraoGlobal,
     MedicaoItemCompetencia,
     EmpresaContratada,
     ResponsavelEmpresa,
     PrazoMonitoramento,
+    EscalaNotaAvaliacaoPadraoGlobal,
+    FaixaLiberacaoAvaliacaoPadraoGlobal,
 )
 
 
@@ -93,6 +98,30 @@ def numero_contrato_por_ano(ano):
         if parsed and parsed[1] == ano:
             maior = max(maior, parsed[0])
     return f'{maior + 1:03d}/{ano}'
+
+
+def calcular_percentual_por_faixa(snapshot_faixas, nota_final):
+    """Replica a regra de faixas para sugerir o percentual a partir de uma nota informada."""
+
+    nota_decimal = Decimal(nota_final or Decimal('0.00'))
+    percentual = Decimal('100.00')
+    for faixa in snapshot_faixas or []:
+        nota_minima = Decimal(faixa['nota_minima'])
+        nota_maxima = Decimal(faixa['nota_maxima']) if faixa.get('nota_maxima') not in {'', None} else None
+        if nota_decimal < nota_minima:
+            continue
+        if nota_maxima is not None and nota_decimal > nota_maxima:
+            continue
+        percentual = Decimal(faixa['percentual_liberacao'])
+        break
+    return percentual
+
+
+def calcular_valor_avaliacao_sugerido(competencia, percentual):
+    """Calcula o valor a pagar na avaliação com base no percentual e na nota fiscal da competência."""
+
+    base = Decimal(getattr(competencia, 'valor_nota_fiscal', Decimal('0.00')) or Decimal('0.00'))
+    return base * (Decimal(percentual or Decimal('0.00')) / Decimal('100.00'))
 
 
 class BootstrapModelForm(forms.ModelForm):
@@ -244,6 +273,8 @@ class ContratoItemForm(BootstrapModelForm):
         super().__init__(*args, **kwargs)
         self.fields['ordem'].required = False
         self.fields['ordem'].help_text = 'Se deixar em branco, o sistema usará o próximo número disponível.'
+        # No cadastro operacional do contrato, o usuário informa a referência mensal do item.
+        self.fields['quantidade'].label = 'Quantidade mensal'
 
 
 class DocumentoImportanteContratoForm(BootstrapModelForm):
@@ -312,15 +343,43 @@ class FormularioAvaliacaoForm(BootstrapModelForm):
         }
 
 
+class FormularioAvaliacaoPadraoGlobalForm(BootstrapModelForm):
+    """Repete o formulário de avaliação, agora desacoplado de um contrato específico."""
+
+    class Meta:
+        model = FormularioAvaliacaoPadraoGlobal
+        fields = ['nome', 'descricao', 'ativo', 'observacoes']
+        widgets = {
+            'descricao': forms.Textarea(attrs={'rows': 3}),
+            'observacoes': forms.Textarea(attrs={'rows': 3}),
+        }
+
+
 class EscalaNotaAvaliacaoForm(BootstrapModelForm):
     class Meta:
         model = EscalaNotaAvaliacao
         fields = ['valor', 'legenda']
 
 
+class EscalaNotaAvaliacaoPadraoGlobalForm(BootstrapModelForm):
+    """Mantém a escala padrão global alinhada ao cadastro da avaliação por contrato."""
+
+    class Meta:
+        model = EscalaNotaAvaliacaoPadraoGlobal
+        fields = ['valor', 'legenda']
+
+
 class FaixaLiberacaoAvaliacaoForm(BootstrapModelForm):
     class Meta:
         model = FaixaLiberacaoAvaliacao
+        fields = ['nota_minima', 'nota_maxima', 'percentual_liberacao']
+
+
+class FaixaLiberacaoAvaliacaoPadraoGlobalForm(BootstrapModelForm):
+    """Replica as faixas de liberação para o cadastro padrão institucional."""
+
+    class Meta:
+        model = FaixaLiberacaoAvaliacaoPadraoGlobal
         fields = ['nota_minima', 'nota_maxima', 'percentual_liberacao']
 
 
@@ -331,11 +390,32 @@ class GrupoAvaliacaoForm(BootstrapModelForm):
         widgets = {'descricao': forms.Textarea(attrs={'rows': 3})}
 
 
+class GrupoAvaliacaoPadraoGlobalForm(BootstrapModelForm):
+    """Organiza os grupos do formulário padrão global com o mesmo desenho do contrato."""
+
+    class Meta:
+        model = GrupoAvaliacaoPadraoGlobal
+        fields = ['nome', 'descricao']
+        widgets = {'descricao': forms.Textarea(attrs={'rows': 3})}
+
+
 class ItemAvaliacaoForm(BootstrapModelForm):
     """Mantém o cadastro do item focado no conteúdo, com ordem controlada pelo sistema."""
 
     class Meta:
         model = ItemAvaliacao
+        fields = ['descricao', 'peso_percentual', 'observacoes_padrao']
+        widgets = {
+            'descricao': forms.Textarea(attrs={'rows': 3}),
+            'observacoes_padrao': forms.Textarea(attrs={'rows': 2}),
+        }
+
+
+class ItemAvaliacaoPadraoGlobalForm(BootstrapModelForm):
+    """Mantém o item padrão global focado no conteúdo para clonagem futura."""
+
+    class Meta:
+        model = ItemAvaliacaoPadraoGlobal
         fields = ['descricao', 'peso_percentual', 'observacoes_padrao']
         widgets = {
             'descricao': forms.Textarea(attrs={'rows': 3}),
@@ -373,10 +453,41 @@ class CompetenciaChecklistUploadForm(forms.Form):
 class CompetenciaMedicaoLoteV2Form(forms.Form):
     """Monta a tabela mensal de medição trazendo automaticamente os itens do contrato V2."""
 
+    ORIGEM_VALOR_NOTA_MEDICAO = 'medicao'
+    ORIGEM_VALOR_NOTA_MANUAL = 'manual'
+
+    CAMPOS_NOTA_PRINCIPAL = (
+        'aceite_definitivo_arquivo',
+        'data_aceite_definitivo',
+        'prazo_pagamento_dias',
+        'nota_fiscal_fatura',
+        'numero_nota_fiscal',
+        'valor_nota_fiscal',
+        'retencao_ir',
+        'retencao_inss',
+        'retencao_iss',
+        'retencao_pis_pasep',
+        'retencao_cofins',
+        'valor_liberado_final',
+    )
+    CAMPOS_NOTA_ADICIONAL = (
+        'nota_adicional_arquivo',
+        'nota_adicional_nao_consta',
+        'numero_nota_adicional',
+        'valor_nota_adicional',
+        'retencao_ir_adicional',
+        'retencao_inss_adicional',
+        'retencao_iss_adicional',
+        'retencao_pis_pasep_adicional',
+        'retencao_cofins_adicional',
+        'valor_liquido_nota_adicional',
+    )
+
     def __init__(self, *args, contrato=None, competencia=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.contrato = contrato
         self.competencia = competencia
+        self.valor_medido_referencia = Decimal(getattr(competencia, 'valor_medido', Decimal('0.00')) or Decimal('0.00'))
         self.itens = list((contrato.itens.order_by('ordem', 'id') if contrato is not None else []))
         self.permite_pro_rata = self._permite_pro_rata()
         medicoes_existentes = {}
@@ -473,6 +584,28 @@ class CompetenciaMedicaoLoteV2Form(forms.Form):
             initial=getattr(competencia, 'valor_nota_fiscal', None),
             widget=forms.NumberInput(attrs={'class': BOOTSTRAP_INPUT, 'step': '0.01', 'min': '0'}),
         )
+        valor_nota_inicial = Decimal(getattr(competencia, 'valor_nota_fiscal', Decimal('0.00')) or Decimal('0.00'))
+        origem_inicial = None
+        if valor_nota_inicial > Decimal('0.00'):
+            if valor_nota_inicial == self.valor_medido_referencia:
+                origem_inicial = self.ORIGEM_VALOR_NOTA_MEDICAO
+            else:
+                origem_inicial = self.ORIGEM_VALOR_NOTA_MANUAL
+        self.fields['origem_valor_nota_fiscal'] = forms.ChoiceField(
+            label='Origem do valor da nota fiscal',
+            required=False,
+            initial=origem_inicial,
+            choices=(
+                (self.ORIGEM_VALOR_NOTA_MEDICAO, 'Usar valor da medição'),
+                (self.ORIGEM_VALOR_NOTA_MANUAL, 'Preencher manualmente'),
+            ),
+            widget=forms.RadioSelect,
+        )
+        if origem_inicial == self.ORIGEM_VALOR_NOTA_MEDICAO and valor_nota_inicial <= Decimal('0.00'):
+            self.fields['valor_nota_fiscal'].initial = self.valor_medido_referencia
+        if origem_inicial != self.ORIGEM_VALOR_NOTA_MANUAL:
+            self.fields['valor_nota_fiscal'].widget.attrs['readonly'] = 'readonly'
+        self.fields['valor_nota_fiscal'].widget.attrs['data-origem-medicao'] = '1' if origem_inicial == self.ORIGEM_VALOR_NOTA_MEDICAO else '0'
         for nome, rotulo in (
             ('retencao_ir', 'Retenção IR'),
             ('retencao_inss', 'Retenção INSS'),
@@ -552,7 +685,11 @@ class CompetenciaMedicaoLoteV2Form(forms.Form):
             initial=getattr(competencia, 'observacoes_medicao', ''),
             widget=forms.Textarea(attrs={'class': BOOTSTRAP_TEXTAREA, 'rows': 3}),
         )
+        self.nota_principal_liberada = self._nota_principal_liberada()
+        self.nota_adicional_liberada = self._nota_adicional_liberada()
+        self.etapas_fluxo = self._montar_etapas_fluxo()
         self._aplicar_bloqueios_campos_preenchidos(medicoes_existentes)
+        self._aplicar_bloqueios_fluxo_sequencial()
 
     def _bloquear_campo(self, nome):
         """Congela um campo já preenchido para preservar o histórico salvo."""
@@ -588,6 +725,7 @@ class CompetenciaMedicaoLoteV2Form(forms.Form):
             'prazo_pagamento_dias': bool(self.competencia.prazo_pagamento_dias),
             'nota_fiscal_fatura': bool(self.competencia.nota_fiscal_fatura),
             'numero_nota_fiscal': bool((self.competencia.numero_nota_fiscal or '').strip()),
+            'origem_valor_nota_fiscal': (self.competencia.valor_nota_fiscal or Decimal('0.00')) > Decimal('0.00'),
             'valor_nota_fiscal': (self.competencia.valor_nota_fiscal or Decimal('0.00')) > Decimal('0.00'),
             'nota_adicional_arquivo': bool(self.competencia.nota_adicional_arquivo),
             'nota_adicional_nao_consta': bool(self.competencia.nota_adicional_nao_consta),
@@ -628,6 +766,77 @@ class CompetenciaMedicaoLoteV2Form(forms.Form):
             if (getattr(self.competencia, nome, Decimal('0.00')) or Decimal('0.00')) > Decimal('0.00'):
                 self._bloquear_campo(nome)
 
+    def _nota_principal_liberada(self):
+        """A segunda etapa só abre após existir conteúdo salvo na medição."""
+
+        return bool(self.competencia and self.competencia.medicao_tem_conteudo)
+
+    def _nota_adicional_liberada(self):
+        """A terceira etapa depende do salvamento prévio da medição e da nota principal."""
+
+        return bool(self.competencia and self.competencia.medicao_tem_conteudo and self.competencia.nota_principal_tem_conteudo)
+
+    def _montar_etapas_fluxo(self):
+        """Entrega um resumo simples para o template mostrar a ordem operacional da tela."""
+
+        return [
+            {
+                'titulo': '1. Medição',
+                # A primeira etapa permanece visualmente disponível durante todo o fluxo.
+                'descricao': '',
+                'status_classe': 'available',
+                'status_rotulo': 'Liberada',
+            },
+            {
+                'titulo': '2. Nota Fiscal Principal',
+                # Mantém uma orientação curta e estável tanto no estado bloqueado quanto liberado.
+                'descricao': 'Só libera após salvar a medição.',
+                'status_classe': 'available' if self.nota_principal_liberada else 'blocked',
+                'status_rotulo': 'Liberada' if self.nota_principal_liberada else 'Bloqueada',
+            },
+            {
+                'titulo': '3. Nota Fiscal Adicional',
+                # Mantém uma orientação curta e estável tanto no estado bloqueado quanto liberado.
+                'descricao': 'Só libera após salvar a medição e a nota principal.',
+                'status_classe': 'available' if self.nota_adicional_liberada else 'blocked',
+                'status_rotulo': 'Liberada' if self.nota_adicional_liberada else 'Bloqueada',
+            },
+            {
+                'titulo': 'Observações finais',
+                'descricao': 'Fica sempre disponível.',
+                'status_classe': 'available',
+                'status_rotulo': 'Concluída',
+            },
+        ]
+
+    def _aplicar_bloqueios_fluxo_sequencial(self):
+        """Protege as etapas posteriores quando a competência ainda não alcançou o ponto de liberação."""
+
+        if not self.nota_principal_liberada:
+            for nome in self.CAMPOS_NOTA_PRINCIPAL:
+                self._bloquear_campo(nome)
+        if not self.nota_adicional_liberada:
+            for nome in self.CAMPOS_NOTA_ADICIONAL:
+                self._bloquear_campo(nome)
+
+    def _dados_brutos_da_secao_informados(self, nomes_campos):
+        """Detecta tentativa de envio manual de campos bloqueados, mesmo fora do HTML padrão."""
+
+        for nome in nomes_campos:
+            arquivo = self.files.get(nome)
+            if arquivo:
+                return True
+            valor = self.data.get(nome)
+            if valor is None:
+                continue
+            if isinstance(valor, str):
+                if valor.strip():
+                    return True
+                continue
+            if valor:
+                return True
+        return False
+
     def _permite_pro_rata(self):
         """Libera o pró-rata apenas nas bordas da vigência inicial do contrato."""
 
@@ -641,12 +850,21 @@ class CompetenciaMedicaoLoteV2Form(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
+        if not self.nota_principal_liberada and self._dados_brutos_da_secao_informados(self.CAMPOS_NOTA_PRINCIPAL):
+            self.add_error(None, 'Salve a etapa de medição antes de preencher a nota fiscal principal.')
+        if not self.nota_adicional_liberada and self._dados_brutos_da_secao_informados(self.CAMPOS_NOTA_ADICIONAL):
+            self.add_error(None, 'Salve a medição e a nota fiscal principal antes de preencher a nota fiscal adicional.')
+
         for nome in ('aceite_provisorio_arquivo', 'aceite_definitivo_arquivo', 'nota_fiscal_fatura', 'nota_adicional_arquivo'):
             arquivo = cleaned.get(nome)
             if arquivo and not getattr(arquivo, '_committed', False):
                 cleaned[nome] = validar_upload_pdf(arquivo)
 
         valor_nota = Decimal(cleaned.get('valor_nota_fiscal') or Decimal('0.00'))
+        origem_valor_nota = cleaned.get('origem_valor_nota_fiscal') or ''
+        if origem_valor_nota == self.ORIGEM_VALOR_NOTA_MEDICAO:
+            valor_nota = self.valor_medido_referencia
+            cleaned['valor_nota_fiscal'] = valor_nota
         total_retencoes = sum(
             (
                 Decimal(cleaned.get('retencao_ir') or Decimal('0.00')),
@@ -709,6 +927,53 @@ class AvaliacaoCompetenciaV2Form(forms.Form):
         widget=forms.Textarea(attrs={'class': BOOTSTRAP_TEXTAREA, 'rows': 3}),
     )
 
+    def _calcular_resultado_automatico(self, competencia):
+        """Replica o fechamento automático para exibir nota, faixa e valor coerentes no formulário."""
+
+        acumulado = Decimal('0.00')
+        for resposta in self.respostas:
+            acumulado += (resposta.nota_valor or Decimal('0.00')) * (
+                (resposta.item_peso_percentual or Decimal('0.00')) / Decimal('100.00')
+            )
+        nota_final = Decimal(f'{acumulado:.2f}')
+        percentual = Decimal('100.00')
+        for faixa in getattr(self.avaliacao, 'faixas_liberacao_snapshot', []) or []:
+            nota_minima = Decimal(faixa['nota_minima'])
+            nota_maxima = Decimal(faixa['nota_maxima']) if faixa.get('nota_maxima') not in {'', None} else None
+            if nota_final < nota_minima:
+                continue
+            if nota_maxima is not None and nota_final > nota_maxima:
+                continue
+            percentual = Decimal(faixa['percentual_liberacao'])
+            break
+        valor_final = Decimal('0.00')
+        if competencia is not None:
+            valor_final = (getattr(competencia, 'valor_nota_fiscal', Decimal('0.00')) or Decimal('0.00')) * (
+                percentual / Decimal('100.00')
+            )
+        return {
+            'nota_final': nota_final,
+            'percentual': Decimal(f'{percentual:.2f}'),
+            'valor_final': Decimal(f'{valor_final:.2f}'),
+        }
+
+    def _fechamento_avaliacao_liberado(self, competencia):
+        """Só libera o fechamento quando notas, justificativas e PDF assinado já estiverem completos."""
+
+        if competencia is None:
+            return False
+        if not getattr(competencia.avaliacao_assinada, 'name', ''):
+            return False
+
+        for resposta in self.respostas:
+            if resposta.nota_fiscal_valor is None or resposta.nota_gestor_valor is None:
+                return False
+            if resposta.nota_fiscal_valor < self.max_nota and not (resposta.justificativa_fiscal or '').strip():
+                return False
+            if resposta.nota_gestor_valor < self.max_nota and not (resposta.manifestacao_gestor_item or '').strip():
+                return False
+        return bool(self.respostas)
+
     def __init__(self, *args, avaliacao=None, **kwargs):
         self.pode_preencher_fiscal = kwargs.pop('pode_preencher_fiscal', False)
         self.pode_preencher_gestor = kwargs.pop('pode_preencher_gestor', False)
@@ -723,9 +988,123 @@ class AvaliacaoCompetenciaV2Form(forms.Form):
         self.min_nota = min((Decimal(item['valor']) for item in escala), default=Decimal('0.00'))
         self.max_nota_js = format(self.max_nota, 'f')
         choices = [('', 'Selecione')] + [(item['valor'], f"{item['valor']} - {item['legenda']}") for item in escala]
+        queryset = User.objects.filter(is_active=True).select_related('perfil').order_by('perfil__nome_completo', 'username')
+        percentual_inicial = getattr(avaliacao, 'percentual_liberacao_sugerido', Decimal('100.00')) if avaliacao is not None else Decimal('100.00')
+        nota_final_inicial = getattr(avaliacao, 'nota_final', Decimal('0.00')) if avaliacao is not None else Decimal('0.00')
+        competencia = getattr(avaliacao, 'competencia', None)
+        valor_final_inicial = (
+            getattr(competencia, 'valor_liberado_final', Decimal('0.00'))
+            if competencia is not None
+            else Decimal('0.00')
+        )
 
         if avaliacao is not None:
             self.fields['observacoes'].initial = avaliacao.observacoes
+
+        competencia_possui_pdf_assinado = bool(
+            competencia is not None and getattr(competencia.avaliacao_assinada, 'name', '')
+        )
+        self.fechamento_avaliacao_liberado = self._fechamento_avaliacao_liberado(competencia)
+        self.fechamento_avaliacao_concluido = bool(getattr(avaliacao, 'concluida_em', None))
+        resultado_automatico = self._calcular_resultado_automatico(competencia)
+        nota_final_exibida = (
+            resultado_automatico['nota_final']
+            if competencia_possui_pdf_assinado
+            else nota_final_inicial
+        )
+
+        self.fields['nota_final_aprovada'] = forms.DecimalField(
+            label='Nota Final',
+            required=False,
+            min_value=self.min_nota,
+            max_value=self.max_nota if self.max_nota > self.min_nota else None,
+            decimal_places=2,
+            max_digits=8,
+            initial=nota_final_exibida,
+            widget=forms.NumberInput(attrs={'class': BOOTSTRAP_INPUT, 'step': '0.01', 'min': '0'}),
+        )
+        if competencia_possui_pdf_assinado:
+            # Depois do retorno do PDF assinado, a nota final passa a refletir só o cálculo automático.
+            self.fields['nota_final_aprovada'].widget.attrs['readonly'] = 'readonly'
+            self.fields['nota_final_aprovada'].widget.attrs['class'] = (
+                f"{self.fields['nota_final_aprovada'].widget.attrs.get('class', '')} bg-light"
+            ).strip()
+        self.fields['percentual_liberacao_aprovado'] = forms.DecimalField(
+            label='Faixa de Liberação (%)',
+            required=False,
+            min_value=0,
+            max_value=100,
+            decimal_places=2,
+            max_digits=8,
+            initial=resultado_automatico['percentual'],
+            widget=forms.NumberInput(attrs={'class': BOOTSTRAP_INPUT, 'step': '0.01', 'min': '0', 'max': '100'}),
+        )
+        self.fields['percentual_liberacao_aprovado'].widget.attrs['readonly'] = 'readonly'
+        self.fields['percentual_liberacao_aprovado'].widget.attrs['class'] = (
+            f"{self.fields['percentual_liberacao_aprovado'].widget.attrs.get('class', '')} bg-light"
+        ).strip()
+        self.fields['percentual_liberacao_aprovado'].disabled = True
+        self.fields['valor_liberado_final'] = forms.DecimalField(
+            label='Valor a Pagar',
+            required=False,
+            min_value=0,
+            decimal_places=2,
+            max_digits=14,
+            initial=valor_final_inicial,
+            widget=forms.NumberInput(attrs={'class': BOOTSTRAP_INPUT, 'step': '0.01', 'min': '0'}),
+        )
+        if not self.fechamento_avaliacao_liberado or self.fechamento_avaliacao_concluido:
+            for nome_campo in (
+                'nota_final_aprovada',
+                'percentual_liberacao_aprovado',
+                'valor_liberado_final',
+            ):
+                self.fields[nome_campo].disabled = True
+
+        self.campos_assinatura = (
+            ('gestor_pagamento', 'gestor_pagamento_nome_manual', 'gestor_pagamento_em_exercicio', 'Gestor do contrato'),
+            ('coordenadora_pagamento', 'coordenadora_pagamento_nome_manual', 'coordenadora_em_exercicio', 'Coordenadora'),
+            ('diretora_pagamento', 'diretora_pagamento_nome_manual', 'diretora_em_exercicio', 'Diretora'),
+            ('subsecretario_pagamento', 'subsecretario_pagamento_nome_manual', 'subsecretario_em_exercicio', 'Subsecretário'),
+        )
+        for nome_campo, campo_manual, campo_exercicio, rotulo in self.campos_assinatura:
+            nome_modelo_manual = campo_manual
+            nome_modelo_exercicio = campo_exercicio
+            label_manual = f'Nome manual de {rotulo.lower()}'
+            initial_manual = getattr(competencia, nome_modelo_manual, '') if competencia is not None else ''
+            initial_exercicio = bool(getattr(competencia, nome_modelo_exercicio, False)) if competencia is not None else False
+            initial_usuario = getattr(competencia, nome_campo, None) if competencia is not None else None
+
+            self.fields[nome_campo] = UsuarioPerfilChoiceField(
+                queryset=queryset,
+                required=False,
+                label=rotulo,
+            )
+            self.fields[nome_campo].widget.attrs['class'] = 'form-select form-select-lg'
+            self.fields[campo_manual] = forms.CharField(
+                label=label_manual,
+                required=False,
+                initial=initial_manual,
+                widget=forms.TextInput(
+                    attrs={
+                        'class': BOOTSTRAP_INPUT,
+                        'placeholder': 'Preencha manualmente se o nome não estiver na lista.',
+                    }
+                ),
+            )
+            self.fields[campo_exercicio] = forms.BooleanField(
+                label='Em exercício',
+                required=False,
+                initial=initial_exercicio,
+            )
+            self.fields[nome_campo].initial = initial_usuario
+        if competencia is not None and not self.fields['gestor_pagamento'].initial and competencia.contrato.gestor_contrato_id:
+            self.fields['gestor_pagamento'].initial = competencia.contrato.gestor_contrato
+        if not self.fechamento_avaliacao_liberado or self.fechamento_avaliacao_concluido:
+            for nome_campo, campo_manual, campo_exercicio, _rotulo in self.campos_assinatura:
+                self.fields[nome_campo].disabled = True
+                self.fields[campo_manual].disabled = True
+                self.fields[campo_exercicio].disabled = True
 
         for resposta in self.respostas:
             self.fields[f'nota_fiscal_{resposta.pk}'] = forms.TypedChoiceField(
@@ -823,6 +1202,18 @@ class AvaliacaoCompetenciaV2Form(forms.Form):
                     f'manifestacao_gestor_item_{resposta.pk}',
                     'Informe a manifestação do gestor para notas abaixo da máxima.',
                 )
+
+        nota_final_aprovada = normalizar_nota(cleaned.get('nota_final_aprovada'))
+        percentual_aprovado = normalizar_nota(cleaned.get('percentual_liberacao_aprovado'))
+        valor_liberado_final = normalizar_nota(cleaned.get('valor_liberado_final'))
+        cleaned['nota_final_aprovada'] = nota_final_aprovada
+        cleaned['percentual_liberacao_aprovado'] = percentual_aprovado
+        cleaned['valor_liberado_final'] = valor_liberado_final
+
+        for nome_campo, campo_manual, campo_exercicio, _rotulo in self.campos_assinatura:
+            cleaned[campo_manual] = (cleaned.get(campo_manual) or '').strip()
+            if cleaned.get(campo_exercicio) and not (cleaned.get(nome_campo) or cleaned[campo_manual]):
+                self.add_error(campo_manual, 'Selecione um usuário ou informe o nome manual para marcar "Em exercício".')
         return cleaned
 
 
@@ -920,14 +1311,6 @@ class CompetenciaChecklistExtraItemForm(forms.Form):
     """Permite cadastrar itens documentais exclusivos da nota adicional na competência."""
 
     titulo = forms.CharField(label='Nome do documento', widget=forms.TextInput(attrs={'class': BOOTSTRAP_INPUT}))
-    arquivo = forms.FileField(
-        label='Arquivo PDF',
-        required=True,
-        widget=forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'application/pdf,.pdf'}),
-    )
-
-    def clean_arquivo(self):
-        return validar_upload_pdf(self.cleaned_data.get('arquivo'))
 
 
 class CompetenciaOBExecucaoForm(BootstrapModelForm):

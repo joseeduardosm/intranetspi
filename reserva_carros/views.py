@@ -31,6 +31,7 @@ from .services import (
     deferir_reserva,
     fiscal_group,
     indeferir_reserva,
+    notificar_fiscais_nova_solicitacao,
     registrar_evento,
     reserva_carros_dashboard_context,
     sync_passageiros,
@@ -334,11 +335,14 @@ class SolicitacaoCreateView(ReservaCarrosMixin, LoginRequiredMixin, UserPassesTe
         return context
 
     def form_valid(self, form):
+        # A solicitação já nasce vinculada ao usuário logado e à origem operacional padrão.
         form.instance.solicitante = self.request.user
         form.instance.local_saida = ReservaCarro.local_saida_padrao
         response = super().form_valid(form)
         sync_passageiros(self.object, form.cleaned_data.get("passageiros") or [])
         registrar_evento(self.object, ReservaCarroEvento.Acao.CRIACAO, usuario=self.request.user)
+        # Notifica o grupo fiscal para que a viagem entre na fila de análise imediatamente.
+        notificar_fiscais_nova_solicitacao(self.object, usuario_responsavel=self.request.user)
         messages.success(self.request, "Solicitação criada com sucesso.")
         return response
 

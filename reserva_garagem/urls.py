@@ -10,10 +10,12 @@ app_name = "reserva_garagem"
 
 urlpatterns = [
     path("", views.AgendaReservaGaragemView.as_view(), name="agenda"),
+    path("minhas-reservas/", views.MinhasReservasGaragemView.as_view(), name="minhas_reservas"),
     path("dashboard/", views.ReservaGaragemDashboardView.as_view(), name="dashboard"),
     path("reservas/", views.ReservaListView.as_view(), name="reserva_list"),
     path("reservas/vagas-disponiveis/", views.vagas_disponiveis_api, name="vagas_disponiveis"),
     path("reservas/nova/", views.ReservaCreateView.as_view(), name="reserva_create"),
+    path("reservas/predefinida/nova/", views.ReservaPredefinidaFiscalCreateView.as_view(), name="reserva_predefinida_create"),
     path("reservas/<int:pk>/", views.ReservaDetailView.as_view(), name="reserva_detail"),
     path("reservas/<int:pk>/editar/", views.ReservaUpdateView.as_view(), name="reserva_update"),
     path("reservas/<int:pk>/cancelar/", views.ReservaCancelView.as_view(), name="reserva_cancel"),

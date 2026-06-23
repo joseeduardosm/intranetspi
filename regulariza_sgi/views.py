@@ -7,6 +7,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
@@ -112,6 +113,10 @@ class ImovelUpdateView(RegularizaSgiAccessMixin, UpdateView):
         context['form_title'] = 'Editar imóvel'
         context['municipios_json'] = MUNICIPIOS_POR_UF
         context['exibir_campos_sei'] = True
+        # Na edição o imóvel já existe, então a aba de observações pode receber lançamentos imediatos.
+        context['observacao_form'] = kwargs.get('observacao_form') or ImovelObservacaoForm()
+        context['observacoes_recentes'] = self.object.observacoes.all()[:5]
+        context['observacoes_total'] = self.object.observacoes.count()
         return context
 
 
@@ -311,17 +316,26 @@ class AnexoDeleteView(ImovelChildMixin, DeleteView):
 class ObservacaoCreateView(RegularizaSgiAccessMixin, View):
     """Adiciona observações textuais ao histórico funcional do imóvel."""
 
+    def _get_safe_redirect(self, request, fallback_url):
+        """Permite retornar para a tela de origem quando ela pertence ao próprio portal."""
+
+        next_url = (request.POST.get('next') or '').strip()
+        if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+            return next_url
+        return fallback_url
+
     def post(self, request, pk):
         imovel = get_object_or_404(Imovel, pk=pk)
         form = ImovelObservacaoForm(request.POST)
+        detail_url = reverse('regulariza_sgi:imovel_detail', args=[imovel.pk])
+        fallback_url = f'{detail_url}?aba=observacoes&subaba=observacoes'
         if form.is_valid():
             observacao = form.save(commit=False)
             observacao.imovel = imovel
             observacao.usuario_responsavel = request.user.username
             observacao.save()
             messages.success(request, 'Observação registrada.')
-            detail_url = reverse('regulariza_sgi:imovel_detail', args=[imovel.pk])
-            return redirect(f'{detail_url}?aba=observacoes&subaba=observacoes')
+            return redirect(self._get_safe_redirect(request, fallback_url))
 
         detail_view = ImovelDetailView()
         detail_view.request = request

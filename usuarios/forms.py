@@ -60,7 +60,18 @@ class UsuarioPerfilForm(BootstrapFormMixin, forms.ModelForm):
 
     class Meta:
         model = UsuarioPerfil
-        fields = ["nome_completo", "foto", "email", "ramal", "celular", "cargo", "setor", "andar", "bloco", "data_nascimento"]
+        fields = [
+            "nome_completo",
+            "foto",
+            "email",
+            "ramal",
+            "celular",
+            "cargo",
+            "setor",
+            "andar",
+            "bloco",
+            "data_nascimento",
+        ]
         labels = {
             "celular": "Celular (Opcional)",
             "data_nascimento": "Data de nascimento (Opcional)",
@@ -148,7 +159,18 @@ class UsuarioCreateForm(BootstrapFormMixin, forms.ModelForm):
 
     class Meta:
         model = UsuarioPerfil
-        fields = ["nome_completo", "foto", "email", "ramal", "celular", "cargo", "setor", "andar", "bloco", "data_nascimento"]
+        fields = [
+            "nome_completo",
+            "foto",
+            "email",
+            "ramal",
+            "celular",
+            "cargo",
+            "setor",
+            "andar",
+            "bloco",
+            "data_nascimento",
+        ]
         labels = {
             "celular": "Celular (Opcional)",
             "data_nascimento": "Data de nascimento (Opcional)",

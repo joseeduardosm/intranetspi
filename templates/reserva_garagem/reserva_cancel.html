@@ -12,7 +12,7 @@
 {% block content %}
   <div class="spi-page-title">
     <h1>Cancelar reserva</h1>
-    <p>Confirme o cancelamento da reserva #{{ reserva.pk }}{% if serie_count %} e da série com {{ serie_count }} ocorrências{% endif %}.</p>
+    <p>Confirme o cancelamento da reserva #{{ reserva.pk }}{% if serie_count %} e escolha o escopo da série com {{ serie_count }} ocorrências{% endif %}.</p>
   </div>
 
   <section class="reserva-espacos-surface reserva-espacos-detail-card">
@@ -20,10 +20,80 @@
     <p><strong>Data:</strong> {{ reserva.data|date:"d/m/Y" }}</p>
     <p><strong>Status atual:</strong> {{ reserva.get_status_display }}</p>
     <p><strong>Placa:</strong> {{ reserva.placa_veiculo }}</p>
-    <form method="post" class="d-flex gap-2 flex-wrap mt-4">
+    <form method="post" class="mt-4">
       {% csrf_token %}
-      <button class="btn btn-danger" type="submit">Confirmar cancelamento</button>
-      <a class="btn btn-light" href="{% url 'reserva_garagem:reserva_detail' reserva.pk %}">Voltar</a>
+      {% if serie_count %}
+        <div class="mb-4">
+          <label class="form-label d-block">Escopo do cancelamento</label>
+          <div class="d-flex gap-4 flex-wrap">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="apply_scope" id="cancel-scope-single" value="single" checked>
+              <label class="form-check-label" for="cancel-scope-single">Cancelar somente esta reserva</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="apply_scope" id="cancel-scope-all" value="all">
+              <label class="form-check-label" for="cancel-scope-all">Cancelar todo o período</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="apply_scope" id="cancel-scope-range" value="range">
+              <label class="form-check-label" for="cancel-scope-range">Cancelar período específico</label>
+            </div>
+          </div>
+        </div>
+        <div class="row g-4 d-none" id="cancel-range-fields">
+          <div class="col-lg-4">
+            <label class="form-label" for="cancel-data-inicial">Data inicial do cancelamento</label>
+            <input
+              class="form-control form-control-lg"
+              type="date"
+              id="cancel-data-inicial"
+              name="cancel_data_inicial"
+              value="{{ serie_primeira_data|date:'Y-m-d' }}"
+            >
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label" for="cancel-data-final">Data final do cancelamento</label>
+            <input
+              class="form-control form-control-lg"
+              type="date"
+              id="cancel-data-final"
+              name="cancel_data_final"
+              value="{{ serie_ultima_data|date:'Y-m-d' }}"
+            >
+          </div>
+        </div>
+      {% endif %}
+      <div class="mt-4">
+        <label class="form-label" for="motivo-cancelamento">Motivo do cancelamento</label>
+        <textarea
+          class="form-control"
+          id="motivo-cancelamento"
+          name="motivo_cancelamento"
+          rows="4"
+          required
+          placeholder="Descreva o motivo do cancelamento"
+        ></textarea>
+      </div>
+      <div class="d-flex gap-2 flex-wrap mt-4">
+        <button class="btn btn-danger text-white" type="submit">Confirmar cancelamento</button>
+        <a class="btn btn-light" href="{% url 'reserva_garagem:reserva_detail' reserva.pk %}">Voltar</a>
+      </div>
     </form>
   </section>
+
+  {% if serie_count %}
+    <script>
+      (() => {
+        const radios = document.querySelectorAll('input[name="apply_scope"]');
+        const rangeFields = document.getElementById("cancel-range-fields");
+        if (!radios.length || !rangeFields) return;
+        const syncRangeFields = () => {
+          const selected = document.querySelector('input[name="apply_scope"]:checked')?.value;
+          rangeFields.classList.toggle("d-none", selected !== "range");
+        };
+        radios.forEach((radio) => radio.addEventListener("change", syncRangeFields));
+        syncRangeFields();
+      })();
+    </script>
+  {% endif %}
 {% endblock %}

@@ -272,6 +272,22 @@ class MensageriaViewTests(MensageriaBaseTest):
         self.assertContains(response, "Atualização")
         self.assertContains(response, 'mensageriaPendenciaModal', html=False)
 
+    def test_modal_individual_envia_proximo_destino_para_link_de_analise_quando_existir(self):
+        mensagem = criar_mensagem_rascunho(
+            assunto="Nova solicitação",
+            corpo="Analise a reserva",
+            criada_por=self.admin,
+            payload_email={"link_analise": "/reserva-garagem/fila-fiscal/9/analisar/"},
+        )
+        mensagem.usuarios_alvo.add(self.destinatario)
+        publicar_mensagem(mensagem, usuario=self.admin)
+        self.client.login(username="ana", password="123")
+
+        response = self.client.get(reverse("noticias:public_list"))
+
+        self.assertContains(response, 'name="next_url"', html=False)
+        self.assertContains(response, 'value="/reserva-garagem/fila-fiscal/9/analisar/"', html=False)
+
     def test_modal_consolidado_aparece_com_mais_de_tres_pendencias(self):
         for indice in range(4):
             self._criar_mensagem_para(self.destinatario, assunto=f"Msg {indice}", corpo="Pendência")

@@ -638,6 +638,11 @@
   font-size: 1.1rem;
 }
 
+.regulariza-observacoes-panel h2 {
+  margin: 0 0 .45rem;
+  font-size: 1.1rem;
+}
+
 .regulariza-inline-form textarea {
   min-height: 130px;
 }

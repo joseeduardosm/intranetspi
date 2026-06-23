@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 19/06/2026 -->
+<!-- Objetivo: Exibir o backlog técnico compartilhado com resumo, filtros e ações rápidas. -->
+
+{% block title %}To-Do Técnico{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'todo_tecnico/css/todo_tecnico.css' %}">{% endblock %}
+
+{% block content %}
+  <!-- O topo da página contextualiza o módulo e oferece o atalho principal de criação. -->
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>Backlog técnico</h1>
+      <p>Lista compartilhada de pendências técnicas do portal, com abertura e conclusão simples.</p>
+    </div>
+    {% if acl_pode_escrever %}
+      <a class="btn btn-primary" href="{% url 'todo_tecnico:create' %}">Nova tarefa</a>
+    {% endif %}
+  </div>
+
+  <div class="todo-tecnico-layout">
+    <aside class="todo-tecnico-sidebar">
+      <section class="todo-tecnico-summary-grid mb-4">
+        <article class="todo-tecnico-summary-card">
+          <span>Total</span>
+          <strong>{{ resumo.total }}</strong>
+        </article>
+        <article class="todo-tecnico-summary-card">
+          <span>Abertas</span>
+          <strong>{{ resumo.abertas }}</strong>
+        </article>
+        <article class="todo-tecnico-summary-card">
+          <span>Concluídas</span>
+          <strong>{{ resumo.concluidas }}</strong>
+        </article>
+        <article class="todo-tecnico-summary-card">
+          <span>Minhas abertas</span>
+          <strong>{{ resumo.minhas_abertas }}</strong>
+        </article>
+      </section>
+
+      <section class="card border-0 shadow-sm todo-tecnico-monitor-card mb-4">
+        <div class="card-body p-4">
+          <div class="todo-tecnico-section-title">
+            <h2>Monitor de tokens</h2>
+            <p>Consumo local das execuções automáticas do portal.</p>
+          </div>
+          <article class="todo-tecnico-usage-card">
+            <span>Limite de uso de 5 horas</span>
+            <strong>{{ codex_monitoramento.janela_5h.consumido }} / {{ codex_monitoramento.janela_5h.limite }}</strong>
+            <div>% restante: {{ codex_monitoramento.janela_5h.percentual_restante }}%</div>
+            <div>Redefinição: {% if codex_monitoramento.janela_5h.redefinicao_em %}{{ codex_monitoramento.janela_5h.redefinicao_em|date:"H:i" }}{% else %}<span class="text-muted">sem uso recente</span>{% endif %}</div>
+          </article>
+          <article class="todo-tecnico-usage-card">
+            <span>Limite de uso semanal</span>
+            <strong>{{ codex_monitoramento.janela_semanal.consumido }} / {{ codex_monitoramento.janela_semanal.limite }}</strong>
+            <div>% restante: {{ codex_monitoramento.janela_semanal.percentual_restante }}%</div>
+            <div>Redefinição: {% if codex_monitoramento.janela_semanal.redefinicao_em %}{{ codex_monitoramento.janela_semanal.redefinicao_em|date:"d/m/Y H:i" }}{% else %}<span class="text-muted">sem uso recente</span>{% endif %}</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="card border-0 shadow-sm todo-tecnico-monitor-card mb-4">
+        <div class="card-body p-4">
+          <div class="todo-tecnico-section-title">
+            <h2>Fila do Codex</h2>
+            <p>Pendentes, em execução e últimos resultados.</p>
+          </div>
+          <div class="todo-tecnico-queue-block">
+            <h3>Pendentes</h3>
+            {% for execucao in codex_painel.pendentes %}
+              <article class="todo-tecnico-queue-item">
+                <strong>#{{ execucao.tarefa.pk }} · {{ execucao.tarefa.titulo|default:"Sem título" }}</strong>
+                <div>{{ execucao.status_legivel }}</div>
+                {% if execucao.agendado_para %}<div>{{ execucao.agendado_para|date:"d/m/Y H:i" }}</div>{% endif %}
+              </article>
+            {% empty %}
+              <p class="text-muted mb-0">Nenhuma execução pendente.</p>
+            {% endfor %}
+          </div>
+          <div class="todo-tecnico-queue-block">
+            <h3>Recentes</h3>
+            {% for execucao in codex_painel.recentes %}
+              <article class="todo-tecnico-queue-item {% if execucao.status == 'erro' %}is-error{% endif %}">
+                <strong>#{{ execucao.tarefa.pk }} · {{ execucao.tarefa.titulo|default:"Sem título" }}</strong>
+                <div>{{ execucao.status_legivel }}</div>
+                <div>{{ execucao.total_tokens }} tokens</div>
+              </article>
+            {% empty %}
+              <p class="text-muted mb-0">Nenhuma execução concluída ainda.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+
+      <section class="card border-0 shadow-sm todo-tecnico-monitor-card">
+        <div class="card-body p-4">
+          <div class="todo-tecnico-section-title">
+            <h2>Configuração do Codex</h2>
+            <p>Parâmetros reutilizados em toda execução automática.</p>
+          </div>
+          <form method="post" action="{% url 'todo_tecnico:codex_config' %}">
+            {% csrf_token %}
+            {% for field in codex_config_form %}
+              <div class="mb-3">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+              </div>
+            {% endfor %}
+            <button class="btn btn-primary w-100" type="submit">Salvar configuração</button>
+          </form>
+        </div>
+      </section>
+    </aside>
+
+    <div class="todo-tecnico-main">
+      <form method="get" class="card border-0 shadow-sm todo-tecnico-filter-card mb-4">
+        <div class="card-body p-4 d-flex flex-wrap gap-3 align-items-end">
+          <div class="todo-tecnico-filter-field">
+            <label class="form-label" for="id_situacao">Situação</label>
+            <select class="form-select form-select-lg" id="id_situacao" name="situacao">
+              <option value="abertas" {% if situacao_atual == "abertas" %}selected{% endif %}>Abertas</option>
+              <option value="concluidas" {% if situacao_atual == "concluidas" %}selected{% endif %}>Concluídas</option>
+              <option value="todas" {% if situacao_atual == "todas" %}selected{% endif %}>Todas</option>
+            </select>
+          </div>
+          <div class="form-check todo-tecnico-filter-check">
+            <input class="form-check-input" type="checkbox" value="1" id="id_minhas" name="minhas" {% if somente_minhas %}checked{% endif %}>
+            <label class="form-check-label" for="id_minhas">Mostrar apenas minhas tarefas</label>
+          </div>
+          <div class="d-flex gap-2 ms-auto">
+            <a class="btn btn-light" href="{% url 'todo_tecnico:list' %}">Limpar</a>
+            <button class="btn btn-outline-secondary" type="submit">Filtrar</button>
+          </div>
+        </div>
+      </form>
+
+      <div class="card border-0 shadow-sm todo-tecnico-list-card">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Tarefa</th>
+                <th>Criado por</th>
+                <th>Data de inserção</th>
+                <th>Data de conclusão</th>
+                <th>Situação</th>
+                <th class="text-end">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tarefa in tarefas %}
+                <tr>
+                  <td>
+                    <button
+                      class="todo-tecnico-task-id"
+                      type="button"
+                      data-copy-task-id="tarefa #{{ tarefa.pk }}"
+                      aria-label="Copiar identificador da tarefa {{ tarefa.pk }}"
+                      title="Clique para copiar tarefa #{{ tarefa.pk }}"
+                    >
+                      #{{ tarefa.pk }}
+                    </button>
+                    <strong>{{ tarefa.titulo|default:"Sem título" }}</strong>
+                    <div>{{ tarefa.descricao|truncatechars:220 }}</div>
+                    {% if tarefa.solucao %}
+                      <div class="todo-tecnico-solution-preview">{{ tarefa.solucao|truncatechars:160 }}</div>
+                    {% endif %}
+                  </td>
+                  <td>{{ tarefa.criado_por.get_full_name|default:tarefa.criado_por.username }}</td>
+                  <td>{{ tarefa.criado_em|date:"d/m/Y H:i" }}</td>
+                  <td>{% if tarefa.concluido_em %}{{ tarefa.concluido_em|date:"d/m/Y H:i" }}{% else %}<span class="text-muted">Em aberto</span>{% endif %}</td>
+                  <td>
+                    <span class="badge rounded-pill text-bg-{% if tarefa.esta_concluida %}success{% else %}warning{% endif %}">
+                      {% if tarefa.esta_concluida %}Concluída{% else %}Aberta{% endif %}
+                    </span>
+                  </td>
+                  <td class="text-end">
+                    <div class="dropdown">
+                      <button
+                        class="btn btn-sm btn-outline-secondary todo-tecnico-actions-toggle"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        data-bs-boundary="viewport"
+                        data-bs-popper-config='{"strategy":"fixed"}'
+                        title="Ações da tarefa #{{ tarefa.pk }}"
+                        aria-label="Abrir ações da tarefa #{{ tarefa.pk }}"
+                      >
+                        ...
+                      </button>
+                      <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="{% url 'todo_tecnico:detail' tarefa.pk %}">Ver</a></li>
+                        {% if acl_controle_total or tarefa.criado_por_id == request.user.id %}
+                          <li><a class="dropdown-item" href="{% url 'todo_tecnico:update' tarefa.pk %}">Editar</a></li>
+                          <li>
+                            <form method="post" action="{% url 'todo_tecnico:codex_run' tarefa.pk %}">
+                              {% csrf_token %}
+                              <button class="dropdown-item" type="submit">Codex</button>
+                            </form>
+                          </li>
+                          <li>
+                            <button
+                              class="dropdown-item"
+                              type="button"
+                              data-bs-toggle="modal"
+                              data-bs-target="#codexScheduleModal"
+                              data-codex-task-id="{{ tarefa.pk }}"
+                              data-codex-task-title="{{ tarefa.titulo|default:'Sem título'|escape }}"
+                            >
+                              Codex agendado
+                            </button>
+                          </li>
+                          {% if tarefa.esta_concluida %}
+                            <li>
+                              <form method="post" action="{% url 'todo_tecnico:reopen' tarefa.pk %}">
+                                {% csrf_token %}
+                                <button class="dropdown-item" type="submit">Reabrir</button>
+                              </form>
+                            </li>
+                          {% else %}
+                            <li><a class="dropdown-item" href="{% url 'todo_tecnico:solve' tarefa.pk %}">Solucionar</a></li>
+                          {% endif %}
+                          <li>
+                            <form method="post" action="{% url 'todo_tecnico:delete' tarefa.pk %}" onsubmit="return window.confirm('Deseja excluir a tarefa #{{ tarefa.pk }}?');">
+                              {% csrf_token %}
+                              <button class="dropdown-item text-danger" type="submit">Excluir</button>
+                            </form>
+                          </li>
+                        {% endif %}
+                      </ul>
+                    </div>
+                    {% if not acl_controle_total and tarefa.criado_por_id != request.user.id %}
+                      <div class="mt-2">
+                        <span class="text-muted small">Somente leitura</span>
+                      </div>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="6" class="text-muted text-center py-4">Nenhuma tarefa encontrada para os filtros selecionados.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="codexScheduleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form method="post" data-codex-schedule-form>
+          <div class="modal-header">
+            <div>
+              <h2 class="modal-title fs-5 mb-1">Agendar Codex</h2>
+              <p class="mb-0 text-muted" data-codex-schedule-title>Selecione a tarefa.</p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            {% csrf_token %}
+            <label class="form-label" for="{{ codex_agendamento_form.agendado_para.id_for_label }}">{{ codex_agendamento_form.agendado_para.label }}</label>
+            {{ codex_agendamento_form.agendado_para }}
+            {% if codex_agendamento_form.agendado_para.help_text %}<div class="form-text">{{ codex_agendamento_form.agendado_para.help_text }}</div>{% endif %}
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-light" type="button" data-bs-dismiss="modal">Cancelar</button>
+            <button class="btn btn-primary" type="submit">Agendar execução</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+{% block extra_js %}
+  <script>
+    (function () {
+      var copyButtons = document.querySelectorAll('[data-copy-task-id]');
+      if (!copyButtons.length) {
+        return;
+      }
+
+      function fallbackCopy(text) {
+        var textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', 'readonly');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+
+      async function copyTaskId(button) {
+        var text = button.dataset.copyTaskId;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            fallbackCopy(text);
+          }
+          button.dataset.copyState = 'copied';
+          button.title = 'Copiado: ' + text;
+          window.setTimeout(function () {
+            button.dataset.copyState = '';
+            button.title = 'Clique para copiar ' + text;
+          }, 1600);
+        } catch (error) {
+          fallbackCopy(text);
+        }
+      }
+
+      copyButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+          copyTaskId(button);
+        });
+      });
+
+      var scheduleModal = document.getElementById('codexScheduleModal');
+      if (!scheduleModal) {
+        return;
+      }
+
+      scheduleModal.addEventListener('show.bs.modal', function (event) {
+        var trigger = event.relatedTarget;
+        var form = scheduleModal.querySelector('[data-codex-schedule-form]');
+        var title = scheduleModal.querySelector('[data-codex-schedule-title]');
+        if (!trigger || !form || !title) {
+          return;
+        }
+
+        var taskId = trigger.getAttribute('data-codex-task-id');
+        var taskTitle = trigger.getAttribute('data-codex-task-title') || 'Sem título';
+        form.action = '/todo-tecnico/' + taskId + '/codex/agendar/';
+        title.textContent = 'Tarefa #' + taskId + ' · ' + taskTitle;
+      });
+    }());
+  </script>
+{% endblock %}

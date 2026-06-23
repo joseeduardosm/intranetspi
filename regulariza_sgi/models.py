@@ -24,6 +24,7 @@ class Imovel(models.Model):
     bairro = models.CharField('Bairro', max_length=120)
     numero = models.CharField('Número', max_length=40)
     area = models.DecimalField('Área (m²)', max_digits=14, decimal_places=2, null=True, blank=True)
+    motivo_desapropriacao = models.TextField('Motivo da desapropriação', blank=True)
     imissao_posse = models.DateField('Imissão na posse', null=True, blank=True)
     imunidade = models.BooleanField('Imunidade', default=False)
     tempo_imunidade = models.PositiveIntegerField('Tempo de imunidade (anos)', null=True, blank=True)

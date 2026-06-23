@@ -1,0 +1,301 @@
+/* Criado por OpenAI Codex em 19/06/2026 */
+/* Objetivo: Isolar o visual do backlog técnico sem interferir em outros módulos do portal. */
+
+:root {
+  --todo-tecnico-ink: #1e2f4d;
+  --todo-tecnico-accent: #215a9a;
+  --todo-tecnico-soft: #f5f7fb;
+  --todo-tecnico-line: rgba(30, 47, 77, 0.12);
+  --todo-tecnico-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+  --todo-tecnico-warm: #f3ede1;
+  --todo-tecnico-danger: #8f2d2d;
+}
+
+.todo-tecnico-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.todo-tecnico-sidebar {
+  position: sticky;
+  top: 1rem;
+}
+
+.todo-tecnico-main {
+  min-width: 0;
+}
+
+.todo-tecnico-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.todo-tecnico-summary-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--todo-tecnico-line);
+  border-radius: 1.1rem;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  box-shadow: var(--todo-tecnico-shadow);
+}
+
+.todo-tecnico-summary-card span {
+  color: #5d6b82;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.todo-tecnico-summary-card strong {
+  color: var(--todo-tecnico-ink);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.todo-tecnico-filter-card,
+.todo-tecnico-list-card,
+.todo-tecnico-form-card,
+.todo-tecnico-monitor-card {
+  border-radius: 1.2rem;
+  overflow: visible;
+}
+
+.todo-tecnico-monitor-card {
+  background:
+    radial-gradient(circle at top right, rgba(33, 90, 154, 0.12), transparent 35%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.todo-tecnico-section-title h2 {
+  margin: 0 0 0.25rem;
+  color: var(--todo-tecnico-ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.todo-tecnico-section-title p {
+  margin: 0 0 1rem;
+  color: #5d6b82;
+  font-size: 0.92rem;
+}
+
+.todo-tecnico-usage-card {
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--todo-tecnico-line);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.todo-tecnico-usage-card + .todo-tecnico-usage-card {
+  margin-top: 0.85rem;
+}
+
+.todo-tecnico-usage-card span,
+.todo-tecnico-queue-block h3 {
+  color: #5d6b82;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.todo-tecnico-usage-card strong {
+  display: block;
+  margin: 0.35rem 0;
+  color: var(--todo-tecnico-ink);
+  font-size: 1.15rem;
+}
+
+.todo-tecnico-queue-block + .todo-tecnico-queue-block {
+  margin-top: 1rem;
+}
+
+.todo-tecnico-queue-item,
+.todo-tecnico-history-item {
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--todo-tecnico-line);
+  border-radius: 0.95rem;
+  background: #fff;
+}
+
+.todo-tecnico-queue-item + .todo-tecnico-queue-item,
+.todo-tecnico-history-item + .todo-tecnico-history-item {
+  margin-top: 0.75rem;
+}
+
+.todo-tecnico-queue-item.is-error,
+.todo-tecnico-history-item.is-error {
+  border-color: rgba(143, 45, 45, 0.22);
+  background: #fff6f6;
+}
+
+.todo-tecnico-filter-field {
+  min-width: 220px;
+}
+
+.todo-tecnico-filter-check {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--todo-tecnico-line);
+  border-radius: 1rem;
+  background: var(--todo-tecnico-soft);
+}
+
+.todo-tecnico-list-card thead th {
+  color: var(--todo-tecnico-ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.todo-tecnico-list-card tbody td {
+  vertical-align: middle;
+}
+
+.todo-tecnico-list-card tbody tr td:first-child strong {
+  color: var(--todo-tecnico-ink);
+}
+
+.todo-tecnico-solution-preview {
+  margin-top: 0.35rem;
+  color: #5d6b82;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.todo-tecnico-task-id {
+  display: inline-block;
+  margin-right: 0.45rem;
+  padding: 0.18rem 0.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: #e8eef9;
+  color: var(--todo-tecnico-accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.todo-tecnico-task-id:hover,
+.todo-tecnico-task-id:focus-visible {
+  background: #d8e5fb;
+  color: #163d6d;
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.todo-tecnico-task-id[data-copy-state="copied"] {
+  background: #d9f3e4;
+  color: #146c43;
+}
+
+.todo-tecnico-shortcut-tip {
+  align-self: center;
+  color: #5d6b82;
+  font-size: 0.88rem;
+}
+
+.todo-tecnico-shortcut-tip kbd {
+  padding: 0.14rem 0.38rem;
+  border: 1px solid rgba(30, 47, 77, 0.18);
+  border-radius: 0.45rem;
+  background: #f8fbff;
+  color: var(--todo-tecnico-ink);
+  font-size: 0.82rem;
+  box-shadow: inset 0 -1px 0 rgba(30, 47, 77, 0.08);
+}
+
+.todo-tecnico-list-card .table-responsive {
+  overflow: visible;
+}
+
+.todo-tecnico-actions-toggle {
+  min-width: 2.6rem;
+}
+
+.todo-tecnico-list-card .dropdown-menu form {
+  margin: 0;
+}
+
+.todo-tecnico-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.todo-tecnico-detail-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--todo-tecnico-line);
+  border-radius: 1rem;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+}
+
+.todo-tecnico-detail-card span {
+  color: #5d6b82;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.todo-tecnico-detail-card strong {
+  color: var(--todo-tecnico-ink);
+  font-size: 1rem;
+}
+
+.todo-tecnico-detail-section + .todo-tecnico-detail-section {
+  margin-top: 1.75rem;
+}
+
+.todo-tecnico-detail-section h2 {
+  margin-bottom: 0.65rem;
+  color: var(--todo-tecnico-ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.todo-tecnico-detail-body {
+  color: #324256;
+  line-height: 1.6;
+  white-space: normal;
+}
+
+.todo-tecnico-history-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (max-width: 767.98px) {
+  .todo-tecnico-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .todo-tecnico-sidebar {
+    position: static;
+  }
+
+  .todo-tecnico-filter-field {
+    min-width: 100%;
+  }
+
+  .todo-tecnico-filter-check {
+    width: 100%;
+  }
+
+  .todo-tecnico-shortcut-tip {
+    width: 100%;
+    margin-bottom: 0.25rem;
+  }
+
+}

@@ -11,6 +11,19 @@
   border-radius: 12px;
 }
 
+.setores-voltar-btn {
+  border: 1px solid #495057;
+  background: #495057;
+  color: #fff;
+}
+
+.setores-voltar-btn:hover,
+.setores-voltar-btn:focus-visible {
+  border-color: #3c4248;
+  background: #3c4248;
+  color: #fff;
+}
+
 .setores-search-input {
   min-width: min(520px, 100%);
 }

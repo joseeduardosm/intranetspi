@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por José Eduardo Santana Martins e OpenAI Codex em 17/06/2026 -->
+<!-- Objetivo: Exibir um formulário de avaliação padrão global para manter seus blocos estruturais. -->
+{% block title %}Formulário de Avaliação Padrão{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div class="spi-page-title mb-0">
+      <h1>{{ formulario_padrao.nome }}</h1>
+      <p>Gerencie escala, faixas de liberação e grupos do formulário padrão global selecionado.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'contratos:avaliacao_padrao_list' %}">Voltar</a>
+      {% if usuario_pode_gerir_formularios_padrao_globais %}
+        <a class="btn btn-primary" href="{% url 'contratos:avaliacao_padrao_grupo_create' formulario_padrao.pk %}">Novo grupo</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <section class="card shadow-sm border-0">
+    <div class="card-header contratos-section-header justify-content-between">
+      <h2>Dados gerais</h2>
+      {% if usuario_pode_gerir_formularios_padrao_globais %}
+        <div class="dropdown">
+          <button
+            class="btn btn-sm btn-outline-secondary contratos-actions-toggle"
+            type="button"
+            data-bs-toggle="dropdown"
+            data-bs-boundary="viewport"
+            data-bs-popper-config='{"strategy":"fixed"}'
+            title="Ações"
+          >...</button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_padrao_update' formulario_padrao.pk %}">Editar</a></li>
+            <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_padrao_escala_create' formulario_padrao.pk %}">Nova nota</a></li>
+            <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_padrao_faixa_create' formulario_padrao.pk %}">Nova faixa</a></li>
+            <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_padrao_grupo_create' formulario_padrao.pk %}">Novo grupo</a></li>
+            <li><a class="dropdown-item text-danger" href="{% url 'contratos:avaliacao_padrao_delete' formulario_padrao.pk %}">Excluir</a></li>
+          </ul>
+        </div>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <div class="contratos-summary-grid">
+        <div class="contratos-summary-card p-3 border rounded-4">
+          <span class="contratos-kicker">Status</span>
+          <h2>{{ formulario_padrao.nome }}</h2>
+          <p class="mb-0">{% if formulario_padrao.ativo %}<span class="badge text-bg-success">Ativo</span>{% else %}<span class="badge text-bg-secondary">Inativo</span>{% endif %}</p>
+        </div>
+        <div class="contratos-summary-card p-3 border rounded-4">
+          <span class="contratos-kicker">Última alteração</span>
+          <h2>{{ formulario_padrao.atualizado_por_display }}</h2>
+          <p class="mb-0">{{ formulario_padrao.atualizado_em|date:"d/m/Y H:i" }}</p>
+        </div>
+      </div>
+      {% if formulario_padrao.descricao %}
+        <p class="mt-3 mb-2"><strong>Descrição:</strong> {{ formulario_padrao.descricao }}</p>
+      {% endif %}
+      {% if formulario_padrao.observacoes %}
+        <p class="mb-0"><strong>Observações:</strong> {{ formulario_padrao.observacoes }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="card border-0 shadow-sm mt-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-lg-4">
+          <div class="card h-100 border-0 bg-light-subtle">
+            <div class="card-header contratos-section-header justify-content-between">
+              <h2>Escala</h2>
+              {% if usuario_pode_gerir_formularios_padrao_globais %}
+                <a class="btn btn-sm btn-primary" href="{% url 'contratos:avaliacao_padrao_escala_create' formulario_padrao.pk %}">Nova nota</a>
+              {% endif %}
+            </div>
+            <div class="card-body">
+              <ul class="list-unstyled mb-0">
+                {% for escala in formulario_padrao.escalas.all %}
+                  <li class="contratos-inline-action">
+                    <span>{{ escala.valor }} - {{ escala.legenda }}</span>
+                    {% if usuario_pode_gerir_formularios_padrao_globais %}
+                      <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary contratos-actions-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-popper-config='{"strategy":"fixed"}' title="Ações">...</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_padrao_escala_update' escala.pk %}">Editar</a></li>
+                          <li><a class="dropdown-item text-danger" href="{% url 'contratos:avaliacao_padrao_escala_delete' escala.pk %}">Excluir</a></li>
+                        </ul>
+                      </div>
+                    {% endif %}
+                  </li>
+                {% empty %}
+                  <li class="text-muted">Sem notas cadastradas.</li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="card h-100 border-0 bg-light-subtle">
+            <div class="card-header contratos-section-header justify-content-between">
+              <h2>Faixas de liberação</h2>
+              {% if usuario_pode_gerir_formularios_padrao_globais %}
+                <a class="btn btn-sm btn-primary" href="{% url 'contratos:avaliacao_padrao_faixa_create' formulario_padrao.pk %}">Nova faixa</a>
+              {% endif %}
+            </div>
+            <div class="card-body">
+              <ul class="list-unstyled mb-0">
+                {% for faixa in formulario_padrao.faixas_liberacao.all %}
+                  <li class="contratos-inline-action">
+                    <span>{{ faixa.percentual_liberacao }}% para notas de {{ faixa.nota_minima }}{% if faixa.nota_maxima %} até {{ faixa.nota_maxima }}{% endif %}</span>
+                    {% if usuario_pode_gerir_formularios_padrao_globais %}
+                      <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary contratos-actions-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-popper-config='{"strategy":"fixed"}' title="Ações">...</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_padrao_faixa_update' faixa.pk %}">Editar</a></li>
+                          <li><a class="dropdown-item text-danger" href="{% url 'contratos:avaliacao_padrao_faixa_delete' faixa.pk %}">Excluir</a></li>
+                        </ul>
+                      </div>
+                    {% endif %}
+                  </li>
+                {% empty %}
+                  <li class="text-muted">Sem faixas cadastradas.</li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="card h-100 border-0 bg-light-subtle">
+            <div class="card-header contratos-section-header justify-content-between">
+              <h2>Grupos e itens</h2>
+              {% if usuario_pode_gerir_formularios_padrao_globais %}
+                <a class="btn btn-sm btn-primary" href="{% url 'contratos:avaliacao_padrao_grupo_create' formulario_padrao.pk %}">Novo grupo</a>
+              {% endif %}
+            </div>
+            <div class="card-body">
+              {% for grupo in formulario_padrao.grupos.all %}
+                <div class="contratos-group-box">
+                  <div class="d-flex justify-content-between gap-2">
+                    <strong>{{ grupo.ordem }}. {{ grupo.nome }}</strong>
+                    {% if usuario_pode_gerir_formularios_padrao_globais %}
+                      <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary contratos-actions-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-popper-config='{"strategy":"fixed"}' title="Ações">...</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_padrao_grupo_update' grupo.pk %}">Editar</a></li>
+                          <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_padrao_item_create' grupo.pk %}">Novo item</a></li>
+                          <li><a class="dropdown-item text-danger" href="{% url 'contratos:avaliacao_padrao_grupo_delete' grupo.pk %}">Excluir</a></li>
+                        </ul>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <ul class="mt-2 mb-0">
+                    {% for item in grupo.itens.all %}
+                      <li class="contratos-inline-action">
+                        <span>{{ item.ordem }}. {{ item.descricao|truncatechars:80 }}</span>
+                        {% if usuario_pode_gerir_formularios_padrao_globais %}
+                          <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary contratos-actions-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-popper-config='{"strategy":"fixed"}' title="Ações">...</button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                              <li><a class="dropdown-item" href="{% url 'contratos:avaliacao_padrao_item_update' item.pk %}">Editar</a></li>
+                              <li><a class="dropdown-item text-danger" href="{% url 'contratos:avaliacao_padrao_item_delete' item.pk %}">Excluir</a></li>
+                            </ul>
+                          </div>
+                        {% endif %}
+                      </li>
+                    {% empty %}
+                      <li class="text-muted">Sem itens neste grupo.</li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              {% empty %}
+                <p class="text-muted mb-0">Nenhum grupo cadastrado.</p>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

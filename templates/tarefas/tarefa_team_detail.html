@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% load static %}
+<!-- Criado por OpenAI Codex em 23/06/2026 -->
+<!-- Objetivo: Exibir o detalhe gerencial de uma pessoa com resumo, subordinados e tabela de tarefas. -->
+
+{% block title %}Equipe - {{ pessoa.perfil.nome_completo|default:pessoa.username }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'tarefas/css/tarefas.css' %}">{% endblock %}
+
+{% block content %}
+  <div class="spi-page-title d-flex justify-content-between align-items-start gap-3">
+    <div>
+      <h1>{{ page_title }}</h1>
+      <p>{{ page_description }}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-primary" href="{% url 'tarefas:list' %}?dashboard=mine&view=table">Minha visão</a>
+      <a class="btn btn-primary" href="{% url 'tarefas:list' %}?dashboard=team&scope=imediatos">Equipe</a>
+    </div>
+  </div>
+
+  <section class="tarefas-person-hero card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <div class="tarefas-person-hero__header">
+        <div>
+          <h2 class="mb-1">{{ person_card.nome }}</h2>
+          <div class="text-muted">{{ person_card.cargo|default:"Sem cargo" }}{% if person_card.setor %} • {{ person_card.setor }}{% endif %}</div>
+        </div>
+        <span class="badge rounded-pill text-bg-{% if person_card.faixa_ocupacao.cor == 'orange' %}warning{% else %}{{ person_card.faixa_ocupacao.cor }}{% endif %}">
+          {{ person_card.faixa_ocupacao.icone }} {{ person_card.faixa_ocupacao.rotulo }}
+        </span>
+      </div>
+      <div class="tarefas-detail-grid mt-4">
+        <article class="tarefas-detail-item">
+          <span>Total de tarefas operacionais</span>
+          <strong>{{ person_card.total_operacionais }}</strong>
+        </article>
+        <article class="tarefas-detail-item">
+          <span>Carga de trabalho</span>
+          <strong>{{ person_card.carga_total|floatformat:1 }} pts</strong>
+        </article>
+        <article class="tarefas-detail-item">
+          <span>Atrasadas</span>
+          <strong>{{ person_card.resumo.atrasadas }}</strong>
+        </article>
+        <article class="tarefas-detail-item">
+          <span>Usuário</span>
+          <strong>{{ pessoa.username }}</strong>
+        </article>
+      </div>
+      <div class="tarefas-progress-highlight mt-4">
+        <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+          <strong>Ocupação da pessoa</strong>
+          <span>{{ person_card.carga_total|floatformat:1 }} pts</span>
+        </div>
+        <div class="progress tarefas-progress tarefas-progress--lg mt-2">
+          <div class="progress-bar bg-{% if person_card.faixa_ocupacao.cor == 'orange' %}warning{% else %}{{ person_card.faixa_ocupacao.cor }}{% endif %}" role="progressbar" style="width: {{ person_card.progress_percentual }}%;"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {% if subordinate_cards %}
+    <section class="mb-4">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+        <h2 class="h4 mb-0">Subordinados imediatos</h2>
+        <span class="text-muted small">{{ subordinate_cards|length }} pessoa(s)</span>
+      </div>
+      <div class="tarefas-team-grid">
+        {% for card in subordinate_cards %}
+          <a class="tarefas-team-card" href="{% url 'tarefas:team_person' card.usuario.pk %}">
+            <div class="tarefas-team-card__head">
+              <strong>{{ card.nome }}</strong>
+              <span class="badge rounded-pill text-bg-{% if card.faixa_ocupacao.cor == 'orange' %}warning{% else %}{{ card.faixa_ocupacao.cor }}{% endif %}">
+                {{ card.faixa_ocupacao.rotulo }}
+              </span>
+            </div>
+            <div class="text-muted small">{{ card.cargo|default:"Sem cargo" }}{% if card.setor %} • {{ card.setor }}{% endif %}</div>
+            <div class="tarefas-team-card__metrics">
+              <span>{{ card.total_operacionais }} tarefa(s)</span>
+              <strong>{{ card.carga_total|floatformat:1 }} pts</strong>
+            </div>
+            <div class="progress tarefas-progress mt-2">
+              <div class="progress-bar bg-{% if card.faixa_ocupacao.cor == 'orange' %}warning{% else %}{{ card.faixa_ocupacao.cor }}{% endif %}" role="progressbar" style="width: {{ card.progress_percentual }}%;"></div>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <form method="get" class="card border-0 shadow-sm tarefas-filter-card mb-4">
+    <div class="card-body p-4 row g-3 align-items-end">
+      <div class="col-lg-6">
+        <label class="form-label" for="{{ form.q.id_for_label }}">{{ form.q.label }}</label>
+        <input class="form-control form-control-lg" type="text" name="q" id="{{ form.q.id_for_label }}" value="{{ request.GET.q|default:'' }}" placeholder="Pesquisar nas tarefas desta pessoa...">
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label" for="{{ form.prioridade.id_for_label }}">{{ form.prioridade.label }}</label>
+        {{ form.prioridade }}
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label" for="{{ form.status.id_for_label }}">{{ form.status.label }}</label>
+        {{ form.status }}
+      </div>
+      <div class="col-lg-2 d-flex gap-2">
+        <a class="btn btn-light w-50" href="{% url 'tarefas:team_person' pessoa.pk %}">Limpar</a>
+        <button class="btn btn-outline-secondary w-50" type="submit">Buscar</button>
+      </div>
+    </div>
+  </form>
+
+  <section class="card border-0 shadow-sm tarefas-list-card">
+    <div class="card-body border-bottom d-flex justify-content-between align-items-center flex-wrap gap-3">
+      <div>
+        <h2 class="h4 mb-1">Tarefas da pessoa</h2>
+        <p class="text-muted mb-0">Cada tarefa é clicável e abre o detalhe operacional completo.</p>
+      </div>
+      <span class="badge rounded-pill text-bg-light">{{ tarefas|length }} tarefa(s)</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle mb-0 tarefas-table">
+        <thead>
+          <tr>
+            <th><a href="{{ sort_urls.id }}">ID</a></th>
+            <th><a href="{{ sort_urls.titulo }}">Título</a></th>
+            <th><a href="{{ sort_urls.prazo }}">Prazo</a></th>
+            <th><a href="{{ sort_urls.criado_por }}">Autor</a></th>
+            <th><a href="{{ sort_urls.responsavel }}">Atribuído</a></th>
+            <th>Status</th>
+            <th><a href="{{ sort_urls.atualizado_em }}">Última modificação</a></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tarefa in tarefas %}
+            <tr>
+              <td>#{{ tarefa.pk }}</td>
+              <td>
+                <a class="tarefas-link-title" href="{% url 'tarefas:detail' tarefa.pk %}">{{ tarefa.titulo }}</a>
+                <div class="text-muted">{{ tarefa.descricao|truncatechars:120 }}</div>
+              </td>
+              <td class="tarefas-prazo-cell">
+                <div class="tarefas-progress-wrapper">
+                  <div class="progress tarefas-progress">
+                    <div class="progress-bar bg-{% if tarefa.progresso_prazo.cor == 'danger-strong' %}danger{% else %}{{ tarefa.progresso_prazo.cor }}{% endif %}" role="progressbar" style="width: {{ tarefa.progresso_prazo.percentual }}%;"></div>
+                  </div>
+                  <div class="tarefas-progress-meta">
+                    <strong>{{ tarefa.progresso_prazo.percentual|floatformat:1 }}%</strong>
+                    <span class="{% if tarefa.progresso_prazo.atrasada %}text-danger fw-semibold{% endif %}">{{ tarefa.prazo|date:"d/m/Y H:i" }}</span>
+                  </div>
+                </div>
+              </td>
+              <td>{{ tarefa.autor_nome }}</td>
+              <td>{{ tarefa.responsavel_nome }}</td>
+              <td>
+                <span class="badge rounded-pill text-bg-{% if tarefa.status == 'CONCLUIDA' %}success{% elif tarefa.status == 'EM_ANDAMENTO' %}warning{% elif tarefa.status == 'ARQUIVADA' %}secondary{% else %}primary{% endif %}">
+                  {{ tarefa.get_status_display }}
+                </span>
+              </td>
+              <td>{{ tarefa.atualizado_em|date:"d/m/Y H:i" }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="text-center text-muted py-4">Nenhuma tarefa encontrada para os filtros selecionados.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

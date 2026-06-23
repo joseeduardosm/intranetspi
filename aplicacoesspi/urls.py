@@ -50,8 +50,10 @@ urlpatterns = [
     path('reservas-recursos/', RedirectView.as_view(pattern_name='reserva_espacos:agenda', permanent=False)),
     path('reserva-espacos/', include('reserva_espacos.urls')),
     path('setores/', include('setores.urls')),
+    path('tarefas/', include('tarefas.urls')),
     path('acls/', include('acls.urls')),
     path('organograma/', include('organograma.urls')),
+    path('todo-tecnico/', include('todo_tecnico.urls')),
     path('admin/', admin.site.urls),
 ]
 

@@ -63,22 +63,39 @@
           </div>
         </div>
       </div>
-      <div class="col-lg-4">
+      <div class="col-lg-3">
         <label class="form-label" for="{{ form.marca_veiculo.id_for_label }}">Marca</label>
         {{ form.marca_veiculo }}
         {{ form.marca_veiculo.errors }}
       </div>
-      <div class="col-lg-4">
+      <div class="col-lg-3">
         <label class="form-label" for="{{ form.modelo_veiculo.id_for_label }}">Modelo</label>
         {{ form.modelo_veiculo }}
         {{ form.modelo_veiculo.errors }}
       </div>
-      <div class="col-lg-4">
+      <div class="col-lg-3">
         <label class="form-label" for="{{ form.cor_veiculo.id_for_label }}">Cor</label>
         {{ form.cor_veiculo }}
         {{ form.cor_veiculo.errors }}
       </div>
-      <div class="col-lg-4">
+      {% if form.mostrar_responsavel_campo %}
+        <div class="col-lg-8">
+          <label class="form-label" for="{{ form.responsavel.id_for_label }}">{{ form.responsavel.label }}</label>
+          {{ form.responsavel }}
+          {% if form.responsavel.help_text %}<div class="form-text">{{ form.responsavel.help_text }}</div>{% endif %}
+          {{ form.responsavel.errors }}
+          {% if form.usuarios_responsaveis_sugestoes %}
+            <datalist id="reserva-garagem-responsaveis">
+              {% for usuario in form.usuarios_responsaveis_sugestoes %}
+                <option value="{{ usuario.nome }}">{{ usuario.username }}{% if usuario.email %} • {{ usuario.email }}{% endif %}</option>
+              {% endfor %}
+            </datalist>
+          {% endif %}
+        </div>
+      {% else %}
+        {{ form.responsavel }}
+      {% endif %}
+      <div class="col-lg-3">
         <label class="form-label" for="{{ form.placa_veiculo.id_for_label }}">Placa</label>
         {{ form.placa_veiculo }}
         {{ form.placa_veiculo.errors }}

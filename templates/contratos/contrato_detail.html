@@ -5,6 +5,7 @@
 <!-- Objetivo: Exibir o resumo do contrato V2 com itens, checklist, avaliação, competências e contatos internos. -->
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'contratos/css/contratos.css' %}">
+  <link rel="stylesheet" href="{% static 'contratos/css/contrato_detail.css' %}">
   <link rel="stylesheet" href="{% static 'usuarios/css/ramais.css' %}">
 {% endblock %}
 
@@ -44,7 +45,7 @@
       <div class="card-body">
         <span class="contratos-kicker">Execução financeira</span>
         <h2>R$ {{ contrato.valor_executado|brl }}</h2>
-        <p>Saldo restante: R$ {{ contrato.valor_saldo|brl }}</p>
+        <p>Saldo restante: R$ {{ contrato.valor_saldo|brl }} - {{ contrato.percentual_saldo_display }}%</p>
       </div>
     </article>
   </section>
@@ -497,6 +498,41 @@
       {% if usuario_pode_gerir and not contrato.competencias.exists %}<a class="btn btn-sm btn-primary" href="{% url 'contratos:avaliacao_form_create' contrato.pk %}">Novo formulário</a>{% endif %}
     </div>
     <div class="card-body">
+      {% if formularios_avaliacao_padrao_ativos %}
+        <div class="border rounded-4 p-3 mb-4 bg-light-subtle">
+          <div class="d-flex flex-column gap-2">
+            <h3 class="contratos-subtitle mb-0">Formulário de Avaliação Padrão</h3>
+            <p class="text-muted mb-0">Carregue um modelo institucional pronto para criar uma nova versão ativa no contrato.</p>
+          </div>
+          <form method="post" action="{% url 'contratos:avaliacao_padrao_carregar' contrato.pk %}" class="mt-3">
+            {% csrf_token %}
+            <div class="d-flex flex-column gap-2">
+              {% for formulario_padrao in formularios_avaliacao_padrao_ativos %}
+                <label class="form-check d-flex align-items-start gap-2">
+                  <input
+                    class="form-check-input mt-1"
+                    type="radio"
+                    name="formulario_padrao_id"
+                    value="{{ formulario_padrao.pk }}"
+                    {% if forloop.first %}checked{% endif %}
+                  >
+                  <span>
+                    <strong>{{ formulario_padrao.nome }}</strong>
+                    {% if formulario_padrao.descricao %}
+                      <span class="d-block text-muted small mt-1">{{ formulario_padrao.descricao }}</span>
+                    {% endif %}
+                  </span>
+                </label>
+              {% endfor %}
+            </div>
+            {% if usuario_pode_carregar_formulario_padrao %}
+              <div class="d-flex justify-content-end mt-3">
+                <button class="btn btn-sm btn-outline-primary" type="submit">Carregar Formulário</button>
+              </div>
+            {% endif %}
+          </form>
+        </div>
+      {% endif %}
       {% for formulario in contrato.formularios_avaliacao.all %}
         <article class="contratos-version-card">
           <div class="d-flex justify-content-between flex-wrap gap-2">
@@ -646,18 +682,84 @@
   {% endif %}
 
   <section class="card border-0 shadow-sm mt-4">
+    <div class="card-header contratos-section-header">
+      <h2>Histórico do contrato</h2>
+    </div>
+    <div class="card-body">
+      {% if historico_contrato %}
+        <div class="contratos-auditoria-lista">
+          {% for evento in historico_contrato %}
+            <article class="contratos-auditoria-item{% if forloop.counter > historico_contrato_inicial_limite %} d-none contratos-auditoria-extra contratos-auditoria-extra-contrato{% endif %}">
+              <div class="contratos-auditoria-meta">
+                <span>{{ evento.created_at|date:"d/m/Y H:i" }}</span>
+                <strong>{{ evento.usuario_display }}</strong>
+              </div>
+              <p class="mb-0">{{ evento.resumo|capfirst }}</p>
+              {% if evento.payload.changes or evento.payload.extra %}
+                <details class="contratos-auditoria-detalhes">
+                  <summary>Ver detalhes</summary>
+                  {% if evento.payload.changes %}
+                    <div class="table-responsive mt-3">
+                      <table class="table table-sm align-middle contratos-auditoria-tabela mb-0">
+                        <thead>
+                          <tr>
+                            <th>Campo</th>
+                            <th>Antes</th>
+                            <th>Depois</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for change in evento.payload.changes %}
+                            <tr>
+                              <td>{{ change.label }}</td>
+                              <td>{{ change.before }}</td>
+                              <td>{{ change.after }}</td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  {% endif %}
+                  {% if evento.payload.extra %}
+                    {% render_auditoria_extra evento.payload.extra %}
+                  {% endif %}
+                </details>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+        {% if historico_contrato|length > historico_contrato_inicial_limite %}
+          <button
+            class="btn btn-outline-secondary btn-sm mt-3"
+            type="button"
+            data-auditoria-toggle=".contratos-auditoria-extra-contrato"
+          >Mostrar mais</button>
+        {% endif %}
+      {% else %}
+        <p class="text-muted mb-0">Nenhum evento auditável foi registrado para este contrato até agora.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="card border-0 shadow-sm mt-4">
     <div class="card-header contratos-section-header justify-content-between">
       <h2>Competências geradas</h2>
       {% if usuario_pode_gerir and not contrato.competencias.exists %}
         <form method="post" action="{% url 'contratos:competencias_generate' contrato.pk %}" id="formGerarCompetencias">
           {% csrf_token %}
-          <button class="btn btn-sm {% if contrato.checklist_ativo %}btn-primary{% else %}btn-outline-primary{% endif %}" type="button" id="btnDispararModalCompetencias" {% if not contrato.checklist_ativo %}disabled{% endif %}>Gerar competências</button>
+          <button
+            class="btn btn-sm {% if contrato.checklist_ativo and contrato.itens.exists %}btn-primary{% else %}btn-outline-primary{% endif %}"
+            type="button"
+            id="btnDispararModalCompetencias"
+            {% if not contrato.checklist_ativo or not contrato.itens.exists %}disabled{% endif %}
+            title="{% if not contrato.itens.exists %}Cadastre ao menos um item no contrato para gerar competências.{% elif not contrato.checklist_ativo %}Cadastre e ative um checklist antes de gerar competências.{% endif %}"
+          >Gerar competências</button>
         </form>
       {% endif %}
     </div>
     <div class="card-body">
       <div id="competencias-paginadas-list">
-        {% for competencia in contrato.competencias.all %}
+        {% for competencia in competencias_ordenadas %}
           <article class="contratos-competencia-card {{ competencia.monitoramento_fundo_classe }}">
             <div class="d-flex justify-content-between flex-wrap gap-3 align-items-start">
               <div>
@@ -689,44 +791,170 @@
             {% endif %}
             <div class="d-flex flex-wrap gap-2 mt-3">
               {% if usuario_pode_medicao %}
-                {% if competencia.medicao_disponivel %}
-                  <a class="btn btn-sm contratos-stage-btn{% if competencia.medicao_estado == 'done' %} is-done{% elif competencia.medicao_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_medicao' competencia.pk %}">Medição</a>
-                {% else %}
-                  <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true">Medição</span>
-                {% endif %}
+                <div class="contratos-stage-slot">
+                  {% if competencia.medicao_disponivel %}
+                    <a class="btn btn-sm contratos-stage-btn{% if competencia.medicao_estado == 'done' %} is-done{% elif competencia.medicao_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_medicao' competencia.pk %}">Medição</a>
+                  {% else %}
+                    <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true" title="{{ competencia.motivo_bloqueio_medicao }}">Medição</span>
+                    <small class="contratos-stage-help">{{ competencia.motivo_bloqueio_medicao }}</small>
+                  {% endif %}
+                </div>
               {% endif %}
               {% if competencia.exige_avaliacao and usuario_pode_avaliacao %}
-                {% if competencia.avaliacao_disponivel %}
-                  <a class="btn btn-sm contratos-stage-btn{% if competencia.avaliacao_estado == 'done' %} is-done{% elif competencia.avaliacao_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_avaliacao' competencia.pk %}">Avaliação</a>
-                {% else %}
-                  <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true">Avaliação</span>
-                {% endif %}
+                <div class="contratos-stage-slot">
+                  {% if competencia.avaliacao_disponivel %}
+                    <a class="btn btn-sm contratos-stage-btn{% if competencia.avaliacao_estado == 'done' %} is-done{% elif competencia.avaliacao_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_avaliacao' competencia.pk %}">Avaliação</a>
+                  {% else %}
+                    <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true" title="{{ competencia.motivo_bloqueio_avaliacao }}">Avaliação</span>
+                    <small class="contratos-stage-help">{{ competencia.motivo_bloqueio_avaliacao }}</small>
+                  {% endif %}
+                </div>
               {% endif %}
               {% if usuario_pode_checklist %}
-                {% if competencia.checklist_disponivel %}
-                  <a class="btn btn-sm contratos-stage-btn{% if competencia.checklist_estado == 'done' %} is-done{% elif competencia.checklist_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_checklist' competencia.pk %}">Checklist</a>
-                {% else %}
-                  <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true">Checklist</span>
-                {% endif %}
+                <div class="contratos-stage-slot">
+                  {% if competencia.checklist_disponivel %}
+                    <a class="btn btn-sm contratos-stage-btn{% if competencia.checklist_estado == 'done' %} is-done{% elif competencia.checklist_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_checklist' competencia.pk %}">Checklist</a>
+                  {% else %}
+                    <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true" title="{{ competencia.motivo_bloqueio_checklist }}">Checklist</span>
+                    <small class="contratos-stage-help">{{ competencia.motivo_bloqueio_checklist }}</small>
+                  {% endif %}
+                </div>
               {% endif %}
               {% if usuario_pode_gerir %}
-                {% if competencia.download_disponivel %}
-                  <div class="dropdown">
-                    <button class="btn btn-sm contratos-stage-btn{% if competencia.download_estado == 'done' %} is-done{% elif competencia.download_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" type="button" data-bs-toggle="dropdown">Download</button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                      <li><a class="dropdown-item btn-baixar-documentos" href="#" data-start-url="{% url 'contratos:competencia_download_docs_start' competencia.pk %}?tipo_saida=unificado">Baixar unificado</a></li>
-                      <li><a class="dropdown-item btn-baixar-documentos" href="#" data-start-url="{% url 'contratos:competencia_download_docs_start' competencia.pk %}?tipo_saida=separado">Baixar separado</a></li>
-                    </ul>
-                  </div>
-                {% else %}
-                  <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true">Download</span>
-                {% endif %}
-                {% if competencia.ob_disponivel %}
-                  <a class="btn btn-sm contratos-stage-btn{% if competencia.ob_estado == 'done' %} is-done{% elif competencia.ob_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_ob' competencia.pk %}">Ordem Bancária</a>
-                {% else %}
-                  <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true">Ordem Bancária</span>
-                {% endif %}
+                <div class="contratos-stage-slot">
+                  {% if competencia.download_disponivel %}
+                    <div class="dropdown">
+                      <button class="btn btn-sm contratos-stage-btn{% if competencia.download_estado == 'done' %} is-done{% elif competencia.download_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" type="button" data-bs-toggle="dropdown">Download</button>
+                      <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item btn-baixar-documentos" href="#" data-start-url="{% url 'contratos:competencia_download_docs_start' competencia.pk %}?tipo_saida=unificado" data-competencia-id="{{ competencia.pk }}">Baixar unificado</a></li>
+                        <li><a class="dropdown-item btn-baixar-documentos" href="#" data-start-url="{% url 'contratos:competencia_download_docs_start' competencia.pk %}?tipo_saida=separado" data-competencia-id="{{ competencia.pk }}">Baixar separado</a></li>
+                      </ul>
+                    </div>
+                  {% else %}
+                    <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true" title="{{ competencia.motivo_bloqueio_download }}">Download</span>
+                    <small class="contratos-stage-help">{{ competencia.motivo_bloqueio_download }}</small>
+                  {% endif %}
+                </div>
+                <div class="contratos-stage-slot">
+                  {% if competencia.ob_disponivel %}
+                    <a class="btn btn-sm contratos-stage-btn{% if competencia.ob_estado == 'done' %} is-done{% elif competencia.ob_estado == 'pending' %} is-pending{% else %} is-idle{% endif %}" href="{% url 'contratos:competencia_ob' competencia.pk %}">Ordem Bancária</a>
+                  {% else %}
+                    <span class="btn btn-sm contratos-stage-btn is-idle is-disabled" aria-disabled="true" title="{{ competencia.motivo_bloqueio_ob }}">Ordem Bancária</span>
+                    <small class="contratos-stage-help">{{ competencia.motivo_bloqueio_ob }}</small>
+                  {% endif %}
+                </div>
               {% endif %}
+            </div>
+            {% if usuario_pode_gerir %}
+              <div class="contratos-export-feedback mt-3" data-competencia-export-slot="{{ competencia.pk }}">
+                {% if competencia.exportacao_documento_recente %}
+                  <div class="contratos-export-card is-{{ competencia.exportacao_documento_recente.status|lower }}" data-competencia-export-card>
+                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                      <div>
+                        <span class="contratos-export-kicker">Geração de documentos</span>
+                        <p class="mb-1 fw-semibold">{{ competencia.exportacao_documento_recente.etapa_atual|default:"Aguardando processamento" }}</p>
+                        <p class="text-muted small mb-0">{{ competencia.exportacao_documento_recente.mensagem|default:"O andamento mais recente da exportação aparece aqui." }}</p>
+                      </div>
+                      <span class="badge text-bg-{% if competencia.exportacao_documento_recente.status == 'CONCLUIDO' %}success{% elif competencia.exportacao_documento_recente.status == 'ERRO' %}danger{% else %}warning{% endif %}">
+                        {{ competencia.exportacao_documento_recente.get_status_display }}
+                      </span>
+                    </div>
+                    <div class="progress mt-3" style="height: 8px;">
+                      <div
+                        class="progress-bar {% if competencia.exportacao_documento_recente.status == 'ERRO' %}bg-danger{% else %}bg-success{% endif %}"
+                        role="progressbar"
+                        style="width: {{ competencia.exportacao_documento_recente.percentual }}%;"
+                        aria-valuenow="{{ competencia.exportacao_documento_recente.percentual }}"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                      ></div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mt-2">
+                      <small class="text-muted">
+                        {{ competencia.exportacao_documento_recente.percentual }}% • {{ competencia.exportacao_documento_recente.get_tipo_saida_display|default:competencia.exportacao_documento_recente.tipo_saida|capfirst }} • atualizado em {{ competencia.exportacao_documento_recente.atualizado_em|date:"d/m/Y H:i" }}
+                      </small>
+                      {% if competencia.exportacao_documento_recente.status == 'CONCLUIDO' and competencia.exportacao_documento_recente.arquivo_pdf %}
+                        <a class="btn btn-sm btn-outline-success" href="{% url 'contratos:competencia_download_docs_file' competencia.exportacao_documento_recente.pk %}">Baixar último arquivo</a>
+                      {% endif %}
+                    </div>
+                    {% if competencia.exportacao_documento_recente.erro_detalhe %}
+                      <div class="alert alert-danger small mt-3 mb-0">{{ competencia.exportacao_documento_recente.erro_detalhe }}</div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </div>
+            {% endif %}
+            {% if usuario_pode_gerir %}
+              <div class="d-flex justify-content-end mt-3">
+                <button
+                  class="btn btn-sm btn-outline-danger contratos-reset-btn"
+                  type="button"
+                  data-bs-toggle="modal"
+                  data-bs-target="#competenciaResetModal"
+                  data-reset-url="{% url 'contratos:competencia_reset' competencia.pk %}"
+                  data-competencia-label="{{ competencia.periodo_inicio|date:'m/Y' }}"
+                  data-competencia-status="{{ competencia.status_marcador|escape }}"
+                >
+                  Resetar competência
+                </button>
+              </div>
+            {% endif %}
+            <div class="contratos-auditoria-competencia mt-3">
+              <details {% if competencia.historico_completo %}open{% endif %}>
+                <summary>Histórico da competência</summary>
+                {% if competencia.historico_completo %}
+                  <div class="contratos-auditoria-lista contratos-auditoria-lista-competencia mt-3">
+                    {% for evento in competencia.historico_completo %}
+                      <article class="contratos-auditoria-item{% if forloop.counter > competencia.historico_inicial_limite %} d-none contratos-auditoria-extra contratos-auditoria-extra-competencia-{{ competencia.pk }}{% endif %}">
+                        <div class="contratos-auditoria-meta">
+                          <span>{{ evento.created_at|date:"d/m/Y H:i" }}</span>
+                          <strong>{{ evento.usuario_display }}</strong>
+                        </div>
+                        <p class="mb-0">{{ evento.resumo|capfirst }}</p>
+                        {% if evento.payload.changes or evento.payload.extra %}
+                          <details class="contratos-auditoria-detalhes">
+                            <summary>Ver detalhes</summary>
+                            {% if evento.payload.changes %}
+                              <div class="table-responsive mt-3">
+                                <table class="table table-sm align-middle contratos-auditoria-tabela mb-0">
+                                  <thead>
+                                    <tr>
+                                      <th>Campo</th>
+                                      <th>Antes</th>
+                                      <th>Depois</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {% for change in evento.payload.changes %}
+                                      <tr>
+                                        <td>{{ change.label }}</td>
+                                        <td>{{ change.before }}</td>
+                                        <td>{{ change.after }}</td>
+                                      </tr>
+                                    {% endfor %}
+                                  </tbody>
+                                </table>
+                              </div>
+                            {% endif %}
+                            {% if evento.payload.extra %}
+                              {% render_auditoria_extra evento.payload.extra %}
+                            {% endif %}
+                          </details>
+                        {% endif %}
+                      </article>
+                    {% endfor %}
+                  </div>
+                  {% if competencia.historico_completo|length > competencia.historico_inicial_limite %}
+                    <button
+                      class="btn btn-outline-secondary btn-sm mt-3"
+                      type="button"
+                      data-auditoria-toggle=".contratos-auditoria-extra-competencia-{{ competencia.pk }}"
+                    >Mostrar mais</button>
+                  {% endif %}
+                {% else %}
+                  <p class="text-muted mb-0 mt-3">Nenhum evento auditável foi registrado para esta competência.</p>
+                {% endif %}
+              </details>
             </div>
           </article>
         {% empty %}
@@ -744,6 +972,47 @@
       {% endif %}
     </div>
   </section>
+
+  <div
+    class="modal fade"
+    id="competenciaResetModal"
+    tabindex="-1"
+    aria-labelledby="competenciaResetModalLabel"
+    aria-hidden="true"
+    data-bs-backdrop="static"
+    data-bs-keyboard="false"
+  >
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form method="post" data-reset-competencia-form>
+          {% csrf_token %}
+          <div class="modal-header bg-light">
+            <h5 class="modal-title" id="competenciaResetModalLabel">Confirmar reset da competência</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-2">
+              Você está prestes a limpar tudo que foi feito na competência
+              <strong data-reset-competencia-label>--/----</strong>.
+            </p>
+            <p class="text-muted mb-3">
+              O reset apaga medições, anexos, avaliação, downloads, ordem bancária e dados de pagamento para reiniciar o fluxo.
+            </p>
+            <div class="alert alert-danger mb-0">
+              <strong>Status atual:</strong> <span data-reset-competencia-status>-</span><br>
+              Aguarde <strong data-reset-countdown>10</strong>s para habilitar a confirmação.
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-danger" data-reset-submit disabled>
+              Confirmar reset
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
 
 
@@ -938,9 +1207,59 @@
     </div>
   </div>
 {% endblock %}
-
 {% block extra_js %}
+  {{ block.super }}
   <script>
+    (function () {
+      var resetModal = document.getElementById('competenciaResetModal');
+      if (!resetModal) {
+        return;
+      }
+
+      var countdownTimer = null;
+
+      resetModal.addEventListener('show.bs.modal', function (event) {
+        var trigger = event.relatedTarget;
+        var form = resetModal.querySelector('[data-reset-competencia-form]');
+        var label = resetModal.querySelector('[data-reset-competencia-label]');
+        var status = resetModal.querySelector('[data-reset-competencia-status]');
+        var countdown = resetModal.querySelector('[data-reset-countdown]');
+        var submit = resetModal.querySelector('[data-reset-submit]');
+        var secondsRemaining = 10;
+
+        if (!trigger || !form || !label || !status || !countdown || !submit) {
+          return;
+        }
+
+        if (countdownTimer) {
+          window.clearInterval(countdownTimer);
+        }
+
+        form.action = trigger.getAttribute('data-reset-url');
+        label.textContent = trigger.getAttribute('data-competencia-label') || '--/----';
+        status.textContent = trigger.getAttribute('data-competencia-status') || '-';
+        countdown.textContent = String(secondsRemaining);
+        submit.disabled = true;
+
+        countdownTimer = window.setInterval(function () {
+          secondsRemaining -= 1;
+          countdown.textContent = String(Math.max(secondsRemaining, 0));
+          if (secondsRemaining <= 0) {
+            submit.disabled = false;
+            window.clearInterval(countdownTimer);
+            countdownTimer = null;
+          }
+        }, 1000);
+      });
+
+      resetModal.addEventListener('hidden.bs.modal', function () {
+        if (countdownTimer) {
+          window.clearInterval(countdownTimer);
+          countdownTimer = null;
+        }
+      });
+    }());
+
     const ramalContactModal = document.getElementById('ramalContactModal');
     if (ramalContactModal) {
       ramalContactModal.addEventListener('show.bs.modal', (event) => {
@@ -987,6 +1306,9 @@
         let tempoRestante = 10;
         
         btnDisparar.addEventListener('click', function() {
+          if (btnDisparar.disabled) {
+            return;
+          }
           modal.show();
         });
         
@@ -1041,6 +1363,75 @@
         const modal = new bootstrap.Modal(modalElement);
         let pollingHandle = null;
         let ultimoStartUrl = '';
+        let ultimaCompetenciaId = '';
+
+        function obterCorBadge(status) {
+          if (status === 'CONCLUIDO') {
+            return 'success';
+          }
+          if (status === 'ERRO') {
+            return 'danger';
+          }
+          return 'warning';
+        }
+
+        function escapeHtml(value) {
+          return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        }
+
+        function atualizarFeedbackInline(competenciaId, data) {
+          if (!competenciaId) {
+            return;
+          }
+          const slot = document.querySelector(`[data-competencia-export-slot="${competenciaId}"]`);
+          if (!slot) {
+            return;
+          }
+
+          const status = data.status || 'PENDENTE';
+          const statusDisplay = data.status_display || status;
+          const percentual = Number(data.percentual || 0);
+          const etapaAtual = data.etapa_atual || 'Aguardando processamento';
+          const mensagem = data.mensagem || 'O andamento mais recente da exportação aparece aqui.';
+          const tipoSaida = data.tipo_saida === 'separado' ? 'Separado' : 'Unificado';
+          const erro = data.erro_detalhe ? `<div class="alert alert-danger small mt-3 mb-0">${escapeHtml(data.erro_detalhe)}</div>` : '';
+          const acaoDownload = status === 'CONCLUIDO' && data.download_url
+            ? `<a class="btn btn-sm btn-outline-success" href="${escapeHtml(data.download_url)}">Baixar último arquivo</a>`
+            : '';
+
+          slot.innerHTML = `
+            <div class="contratos-export-card is-${status.toLowerCase()}" data-competencia-export-card>
+              <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                <div>
+                  <span class="contratos-export-kicker">Geração de documentos</span>
+                  <p class="mb-1 fw-semibold">${escapeHtml(etapaAtual)}</p>
+                  <p class="text-muted small mb-0">${escapeHtml(mensagem)}</p>
+                </div>
+                <span class="badge text-bg-${obterCorBadge(status)}">${escapeHtml(statusDisplay)}</span>
+              </div>
+              <div class="progress mt-3" style="height: 8px;">
+                <div
+                  class="progress-bar ${status === 'ERRO' ? 'bg-danger' : 'bg-success'}"
+                  role="progressbar"
+                  style="width: ${percentual}%;"
+                  aria-valuenow="${percentual}"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                ></div>
+              </div>
+              <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mt-2">
+                <small class="text-muted">${percentual}% • ${escapeHtml(tipoSaida)}${status === 'CONCLUIDO' ? ' • arquivo pronto' : ''}</small>
+                ${acaoDownload}
+              </div>
+              ${erro}
+            </div>
+          `;
+        }
 
         function getCsrfToken() {
           const cookie = document.cookie
@@ -1076,6 +1467,7 @@
           progressBar.style.width = `${percentual}%`;
           progressBar.textContent = `${percentual}%`;
           progressBar.setAttribute('aria-valuenow', `${percentual}`);
+          atualizarFeedbackInline(data.competencia_id || ultimaCompetenciaId, data);
         }
 
         function tratarErro(mensagem) {
@@ -1087,6 +1479,16 @@
           btnRetry.classList.remove('d-none');
           etapaElement.textContent = 'Falha na geração';
           mensagemElement.textContent = 'Revise a mensagem abaixo e tente novamente.';
+          atualizarFeedbackInline(ultimaCompetenciaId, {
+            competencia_id: ultimaCompetenciaId,
+            status: 'ERRO',
+            status_display: 'Erro',
+            etapa_atual: 'Falha na geração',
+            percentual: 100,
+            mensagem: 'Revise a mensagem abaixo e tente novamente.',
+            erro_detalhe: mensagem,
+            tipo_saida: ultimoStartUrl.includes('tipo_saida=separado') ? 'separado' : 'unificado',
+          });
         }
 
         async function acompanharJob(statusUrl) {
@@ -1121,10 +1523,20 @@
           }, 1500);
         }
 
-        async function iniciarGeracao(startUrl) {
+        async function iniciarGeracao(startUrl, competenciaId) {
           ultimoStartUrl = startUrl;
+          ultimaCompetenciaId = competenciaId || '';
           resetModalState();
           modal.show();
+          atualizarFeedbackInline(ultimaCompetenciaId, {
+            competencia_id: ultimaCompetenciaId,
+            status: 'PENDENTE',
+            status_display: 'Pendente',
+            etapa_atual: 'Na fila',
+            percentual: 0,
+            mensagem: 'A exportação foi criada e será iniciada em instantes.',
+            tipo_saida: startUrl.includes('tipo_saida=separado') ? 'separado' : 'unificado',
+          });
           try {
             const response = await fetch(startUrl, {
               method: 'POST',
@@ -1147,7 +1559,7 @@
 
         btnRetry.addEventListener('click', function() {
           if (ultimoStartUrl) {
-            iniciarGeracao(ultimoStartUrl);
+            iniciarGeracao(ultimoStartUrl, ultimaCompetenciaId);
           }
         });
 
@@ -1158,7 +1570,7 @@
         baixarBtns.forEach(btn => {
           btn.addEventListener('click', function(e) {
             e.preventDefault();
-            iniciarGeracao(this.dataset.startUrl);
+            iniciarGeracao(this.dataset.startUrl, this.dataset.competenciaId);
           });
         });
       }
@@ -1167,6 +1579,19 @@
     // =========================================================================
     // Paginação local e dinâmica das Competências Geradas (de 5 em 5)
     // =========================================================================
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('[data-auditoria-toggle]').forEach(botao => {
+        botao.addEventListener('click', function() {
+          const seletor = this.dataset.auditoriaToggle;
+          const extras = document.querySelectorAll(seletor);
+          const ocultos = Array.from(extras).filter(elemento => elemento.classList.contains('d-none'));
+          const deveMostrar = ocultos.length > 0;
+          extras.forEach(elemento => elemento.classList.toggle('d-none', !deveMostrar));
+          this.textContent = deveMostrar ? 'Mostrar menos' : 'Mostrar mais';
+        });
+      });
+    });
+
     document.addEventListener('DOMContentLoaded', function() {
       // Seleciona todos os cards de competência e o container de paginação
       const cards = document.querySelectorAll('#competencias-paginadas-list .contratos-competencia-card');

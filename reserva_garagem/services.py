@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -65,6 +65,34 @@ def _serie_queryset(reserva: ReservaGaragem):
     return ReservaGaragem.objects.filter(pk=reserva.pk)
 
 
+def _cancel_scope_queryset(
+    reserva: ReservaGaragem,
+    *,
+    apply_scope: str = "single",
+    data_inicial: date | None = None,
+    data_final: date | None = None,
+):
+    """Resolve quais ocorrências da reserva serão canceladas conforme o escopo solicitado."""
+
+    if not reserva.serie_id or apply_scope == "single":
+        return ReservaGaragem.objects.filter(pk=reserva.pk).order_by("data", "id")
+    if apply_scope == "all":
+        return ReservaGaragem.objects.filter(serie_id=reserva.serie_id).order_by("data", "id")
+    if apply_scope == "range":
+        if not (data_inicial and data_final):
+            raise ValidationError("Informe a data inicial e a data final do cancelamento.")
+        if data_final < data_inicial:
+            raise ValidationError("A data final do cancelamento deve ser maior ou igual à data inicial.")
+        queryset = ReservaGaragem.objects.filter(
+            serie_id=reserva.serie_id,
+            data__range=(data_inicial, data_final),
+        ).order_by("data", "id")
+        if not queryset.exists():
+            raise ValidationError("Nenhuma ocorrência da série foi encontrada no período informado para cancelamento.")
+        return queryset
+    raise ValidationError("Escopo de cancelamento inválido.")
+
+
 def _datas_serie_display(reservas):
     """Resume o intervalo da série em texto para notificação."""
 
@@ -72,6 +100,16 @@ def _datas_serie_display(reservas):
     if not datas:
         return "-"
     return f"{_format_date(datas[0])} a {_format_date(datas[-1])}" if len(datas) > 1 else _format_date(datas[0])
+
+
+def _scope_display(apply_scope: str, data_inicial: date | None = None, data_final: date | None = None) -> str:
+    """Traduz o escopo técnico em texto humano para mensagens e histórico."""
+
+    if apply_scope == "all":
+        return "Toda a série"
+    if apply_scope == "range" and data_inicial and data_final:
+        return f"Período de {_format_date(data_inicial)} a {_format_date(data_final)}"
+    return "Somente esta ocorrência"
 
 
 def _mensagem_nova_solicitacao_para_fiscais(reservas):
@@ -88,8 +126,7 @@ def _mensagem_nova_solicitacao_para_fiscais(reservas):
         f"Vaga solicitada: {reserva.vaga.nome_exibicao}\n"
         f"Placa: {reserva.placa_veiculo}\n"
         f"Veículo: {reserva.marca_veiculo} {reserva.modelo_veiculo} - {reserva.cor_veiculo}\n"
-        f"Observações: {reserva.observacoes or '-'}\n\n"
-        f"Analisar solicitação: {link_analise}"
+        f"Observações: {reserva.observacoes or '-'}"
     )
     payload = {
         "tipo": "nova_solicitacao_reserva_garagem",
@@ -159,6 +196,48 @@ def _mensagem_reserva_indeferida(reservas):
     return assunto, corpo, payload
 
 
+def _mensagem_reserva_cancelada(reservas, usuario_cancelamento, *, motivo: str, apply_scope: str, data_inicial=None, data_final=None):
+    """Monta a mensagem enviada ao solicitante quando a reserva é cancelada."""
+
+    reserva = reservas.first()
+    intervalo = _datas_serie_display(reservas)
+    nome_cancelador = (
+        getattr(getattr(usuario_cancelamento, "perfil", None), "nome_completo", "")
+        or usuario_cancelamento.get_full_name()
+        or usuario_cancelamento.username
+    )
+    cancelamento_administrativo = reserva.solicitante_id != getattr(usuario_cancelamento, "id", None)
+    origem_texto = "cancelada administrativamente" if cancelamento_administrativo else "cancelada"
+    escopo = _scope_display(apply_scope, data_inicial, data_final)
+    assunto = f"Reserva de vaga cancelada #{reserva.pk}"
+    corpo = (
+        f"Sua reserva de vaga foi {origem_texto}.\n\n"
+        f"Vaga: {reserva.vaga.nome_exibicao}\n"
+        f"Período: {intervalo}\n"
+        f"Escopo do cancelamento: {escopo}\n"
+        f"Placa: {reserva.placa_veiculo}\n"
+        f"Cancelada por: {nome_cancelador}\n"
+        f"Motivo do cancelamento: {motivo}\n"
+        f"Observações: {reserva.observacoes or '-'}"
+    )
+    payload = {
+        "tipo": "cancelamento_reserva_garagem",
+        "reserva_id": reserva.pk,
+        "serie_id": str(reserva.serie_id or ""),
+        "vaga": reserva.vaga.nome_exibicao,
+        "placa": reserva.placa_veiculo,
+        "status": reserva.status,
+        "cancelada_por": nome_cancelador,
+        "motivo_cancelamento": motivo,
+        "apply_scope": apply_scope,
+        "data_inicial": data_inicial.isoformat() if data_inicial else "",
+        "data_final": data_final.isoformat() if data_final else "",
+        "origem": "fluxo_fiscal" if cancelamento_administrativo else "fluxo_usuario",
+        "datas": [data.isoformat() for data in reservas.values_list("data", flat=True)],
+    }
+    return assunto, corpo, payload
+
+
 def notificar_solicitante(reservas, usuario_responsavel=None):
     """Cria e publica a mensagem assíncrona após decisão fiscal."""
 
@@ -200,6 +279,32 @@ def notificar_fiscais_nova_solicitacao(reservas, usuario_responsavel=None):
         payload_email=payload,
     )
     mensagem.usuarios_alvo.add(*usuarios_fiscais)
+    publicar_mensagem(mensagem, usuario=usuario_responsavel)
+    return mensagem
+
+
+def notificar_cancelamento(reservas, usuario_responsavel=None, *, motivo: str, apply_scope: str, data_inicial=None, data_final=None):
+    """Publica uma mensagem ao solicitante quando a reserva é cancelada."""
+
+    reserva = reservas.first()
+    if not reserva or reserva.status != ReservaGaragem.Status.CANCELADA:
+        return None
+
+    assunto, corpo, payload = _mensagem_reserva_cancelada(
+        reservas,
+        usuario_responsavel,
+        motivo=motivo,
+        apply_scope=apply_scope,
+        data_inicial=data_inicial,
+        data_final=data_final,
+    )
+    mensagem = criar_mensagem_rascunho(
+        assunto=assunto,
+        corpo=corpo,
+        criada_por=usuario_responsavel,
+        payload_email=payload,
+    )
+    mensagem.usuarios_alvo.add(reserva.solicitante)
     publicar_mensagem(mensagem, usuario=usuario_responsavel)
     return mensagem
 
@@ -279,19 +384,76 @@ def indeferir_reserva(reserva: ReservaGaragem, *, fiscal, justificativa):
 
 @transaction.atomic
 def cancelar_reserva(reserva: ReservaGaragem, *, usuario):
-    """Permite o cancelamento apenas enquanto a série estiver pendente."""
+    """Cancela a série ou ocorrência ativa e notifica o solicitante sobre a liberação da vaga."""
 
-    reservas = list(_serie_queryset(reserva).select_for_update())
+    return cancelar_reserva_com_escopo(
+        reserva,
+        usuario=usuario,
+        motivo_cancelamento="Cancelamento da reserva.",
+    )
+
+
+@transaction.atomic
+def cancelar_reserva_com_escopo(
+    reserva: ReservaGaragem,
+    *,
+    usuario,
+    apply_scope: str = "single",
+    data_inicial: date | None = None,
+    data_final: date | None = None,
+    motivo_cancelamento: str = "",
+):
+    """Cancela uma ocorrência, a série inteira ou apenas um intervalo específico da série."""
+
+    motivo_cancelamento = (motivo_cancelamento or "").strip()
+    if not motivo_cancelamento:
+        raise ValidationError("Informe o motivo do cancelamento.")
+
+    reservas = list(
+        _cancel_scope_queryset(
+            reserva,
+            apply_scope=apply_scope,
+            data_inicial=data_inicial,
+            data_final=data_final,
+        ).select_for_update()
+    )
     if not reservas:
         raise ValidationError("Reserva não encontrada.")
-    for ocorrencia in reservas:
-        if ocorrencia.status != ReservaGaragem.Status.AGUARDANDO_APROVACAO:
-            raise ValidationError("Somente solicitações aguardando aprovação podem ser canceladas.")
-    for ocorrencia in reservas:
+    reservas_ativas = [
+        ocorrencia
+        for ocorrencia in reservas
+        if ocorrencia.status in {
+            ReservaGaragem.Status.AGUARDANDO_APROVACAO,
+            ReservaGaragem.Status.DEFERIDA,
+        }
+    ]
+    if not reservas_ativas:
+        raise ValidationError("Nenhuma reserva ativa foi encontrada no escopo selecionado para cancelamento.")
+    for ocorrencia in reservas_ativas:
         ocorrencia.status = ReservaGaragem.Status.CANCELADA
         ocorrencia.save(update_fields=["status", "atualizado_em"])
-        registrar_evento(ocorrencia, ReservaGaragemEvento.Acao.CANCELAMENTO, usuario=usuario)
-    return reservas
+        registrar_evento(
+            ocorrencia,
+            ReservaGaragemEvento.Acao.CANCELAMENTO,
+            usuario=usuario,
+            payload={
+                "apply_scope": apply_scope,
+                "data_inicial": data_inicial.isoformat() if data_inicial else "",
+                "data_final": data_final.isoformat() if data_final else "",
+                "motivo_cancelamento": motivo_cancelamento,
+                "origem": "fluxo_fiscal" if reserva.solicitante_id != getattr(usuario, "id", None) else "fluxo_usuario",
+            },
+        )
+    queryset = ReservaGaragem.objects.filter(pk__in=[oc.pk for oc in reservas_ativas]).order_by("data", "id")
+    notificar_cancelamento(
+        queryset,
+        usuario_responsavel=usuario,
+        motivo=motivo_cancelamento,
+        apply_scope=apply_scope,
+        data_inicial=data_inicial,
+        data_final=data_final,
+    )
+    return reservas_ativas
 
 
 def reserva_garagem_dashboard_context():

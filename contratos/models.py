@@ -17,6 +17,7 @@ from .services import (
     ZERO,
     criar_avaliacao_shell_competencia_v2,
     gerar_competencias_contrato_v2,
+    inclusive_end_date,
     recalcular_avaliacao_v2,
     recalcular_competencia_v2,
     sincronizar_checklist_ativo_contrato_v2,
@@ -232,6 +233,95 @@ class Contrato(models.Model):
         """Saldo financeiro restante do contrato (Valor Global - Valor Executado)."""
         return max(Decimal('0.00'), self.valor_global - self.valor_executado)
 
+    @property
+    def percentual_saldo(self):
+        """Percentual do saldo restante em relação ao valor global do contrato."""
+
+        if not self.valor_global:
+            return Decimal('0.00')
+        percentual = (self.valor_saldo / self.valor_global) * Decimal('100.00')
+        return quantize_money(percentual)
+
+    @property
+    def percentual_saldo_display(self):
+        """Formata o percentual do saldo no padrão brasileiro para exibição no detalhe."""
+
+        return f'{self.percentual_saldo:,.2f}'.replace(',', '_').replace('.', ',').replace('_', '.')
+
+    @property
+    def percentual_consumido(self):
+        """Mostra quanto do valor global já foi executado para compor o dashboard da carteira."""
+
+        if not self.valor_global:
+            return Decimal('0.00')
+        percentual = (self.valor_executado / self.valor_global) * Decimal('100.00')
+        return quantize_money(percentual)
+
+    @property
+    def percentual_consumido_display(self):
+        """Formata o percentual consumido no padrão brasileiro para cards e tabelas."""
+
+        return f'{self.percentual_consumido:,.2f}'.replace(',', '_').replace('.', ',').replace('_', '.')
+
+    @property
+    def data_fim_vigencia(self):
+        """Entrega a data final da vigência usando a mesma regra já aplicada ao gerar competências."""
+
+        return inclusive_end_date(self.data_inicio_vigencia, self.vigencia_total_meses)
+
+    def esta_vigente_em(self, referencia=None):
+        """Indica se a vigência está ativa na data informada, respeitando situações forçadas."""
+
+        if self.situacao_forcada in {self.Situacao.ENCERRADO, self.Situacao.SUSPENSO}:
+            return False
+        hoje = referencia or timezone.localdate()
+        data_fim = self.data_fim_vigencia
+        if not self.data_inicio_vigencia or not data_fim:
+            return False
+        return self.data_inicio_vigencia <= hoje <= data_fim
+
+    def dias_restantes_vigencia(self, referencia=None):
+        """Calcula quantos dias faltam para o término da vigência a partir da data de referência."""
+
+        data_fim = self.data_fim_vigencia
+        if not data_fim:
+            return None
+        hoje = referencia or timezone.localdate()
+        return (data_fim - hoje).days
+
+    def vence_em_intervalo(self, *, dias_minimos=0, dias_maximos=None, referencia=None):
+        """Retorna se o contrato vence dentro de uma faixa de dias sem duplicar as janelas do dashboard."""
+
+        if not self.esta_vigente_em(referencia=referencia):
+            return False
+        dias_restantes = self.dias_restantes_vigencia(referencia=referencia)
+        if dias_restantes is None or dias_restantes < dias_minimos:
+            return False
+        if dias_maximos is not None and dias_restantes > dias_maximos:
+            return False
+        return True
+
+    @property
+    def situacao_vigencia_dashboard(self):
+        """Resume a vigência para a visão de carteira sem depender da situação forçada manual."""
+
+        hoje = timezone.localdate()
+        data_fim = self.data_fim_vigencia
+        if self.situacao_forcada == self.Situacao.SUSPENSO:
+            return 'Suspenso'
+        if self.situacao_forcada == self.Situacao.ENCERRADO:
+            return 'Encerrado'
+        if not self.data_inicio_vigencia or not data_fim:
+            return 'Sem vigência'
+        if hoje < self.data_inicio_vigencia:
+            return 'Ainda não iniciado'
+        if hoje > data_fim:
+            return 'Encerrado'
+        dias_restantes = self.dias_restantes_vigencia(referencia=hoje)
+        if dias_restantes is not None and dias_restantes <= 30:
+            return 'Vence em até 30 dias'
+        return 'Vigente'
+
     def refresh_financials(self, save=True):
         """Consolida base mensal e valor global a partir dos itens vinculados ao contrato."""
 
@@ -244,7 +334,7 @@ class Contrato(models.Model):
     def gerar_competencias(self):
         """Cria competências mensais da vigência inicial usando as configurações ativas do contrato."""
 
-        gerar_competencias_contrato_v2(self)
+        return gerar_competencias_contrato_v2(self)
 
     def excluir_com_dependencias(self):
         """Apaga o contrato junto com todo o histórico derivado que hoje pode manter referências protegidas."""
@@ -522,6 +612,135 @@ class ChecklistPadraoGlobalItem(models.Model):
         super().save(*args, **kwargs)
 
 
+class FormularioAvaliacaoPadraoGlobal(models.Model):
+    """Cadastro global de formulários padrão que podem ser clonados para contratos específicos."""
+
+    nome = models.CharField('Nome da avaliação', max_length=180)
+    descricao = models.TextField('Descrição', blank=True)
+    observacoes = models.TextField('Observações', blank=True)
+    ativo = models.BooleanField('Ativo', default=False)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='formularios_avaliacao_padrao_globais_criados',
+    )
+    atualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='formularios_avaliacao_padrao_globais_atualizados',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-ativo', '-atualizado_em', '-id']
+        verbose_name = 'Formulário de avaliação padrão global'
+        verbose_name_plural = 'Formulários de avaliação padrão globais'
+
+    def __str__(self):
+        return self.nome
+
+    @property
+    def atualizado_por_display(self):
+        """Entrega um rótulo amigável para a autoria da manutenção global."""
+
+        if not self.atualizado_por:
+            return '-'
+        perfil = getattr(self.atualizado_por, 'perfil', None)
+        return getattr(perfil, 'nome_completo', None) or self.atualizado_por.get_full_name() or self.atualizado_por.username
+
+    def save(self, *args, **kwargs):
+        # O primeiro formulário padrão global nasce ativo para já ficar disponível aos contratos.
+        if not self.pk and not type(self).objects.exists():
+            self.ativo = True
+        super().save(*args, **kwargs)
+        if self.ativo:
+            type(self).objects.exclude(pk=self.pk).update(ativo=False)
+
+
+class EscalaNotaAvaliacaoPadraoGlobal(models.Model):
+    """Escala padrão reutilizável entre múltiplos contratos."""
+
+    formulario_padrao = models.ForeignKey(FormularioAvaliacaoPadraoGlobal, on_delete=models.CASCADE, related_name='escalas')
+    ordem = models.PositiveIntegerField('Ordem', default=1)
+    valor = models.DecimalField('Valor numérico', max_digits=8, decimal_places=2)
+    legenda = models.CharField('Legenda', max_length=120)
+
+    class Meta:
+        ordering = ['ordem', '-valor', 'id']
+        unique_together = [('formulario_padrao', 'ordem')]
+        verbose_name = 'Nota da escala padrão global'
+        verbose_name_plural = 'Notas da escala padrão global'
+
+    def __str__(self):
+        return f'{self.valor} - {self.legenda}'
+
+
+class FaixaLiberacaoAvaliacaoPadraoGlobal(models.Model):
+    """Faixas padrão globais para sugerir a liberação financeira da avaliação."""
+
+    formulario_padrao = models.ForeignKey(FormularioAvaliacaoPadraoGlobal, on_delete=models.CASCADE, related_name='faixas_liberacao')
+    ordem = models.PositiveIntegerField('Ordem', default=1)
+    nota_minima = models.DecimalField('Nota mínima', max_digits=8, decimal_places=2)
+    nota_maxima = models.DecimalField('Nota máxima', max_digits=8, decimal_places=2, null=True, blank=True)
+    percentual_liberacao = models.DecimalField('Percentual de liberação', max_digits=8, decimal_places=2, default=Decimal('100.00'))
+
+    class Meta:
+        ordering = ['ordem', '-nota_minima', 'id']
+        unique_together = [('formulario_padrao', 'ordem')]
+        verbose_name = 'Faixa de liberação padrão global'
+        verbose_name_plural = 'Faixas de liberação padrão global'
+
+    def __str__(self):
+        return f'{self.percentual_liberacao}% a partir de {self.nota_minima}'
+
+    def clean(self):
+        super().clean()
+        if self.nota_maxima is not None and self.nota_maxima < self.nota_minima:
+            raise ValidationError({'nota_maxima': 'A nota máxima deve ser maior ou igual à mínima.'})
+
+
+class GrupoAvaliacaoPadraoGlobal(models.Model):
+    """Grupo padrão global usado para organizar visualmente o formulário institucional."""
+
+    formulario_padrao = models.ForeignKey(FormularioAvaliacaoPadraoGlobal, on_delete=models.CASCADE, related_name='grupos')
+    ordem = models.PositiveIntegerField('Ordem', default=1)
+    nome = models.CharField('Nome', max_length=180)
+    descricao = models.TextField('Descrição', blank=True)
+
+    class Meta:
+        ordering = ['ordem', 'id']
+        unique_together = [('formulario_padrao', 'ordem')]
+        verbose_name = 'Grupo de avaliação padrão global'
+        verbose_name_plural = 'Grupos de avaliação padrão global'
+
+    def __str__(self):
+        return self.nome
+
+
+class ItemAvaliacaoPadraoGlobal(models.Model):
+    """Item padrão global que será clonado para os grupos do contrato."""
+
+    grupo_padrao = models.ForeignKey(GrupoAvaliacaoPadraoGlobal, on_delete=models.CASCADE, related_name='itens')
+    ordem = models.PositiveIntegerField('Ordem de exibição', default=1)
+    descricao = models.TextField('Descrição do item')
+    peso_percentual = models.DecimalField('Peso percentual dentro do grupo', max_digits=8, decimal_places=2, default=Decimal('100.00'))
+    observacoes_padrao = models.TextField('Observação padrão', blank=True)
+
+    class Meta:
+        ordering = ['ordem', 'id']
+        unique_together = [('grupo_padrao', 'ordem')]
+        verbose_name = 'Item de avaliação padrão global'
+        verbose_name_plural = 'Itens de avaliação padrão global'
+
+    def __str__(self):
+        return self.descricao[:80]
+
+
 class FormularioAvaliacao(models.Model):
     """Versão do formulário de avaliação de qualidade do contrato."""
 
@@ -680,6 +899,7 @@ class CompetenciaPagamento(models.Model):
     retencao_pis_pasep = models.DecimalField('Retenção PIS/PASEP', max_digits=14, decimal_places=2, default=Decimal('0.00'))
     retencao_cofins = models.DecimalField('Retenção COFINS', max_digits=14, decimal_places=2, default=Decimal('0.00'))
     valor_liberado_final = models.DecimalField('Valor liberado final', max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    valor_liberado_final_manual = models.DecimalField('Valor liberado final manual', max_digits=14, decimal_places=2, null=True, blank=True)
     nota_adicional_arquivo = models.FileField('Nota Fiscal adicional', upload_to='contratos/pagamentos/', blank=True)
     numero_nota_adicional = models.CharField('Número da nota fiscal adicional', max_length=120, blank=True)
     valor_nota_adicional = models.DecimalField('Valor da nota fiscal adicional', max_digits=14, decimal_places=2, default=Decimal('0.00'))
@@ -698,6 +918,7 @@ class CompetenciaPagamento(models.Model):
         related_name='competencias_v2_como_gestor_pagamento',
         verbose_name='Gestor do contrato',
     )
+    gestor_pagamento_nome_manual = models.CharField('Nome manual do gestor do contrato', max_length=180, blank=True)
     gestor_pagamento_em_exercicio = models.BooleanField('Gestor do contrato em exercício', default=False)
     coordenadora_pagamento = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -707,6 +928,7 @@ class CompetenciaPagamento(models.Model):
         related_name='competencias_v2_como_coordenadora_pagamento',
         verbose_name='Coordenadora',
     )
+    coordenadora_pagamento_nome_manual = models.CharField('Nome manual da coordenadora', max_length=180, blank=True)
     coordenadora_em_exercicio = models.BooleanField('Coordenadora em exercício', default=False)
     diretora_pagamento = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -716,6 +938,7 @@ class CompetenciaPagamento(models.Model):
         related_name='competencias_v2_como_diretora_pagamento',
         verbose_name='Diretora',
     )
+    diretora_pagamento_nome_manual = models.CharField('Nome manual da diretora', max_length=180, blank=True)
     diretora_em_exercicio = models.BooleanField('Diretora em exercício', default=False)
     subsecretario_pagamento = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -725,6 +948,7 @@ class CompetenciaPagamento(models.Model):
         related_name='competencias_v2_como_subsecretario_pagamento',
         verbose_name='Subsecretário',
     )
+    subsecretario_pagamento_nome_manual = models.CharField('Nome manual do subsecretário', max_length=180, blank=True)
     subsecretario_em_exercicio = models.BooleanField('Subsecretário em exercício', default=False)
     checklist_modelo_snapshot = models.JSONField('Snapshot do checklist', default=dict, blank=True)
     formulario_avaliacao_snapshot = models.JSONField('Snapshot da avaliação', default=dict, blank=True)
@@ -824,6 +1048,20 @@ class CompetenciaPagamento(models.Model):
         if self.status == self.Status.PAGA and self.data_pagamento:
             return f'Paga - {self.data_pagamento:%d/%m/%Y}'
         return self.get_status_display()
+
+    def esta_atrasada_em(self, referencia=None):
+        """Define se a competência já ultrapassou o prazo de monitoramento sem estar encerrada."""
+
+        hoje = referencia or timezone.localdate()
+        if self.status in {self.Status.PAGA, self.Status.CANCELADA}:
+            return False
+        return bool(self.monitoramento_etapa and self.monitoramento_limite and self.monitoramento_limite < hoje)
+
+    @property
+    def esta_atrasada(self):
+        """Atalho para o dashboard e para a UI de listagem usando a data local atual."""
+
+        return self.esta_atrasada_em()
 
     @property
     def exige_avaliacao(self):
@@ -1034,10 +1272,32 @@ class CompetenciaPagamento(models.Model):
         return self.status not in {self.Status.CANCELADA}
 
     @property
+    def motivo_bloqueio_medicao(self):
+        """Explica por que a medição não pode mais ser aberta a partir do estado atual."""
+
+        if self.status == self.Status.PAGA:
+            return 'A competência já foi paga e não aceita nova medição.'
+        if self.status == self.Status.CANCELADA:
+            return 'A competência foi cancelada e não aceita nova medição.'
+        return ''
+
+    @property
     def avaliacao_disponivel(self):
         """Libera a avaliação apenas após a conclusão formal da medição."""
 
         return bool(self.exige_avaliacao and self.medicao_concluida_em)
+
+    @property
+    def motivo_bloqueio_avaliacao(self):
+        """Resume a pendência que impede a etapa de avaliação."""
+
+        if self.status in {self.Status.PAGA, self.Status.CANCELADA}:
+            return 'A competência já foi encerrada.'
+        if not self.exige_avaliacao:
+            return 'Esta competência não exige avaliação de qualidade.'
+        if not self.medicao_concluida_em:
+            return 'Conclua a medição para liberar a avaliação.'
+        return ''
 
     @property
     def checklist_disponivel(self):
@@ -1050,16 +1310,60 @@ class CompetenciaPagamento(models.Model):
         return True
 
     @property
+    def motivo_bloqueio_checklist(self):
+        """Resume a pendência que impede a etapa de checklist."""
+
+        if self.status in {self.Status.PAGA, self.Status.CANCELADA}:
+            return 'A competência já foi encerrada.'
+        if not self.medicao_concluida_em:
+            return 'Conclua a medição para liberar o checklist.'
+        if self.exige_avaliacao and not getattr(self.avaliacao_qualidade_segura, 'concluida_em', None):
+            return 'Conclua a avaliação para liberar o checklist.'
+        return ''
+
+    @property
     def download_disponivel(self):
         """Download é liberado somente quando o checklist da competência estiver concluído."""
 
         return bool(self.checklist_concluido_em or self.status in {self.Status.DOWNLOAD_PENDENTE, self.Status.OB_PENDENTE, self.Status.PAGA})
 
     @property
+    def motivo_bloqueio_download(self):
+        """Resume a pendência que impede a geração dos documentos da competência."""
+
+        if self.status in {self.Status.PAGA, self.Status.CANCELADA}:
+            return 'A competência já foi encerrada.'
+        if not self.medicao_concluida_em:
+            return 'Conclua a medição para liberar o download dos documentos.'
+        if self.exige_avaliacao and not getattr(self.avaliacao_qualidade_segura, 'concluida_em', None):
+            return 'Conclua a avaliação para liberar o download dos documentos.'
+        if not self.checklist_concluido_em:
+            return 'Conclua o checklist para liberar o download dos documentos.'
+        return ''
+
+    @property
     def ob_disponivel(self):
         """A Ordem Bancária só entra no fluxo depois da geração do pacote documental."""
 
         return bool(self.download_realizado_em or self.status in {self.Status.OB_PENDENTE, self.Status.PAGA})
+
+    @property
+    def motivo_bloqueio_ob(self):
+        """Resume a pendência que impede o registro da Ordem Bancária."""
+
+        if self.status == self.Status.PAGA:
+            return 'A Ordem Bancária desta competência já foi registrada.'
+        if self.status == self.Status.CANCELADA:
+            return 'A competência foi cancelada e não aceita Ordem Bancária.'
+        if not self.medicao_concluida_em:
+            return 'Conclua a medição para avançar até a Ordem Bancária.'
+        if self.exige_avaliacao and not getattr(self.avaliacao_qualidade_segura, 'concluida_em', None):
+            return 'Conclua a avaliação para avançar até a Ordem Bancária.'
+        if not self.checklist_concluido_em:
+            return 'Conclua o checklist para avançar até a Ordem Bancária.'
+        if not self.download_realizado_em and self.status != self.Status.OB_PENDENTE:
+            return 'Gere o pacote documental para liberar a Ordem Bancária.'
+        return ''
 
     @property
     def monitoramento_percentual(self):
@@ -1131,15 +1435,19 @@ class CompetenciaPagamento(models.Model):
             )
         return marcos
 
-    def obter_assinatura_pagamento(self, usuario, cargo, em_exercicio=False):
+    def obter_assinatura_pagamento(self, usuario, cargo, em_exercicio=False, nome_manual=''):
         """Entrega os textos da assinatura conforme a regra de cargo normal ou em exercício."""
 
-        if not usuario:
-            return {'nome': '-', 'cargo': f'{cargo} - em exercício' if em_exercicio else cargo}
-        nome = usuario.get_full_name() or usuario.username
+        nome = (nome_manual or '').strip()
+        if not nome and usuario:
+            nome = usuario.get_full_name() or usuario.username
+        if not nome:
+            nome = '-'
+        if em_exercicio and nome != '-':
+            nome = f'{nome} - em exercício'
         return {
             'nome': nome,
-            'cargo': f'{cargo} - em exercício' if em_exercicio else cargo,
+            'cargo': cargo,
         }
 
     @property
@@ -1305,7 +1613,9 @@ class AvaliacaoQualidadeCompetencia(models.Model):
     formulario = models.ForeignKey(FormularioAvaliacao, on_delete=models.PROTECT, related_name='avaliacoes')
     formulario_snapshot = models.JSONField('Snapshot do formulário', default=dict, blank=True)
     nota_final = models.DecimalField('Nota final', max_digits=8, decimal_places=2, default=Decimal('0.00'))
+    nota_final_manual = models.DecimalField('Nota final manual', max_digits=8, decimal_places=2, null=True, blank=True)
     percentual_liberacao_sugerido = models.DecimalField('Percentual sugerido', max_digits=8, decimal_places=2, default=Decimal('100.00'))
+    percentual_liberacao_manual = models.DecimalField('Percentual manual', max_digits=8, decimal_places=2, null=True, blank=True)
     valor_liberado_sugerido = models.DecimalField('Valor sugerido', max_digits=14, decimal_places=2, default=Decimal('0.00'))
     observacoes = models.TextField('Observações', blank=True)
     manifestacao_gestor = models.TextField('Manifestação do gestor', blank=True)
@@ -1483,3 +1793,144 @@ class PrazoMonitoramento(models.Model):
             return 'warning'
         else:
             return 'danger'
+
+    def esta_critico_em(self, referencia=None):
+        """
+        Marca como crítico o prazo vencido ou acima de 75% do consumo temporal,
+        reaproveitando a mesma leitura visual usada no detalhe do contrato.
+        """
+
+        if self.concluido:
+            return False
+        hoje = referencia or timezone.localdate()
+        if self.data_limite and self.data_limite < hoje:
+            return True
+        return self.percentual_decorrido > 75
+
+    @property
+    def esta_critico(self):
+        """Atalho para o dashboard da carteira usando a data local atual."""
+
+        return self.esta_critico_em()
+
+
+class ContratoAuditoriaEvento(models.Model):
+    """Histórico estruturado das mutações relevantes do contrato e de seus cadastros filhos."""
+
+    class TipoEvento(models.TextChoices):
+        CONTRATO_CRIADO = 'CONTRATO_CRIADO', 'Contrato criado'
+        CONTRATO_ATUALIZADO = 'CONTRATO_ATUALIZADO', 'Contrato atualizado'
+        ITEM_CRIADO = 'ITEM_CRIADO', 'Item criado'
+        ITEM_ATUALIZADO = 'ITEM_ATUALIZADO', 'Item atualizado'
+        ITEM_EXCLUIDO = 'ITEM_EXCLUIDO', 'Item excluído'
+        DOCUMENTO_CRIADO = 'DOCUMENTO_CRIADO', 'Documento criado'
+        DOCUMENTO_ATUALIZADO = 'DOCUMENTO_ATUALIZADO', 'Documento atualizado'
+        DOCUMENTO_EXCLUIDO = 'DOCUMENTO_EXCLUIDO', 'Documento excluído'
+        CHECKLIST_CRIADO = 'CHECKLIST_CRIADO', 'Checklist criado'
+        CHECKLIST_ATUALIZADO = 'CHECKLIST_ATUALIZADO', 'Checklist atualizado'
+        CHECKLIST_EXCLUIDO = 'CHECKLIST_EXCLUIDO', 'Checklist excluído'
+        CHECKLIST_ITEM_CRIADO = 'CHECKLIST_ITEM_CRIADO', 'Item de checklist criado'
+        CHECKLIST_ITEM_ATUALIZADO = 'CHECKLIST_ITEM_ATUALIZADO', 'Item de checklist atualizado'
+        CHECKLIST_ITEM_EXCLUIDO = 'CHECKLIST_ITEM_EXCLUIDO', 'Item de checklist excluído'
+        CHECKLIST_PADRAO_CARREGADO = 'CHECKLIST_PADRAO_CARREGADO', 'Checklist padrão carregado'
+        FORMULARIO_CRIADO = 'FORMULARIO_CRIADO', 'Formulário criado'
+        FORMULARIO_ATUALIZADO = 'FORMULARIO_ATUALIZADO', 'Formulário atualizado'
+        FORMULARIO_EXCLUIDO = 'FORMULARIO_EXCLUIDO', 'Formulário excluído'
+        ESCALA_CRIADA = 'ESCALA_CRIADA', 'Escala criada'
+        ESCALA_ATUALIZADA = 'ESCALA_ATUALIZADA', 'Escala atualizada'
+        ESCALA_EXCLUIDA = 'ESCALA_EXCLUIDA', 'Escala excluída'
+        FAIXA_CRIADA = 'FAIXA_CRIADA', 'Faixa criada'
+        FAIXA_ATUALIZADA = 'FAIXA_ATUALIZADA', 'Faixa atualizada'
+        FAIXA_EXCLUIDA = 'FAIXA_EXCLUIDA', 'Faixa excluída'
+        GRUPO_CRIADO = 'GRUPO_CRIADO', 'Grupo criado'
+        GRUPO_ATUALIZADO = 'GRUPO_ATUALIZADO', 'Grupo atualizado'
+        GRUPO_EXCLUIDO = 'GRUPO_EXCLUIDO', 'Grupo excluído'
+        ITEM_AVALIACAO_CRIADO = 'ITEM_AVALIACAO_CRIADO', 'Item de avaliação criado'
+        ITEM_AVALIACAO_ATUALIZADO = 'ITEM_AVALIACAO_ATUALIZADO', 'Item de avaliação atualizado'
+        ITEM_AVALIACAO_EXCLUIDO = 'ITEM_AVALIACAO_EXCLUIDO', 'Item de avaliação excluído'
+        FORMULARIO_PADRAO_CARREGADO = 'FORMULARIO_PADRAO_CARREGADO', 'Formulário padrão carregado'
+        COMPETENCIAS_GERADAS = 'COMPETENCIAS_GERADAS', 'Competências geradas'
+        PRAZO_CRIADO = 'PRAZO_CRIADO', 'Prazo criado'
+        PRAZO_ATUALIZADO = 'PRAZO_ATUALIZADO', 'Prazo atualizado'
+        PRAZO_CONCLUIDO = 'PRAZO_CONCLUIDO', 'Prazo concluído'
+        PRAZO_EXCLUIDO = 'PRAZO_EXCLUIDO', 'Prazo excluído'
+
+    contrato = models.ForeignKey(Contrato, on_delete=models.CASCADE, related_name='auditoria_eventos')
+    tipo_evento = models.CharField('Tipo do evento', max_length=50, choices=TipoEvento.choices)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='contrato_auditoria_eventos',
+    )
+    resumo = models.CharField('Resumo', max_length=255)
+    payload = models.JSONField('Payload', default=dict, blank=True)
+    created_at = models.DateTimeField('Criado em', auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [
+            models.Index(fields=['contrato', '-created_at', '-id'], name='contr_audit_ctr_dt_idx'),
+        ]
+        verbose_name = 'Evento de auditoria do contrato'
+        verbose_name_plural = 'Eventos de auditoria do contrato'
+
+    def __str__(self):
+        return f'{self.contrato} - {self.get_tipo_evento_display()}'
+
+    @property
+    def usuario_display(self):
+        """Entrega o nome amigável do ator ou assume o sistema quando a ação for automática."""
+
+        if not self.usuario:
+            return 'Sistema'
+        perfil = getattr(self.usuario, 'perfil', None)
+        return getattr(perfil, 'nome_completo', None) or self.usuario.get_full_name() or self.usuario.username
+
+
+class CompetenciaAuditoriaEvento(models.Model):
+    """Histórico operacional de cada competência mensal do contrato."""
+
+    class TipoEvento(models.TextChoices):
+        COMPETENCIA_CRIADA = 'COMPETENCIA_CRIADA', 'Competência criada'
+        CHECKLIST_ATUALIZADO = 'CHECKLIST_ATUALIZADO', 'Checklist atualizado'
+        MEDICAO_ATUALIZADA = 'MEDICAO_ATUALIZADA', 'Medição atualizada'
+        AVALIACAO_ATUALIZADA = 'AVALIACAO_ATUALIZADA', 'Avaliação atualizada'
+        RESET_EXECUTADO = 'RESET_EXECUTADO', 'Reset executado'
+        OB_EXECUTADA = 'OB_EXECUTADA', 'Ordem bancária executada'
+        PAGAMENTO_EXECUTADO = 'PAGAMENTO_EXECUTADO', 'Pagamento executado'
+        CANCELAMENTO_REGISTRADO = 'CANCELAMENTO_REGISTRADO', 'Cancelamento registrado'
+
+    competencia = models.ForeignKey(CompetenciaPagamento, on_delete=models.CASCADE, related_name='auditoria_eventos')
+    tipo_evento = models.CharField('Tipo do evento', max_length=50, choices=TipoEvento.choices)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='competencia_auditoria_eventos',
+    )
+    resumo = models.CharField('Resumo', max_length=255)
+    payload = models.JSONField('Payload', default=dict, blank=True)
+    created_at = models.DateTimeField('Criado em', auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [
+            models.Index(fields=['competencia', '-created_at', '-id'], name='comp_audit_cmp_dt_idx'),
+        ]
+        verbose_name = 'Evento de auditoria da competência'
+        verbose_name_plural = 'Eventos de auditoria da competência'
+
+    def __str__(self):
+        return f'{self.competencia} - {self.get_tipo_evento_display()}'
+
+    @property
+    def usuario_display(self):
+        """Entrega o ator da mudança ou marca que a ação foi sistêmica."""
+
+        if not self.usuario:
+            return 'Sistema'
+        perfil = getattr(self.usuario, 'perfil', None)
+        return getattr(perfil, 'nome_completo', None) or self.usuario.get_full_name() or self.usuario.username
