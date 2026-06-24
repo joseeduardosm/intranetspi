@@ -45,10 +45,14 @@ class TarefasBaseTestCase(TestCase):
         self.usuario = User.objects.create_user(username="usuario-tarefas", password="123", email="u@spi.sp.gov.br")
         self.superior = User.objects.create_user(username="superior-tarefas", password="123", email="s@spi.sp.gov.br")
         self.outro = User.objects.create_user(username="outro-tarefas", password="123", email="o@spi.sp.gov.br")
+        self.sem_gestao = User.objects.create_user(username="sem-gestao", password="123", email="sg@spi.sp.gov.br")
+        self.chefao = User.objects.create_user(username="chefao-tarefas", password="123", email="c@spi.sp.gov.br")
         for user, nome in (
             (self.usuario, "Usuário Tarefas"),
             (self.superior, "Superior Tarefas"),
             (self.outro, "Outro Usuário"),
+            (self.sem_gestao, "Sem Gestão"),
+            (self.chefao, "Chefão Tarefas"),
         ):
             perfil = user.perfil
             perfil.nome_completo = nome
@@ -60,7 +64,9 @@ class TarefasBaseTestCase(TestCase):
             perfil.save()
         self.usuario.perfil.superior_imediato = self.superior
         self.usuario.perfil.save(update_fields=["superior_imediato", "atualizado_em"])
-        self.superior.perfil.superior_imediato = self.outro
+        # Mantém uma cadeia superior para o gestor sem transformar o cenário
+        # "sem gestão" em usuário com equipe dentro da suíte.
+        self.superior.perfil.superior_imediato = self.chefao
         self.superior.perfil.save(update_fields=["superior_imediato", "atualizado_em"])
         grupo_diretoria = Group.objects.create(name="Diretoria Teste")
         grupo_coordenacao = Group.objects.create(name="Coordenacao Teste")
@@ -75,7 +81,7 @@ class TarefasBaseTestCase(TestCase):
             slug="tarefas",
             defaults={"nome": "Tarefas", "descricao": "Módulo de tarefas", "url_base": "/tarefas/"},
         )
-        for user in (self.usuario, self.superior, self.outro):
+        for user in (self.usuario, self.superior, self.outro, self.sem_gestao, self.chefao):
             regra = RegraAcesso.objects.create(recurso=recurso, nivel=RegraAcesso.NIVEL_CONTROLE_TOTAL)
             regra.usuarios.add(user)
 
@@ -133,7 +139,7 @@ class TarefasFluxoTests(TarefasBaseTestCase):
         self.assertContains(response, "Usuário Tarefas")
 
     def test_usuario_sem_liderados_nao_acessa_visao_gerencial(self):
-        self.client.login(username="outro-tarefas", password="123")
+        self.client.login(username="sem-gestao", password="123")
         response = self.client.get(reverse("tarefas:list"), {"dashboard": "team", "scope": "imediatos"})
         self.assertEqual(response.status_code, 403)
 
@@ -341,7 +347,7 @@ class TarefasServicoTests(TarefasBaseTestCase):
 
     def test_servico_indica_gestor_com_visao_gerencial(self):
         self.assertTrue(gestor_tem_visao_gerencial(self.superior))
-        self.assertFalse(gestor_tem_visao_gerencial(self.outro))
+        self.assertFalse(gestor_tem_visao_gerencial(self.sem_gestao))
 
     def test_escopo_imediatos_mostra_somente_primeiro_nivel(self):
         neto = User.objects.create_user(username="neto-tarefas", password="123", email="n@spi.sp.gov.br")

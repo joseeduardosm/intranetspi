@@ -453,6 +453,21 @@ def montar_cards_gerenciais(usuarios, referencia=None):
     return sorted(cards, key=lambda item: (-item["carga_total"], item["nome"].lower()))
 
 
+def montar_cadeia_hierarquica_usuario(usuario, *, limite=10):
+    """Monta a trilha hierárquica ascendente para uso em breadcrumbs gerenciais."""
+
+    cadeia = []
+    atual = usuario
+    visitados = set()
+    while atual and atual.id not in visitados and len(cadeia) < limite:
+        visitados.add(atual.id)
+        cadeia.append(atual)
+        perfil = getattr(atual, "perfil", None)
+        atual = getattr(perfil, "superior_imediato", None)
+    cadeia.reverse()
+    return cadeia
+
+
 def gestor_pode_ver_usuario(gestor, alvo):
     """Controla se o alvo está dentro de algum escopo gerencial do gestor."""
 
